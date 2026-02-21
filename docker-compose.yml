@@ -1,0 +1,400 @@
+services:
+
+  # ---------------------------------------------------------------------------
+  # PROVIDER SIDE
+  # ---------------------------------------------------------------------------
+
+  ecc-provider:
+    image: rdlabengpa/ids_execution_core_container:v1.14.8
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1024M
+    logging:
+      options:
+        max-size: "200M"
+    networks:
+      - provider
+      - consumer
+    container_name: ecc-provider
+    ports:
+      - "${PROVIDER_PORT}:8449"       # HTTP endpoints
+      - "8889:8889"                   # REST inter-connector
+      - "8086:8086"                   # WS inter-connector
+    environment:
+      - "JDK_JAVA_OPTIONS=-Xmx1024m"
+      - "SPRING_PROFILES_ACTIVE=docker"
+      - DATA_APP_ENDPOINT=${PROVIDER_DATA_APP_ENDPOINT}
+      - MULTIPART_EDGE=${PROVIDER_MULTIPART_EDGE}
+      - MULTIPART_ECC=${MULTIPART_ECC}
+      - CONNECTOR_ID=${PROVIDER_ISSUER_CONNECTOR_URI}
+      - IDSCP2=${IDSCP2}
+      - WS_EDGE=${PROVIDER_WS_EDGE}
+      - WS_ECC=${WS_ECC}
+      - UC_DATAAPP_URI=https://uc-dataapp-provider:8080/platoontec/PlatoonDataUsage/1.0/
+      - BROKER_URL=${BROKER_URL}
+      - CACHE_TOKEN=${CACHE_TOKEN}
+      - FETCH_TOKEN_ON_STARTUP=${FETCH_TOKEN_ON_STARTUP}
+      - KEYSTORE_NAME=${KEYSTORE_NAME}
+      - KEY_PASSWORD=${KEY_PASSWORD}
+      - KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}
+      - ALIAS=${ALIAS}
+      - DAPS_KEYSTORE_NAME=${PROVIDER_DAPS_KEYSTORE_NAME}
+      - DAPS_KEYSTORE_PASSWORD=${PROVIDER_DAPS_KEYSTORE_PASSWORD}
+      - DAPS_KEYSTORE_ALIAS=${PROVIDER_DAPS_KEYSTORE_ALIAS}
+      - TRUSTORE_NAME=${TRUSTORE_NAME}
+      - TRUSTORE_PASSWORD=${TRUSTORE_PASSWORD}
+      - FIREWALL=${PROVIDER_ECC_FIREWALL}
+      - TZ=Europe/Rome
+      - AES256-SECRET-KEY=${AES_SECRET_KEY}
+    volumes:
+      - ./provider/ecc:/config
+      - ./certs:/cert
+      - ecc_provider_data:/home/nobody/data/
+    extra_hosts:
+      - "ecc-provider:172.17.0.1"
+
+  uc-dataapp-provider:
+    image: rdlabengpa/ids_uc_data_app_platoon:v1.7.9
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M
+    logging:
+      options:
+        max-size: "100M"
+    networks:
+      - provider
+    container_name: uc-dataapp-provider
+    environment:
+      - "JDK_JAVA_OPTIONS=-Xmx256m"
+      - ECC_PORT=8449
+      - ECC_SELF_DESCRIPTION_URL=${PROVIDER_ECC_SELF_DESCRIPTION_URL}
+      - KEYSTORE_NAME=${KEYSTORE_NAME}
+      - KEY_PASSWORD=${KEY_PASSWORD}
+      - KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}
+      - ALIAS=${ALIAS}
+      - TZ=Europe/Rome
+      - AES256-SECRET-KEY=${AES_SECRET_KEY}
+    expose:
+      - "8080"
+    volumes:
+      - ./provider/uc:/config
+      - ./provider/uc/mydata:/mydata-config
+      - uc_provider_data:/data
+      - ./certs:/cert
+
+  uc-dataapp-pip-provider:
+    image: rdlabengpa/ids_uc_data_app_platoon_pip:v1.0.0
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M
+    logging:
+      options:
+        max-size: "100M"
+    networks:
+      - provider
+    container_name: uc-dataapp-pip-provider
+    environment:
+      - "JDK_JAVA_OPTIONS=-Xmx256m"
+      - TZ=Europe/Rome
+    expose:
+      - "8085"
+    volumes:
+      - ./provider/pip:/etc
+
+  # ---------------------------------------------------------------------------
+  # IA DataApp — 3 instancias desplegadas en el PROVIDER
+  # La imagen se construye desde ia-dataapp/ (empaquetada y enviada por el Consumer)
+  # Cada instancia comparte los resources y data, pero tiene su propio puerto
+  # El Usage Control del ECC provider gestiona el acceso a cada instancia
+  # ---------------------------------------------------------------------------
+
+  ia-dataapp-1:
+    build:
+      context: ./ia-dataapp
+      dockerfile: Dockerfile
+    image: ia-dataapp:latest
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+    logging:
+      options:
+        max-size: "100M"
+    networks:
+      - provider
+    container_name: be-dataapp-provider
+    ports:
+      - "8183:8183"
+    expose:
+      - "9000"
+    environment:
+      - "SPRING_PROFILES_ACTIVE=docker"
+      - DATA_APP_MULTIPART=${PROVIDER_MULTIPART_EDGE}
+      - KEYSTORE_NAME=${KEYSTORE_NAME}
+      - KEY_PASSWORD=${KEY_PASSWORD}
+      - KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}
+      - ALIAS=${ALIAS}
+      - ECC_HOSTNAME=ecc-provider
+      - EXTRACT_PAYLOAD_FROM_RESPONSE=${EXTRACT_PAYLOAD_FROM_RESPONSE}
+      - ECC_PORT=8887
+      - TZ=Europe/Rome
+      - ISSUER_CONNECTOR_URI=${PROVIDER_ISSUER_CONNECTOR_URI}
+      - FIREWALL=${PROVIDER_DATA_APP_FIREWALL}
+      - VALIDATE_SELF_DESCRIPTION=${VALIDATE_SELF_DESCRIPTION}
+      - INSTANCE_ID=1
+    volumes:
+      - ./ia-dataapp/resources:/config         # configuración be-dataapp (application, firewall, etc.)
+      - ./ia-dataapp/data:/home/nobody/data/   # datos provider (be-dataapp_data_provider)
+      - ./certs:/cert
+    depends_on:
+      - ecc-provider
+      - uc-dataapp-provider
+
+  ia-dataapp-2:
+    build:
+      context: ./ia-dataapp
+      dockerfile: Dockerfile
+    image: ia-dataapp:latest
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+    logging:
+      options:
+        max-size: "100M"
+    networks:
+      - provider
+    container_name: ia-dataapp-2
+    ports:
+      - "8185:8183"
+    expose:
+      - "9001"
+    environment:
+      - "SPRING_PROFILES_ACTIVE=docker"
+      - DATA_APP_MULTIPART=${PROVIDER_MULTIPART_EDGE}
+      - KEYSTORE_NAME=${KEYSTORE_NAME}
+      - KEY_PASSWORD=${KEY_PASSWORD}
+      - KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}
+      - ALIAS=${ALIAS}
+      - ECC_HOSTNAME=ecc-provider
+      - EXTRACT_PAYLOAD_FROM_RESPONSE=${EXTRACT_PAYLOAD_FROM_RESPONSE}
+      - ECC_PORT=8887
+      - TZ=Europe/Rome
+      - ISSUER_CONNECTOR_URI=${PROVIDER_ISSUER_CONNECTOR_URI}
+      - FIREWALL=${PROVIDER_DATA_APP_FIREWALL}
+      - VALIDATE_SELF_DESCRIPTION=${VALIDATE_SELF_DESCRIPTION}
+      - INSTANCE_ID=2
+    volumes:
+      - ./ia-dataapp/resources:/config
+      - ./ia-dataapp/data:/home/nobody/data/
+      - ./certs:/cert
+    depends_on:
+      - ecc-provider
+      - uc-dataapp-provider
+
+  ia-dataapp-3:
+    build:
+      context: ./ia-dataapp
+      dockerfile: Dockerfile
+    image: ia-dataapp:latest
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+    logging:
+      options:
+        max-size: "100M"
+    networks:
+      - provider
+    container_name: ia-dataapp-3
+    ports:
+      - "8186:8183"
+    expose:
+      - "9002"
+    environment:
+      - "SPRING_PROFILES_ACTIVE=docker"
+      - DATA_APP_MULTIPART=${PROVIDER_MULTIPART_EDGE}
+      - KEYSTORE_NAME=${KEYSTORE_NAME}
+      - KEY_PASSWORD=${KEY_PASSWORD}
+      - KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}
+      - ALIAS=${ALIAS}
+      - ECC_HOSTNAME=ecc-provider
+      - EXTRACT_PAYLOAD_FROM_RESPONSE=${EXTRACT_PAYLOAD_FROM_RESPONSE}
+      - ECC_PORT=8887
+      - TZ=Europe/Rome
+      - ISSUER_CONNECTOR_URI=${PROVIDER_ISSUER_CONNECTOR_URI}
+      - FIREWALL=${PROVIDER_DATA_APP_FIREWALL}
+      - VALIDATE_SELF_DESCRIPTION=${VALIDATE_SELF_DESCRIPTION}
+      - INSTANCE_ID=3
+    volumes:
+      - ./ia-dataapp/resources:/config
+      - ./ia-dataapp/data:/home/nobody/data/
+      - ./certs:/cert
+    depends_on:
+      - ecc-provider
+      - uc-dataapp-provider
+
+  # ---------------------------------------------------------------------------
+  # CONSUMER SIDE
+  # ---------------------------------------------------------------------------
+
+  ecc-consumer:
+    image: rdlabengpa/ids_execution_core_container:v1.14.8
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1024M
+    logging:
+      options:
+        max-size: "200M"
+    networks:
+      - consumer
+      - provider
+    container_name: ecc-consumer
+    ports:
+      - "${CONSUMER_PORT}:8449"       # HTTP endpoints
+      - "8890:8889"                   # REST inter-connector
+      - "8087:8086"                   # WS inter-connector
+    environment:
+      - "JDK_JAVA_OPTIONS=-Xmx1024m"
+      - "SPRING_PROFILES_ACTIVE=docker"
+      - DATA_APP_ENDPOINT=${CONSUMER_DATA_APP_ENDPOINT}
+      - MULTIPART_EDGE=${CONSUMER_MULTIPART_EDGE}
+      - MULTIPART_ECC=${MULTIPART_ECC}
+      - CONNECTOR_ID=${CONSUMER_ISSUER_CONNECTOR_URI}
+      - IDSCP2=${IDSCP2}
+      - WS_EDGE=${CONSUMER_WS_EDGE}
+      - WS_ECC=${WS_ECC}
+      - UC_DATAAPP_URI=https://uc-dataapp-consumer:8080/platoontec/PlatoonDataUsage/1.0/
+      - BROKER_URL=${BROKER_URL}
+      - CACHE_TOKEN=${CACHE_TOKEN}
+      - FETCH_TOKEN_ON_STARTUP=${FETCH_TOKEN_ON_STARTUP}
+      - KEYSTORE_NAME=${KEYSTORE_NAME}
+      - KEY_PASSWORD=${KEY_PASSWORD}
+      - KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}
+      - ALIAS=${ALIAS}
+      - DAPS_KEYSTORE_NAME=${CONSUMER_DAPS_KEYSTORE_NAME}
+      - DAPS_KEYSTORE_PASSWORD=${CONSUMER_DAPS_KEYSTORE_PASSWORD}
+      - DAPS_KEYSTORE_ALIAS=${CONSUMER_DAPS_KEYSTORE_ALIAS}
+      - TRUSTORE_NAME=${TRUSTORE_NAME}
+      - TRUSTORE_PASSWORD=${TRUSTORE_PASSWORD}
+      - FIREWALL=${CONSUMER_ECC_FIREWALL}
+      - TZ=Europe/Rome
+      - AES256-SECRET-KEY=${AES_SECRET_KEY}
+    volumes:
+      - ./consumer/ecc:/config
+      - ./certs:/cert
+      - ecc_consumer_data:/home/nobody/data/
+    extra_hosts:
+      - "ecc-consumer:172.17.0.1"
+
+  uc-dataapp-consumer:
+    image: rdlabengpa/ids_uc_data_app_platoon:v1.7.9
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M
+    logging:
+      options:
+        max-size: "100M"
+    networks:
+      - consumer
+    container_name: uc-dataapp-consumer
+    environment:
+      - "JDK_JAVA_OPTIONS=-Xmx256m"
+      - ECC_PORT=8449
+      - ECC_SELF_DESCRIPTION_URL=${CONSUMER_ECC_SELF_DESCRIPTION_URL}
+      - KEYSTORE_NAME=${KEYSTORE_NAME}
+      - KEY_PASSWORD=${KEY_PASSWORD}
+      - KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}
+      - ALIAS=${ALIAS}
+      - TZ=Europe/Rome
+      - AES256-SECRET-KEY=${AES_SECRET_KEY}
+    expose:
+      - "8080"
+    volumes:
+      - ./consumer/uc:/config
+      - uc_consumer_data:/data
+      - ./certs:/cert
+
+  uc-dataapp-pip-consumer:
+    image: rdlabengpa/ids_uc_data_app_platoon_pip:v1.0.0
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M
+    logging:
+      options:
+        max-size: "100M"
+    networks:
+      - consumer
+    container_name: uc-dataapp-pip-consumer
+    environment:
+      - "JDK_JAVA_OPTIONS=-Xmx256m"
+      - TZ=Europe/Rome
+    expose:
+      - "8085"
+    volumes:
+      - ./consumer/pip:/etc
+
+  be-dataapp-consumer:
+    image: rdlabengpa/ids_be_data_app:v0.3.8
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+    logging:
+      options:
+        max-size: "100M"
+    networks:
+      - consumer
+    container_name: be-dataapp-consumer
+    ports:
+      - "8184:8183"
+    expose:
+      - "9000"
+    environment:
+      - "JDK_JAVA_OPTIONS=-Xmx512m"
+      - "SPRING_PROFILES_ACTIVE=docker"
+      - DATA_APP_MULTIPART=${CONSUMER_MULTIPART_EDGE}
+      - KEYSTORE_NAME=${KEYSTORE_NAME}
+      - KEY_PASSWORD=${KEY_PASSWORD}
+      - KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}
+      - ALIAS=${ALIAS}
+      - ECC_HOSTNAME=ecc-consumer
+      - EXTRACT_PAYLOAD_FROM_RESPONSE=${EXTRACT_PAYLOAD_FROM_RESPONSE}
+      - ECC_PORT=8887
+      - TZ=Europe/Rome
+      - ISSUER_CONNECTOR_URI=${CONSUMER_ISSUER_CONNECTOR_URI}
+      - FIREWALL=${CONSUMER_DATA_APP_FIREWALL}
+      - VALIDATE_SELF_DESCRIPTION=${VALIDATE_SELF_DESCRIPTION}
+    volumes:
+      - ./ia-dataapp/resources:/config
+      - ./certs:/cert
+      - be_dataapp_consumer_data:/home/nobody/data
+
+networks:
+  consumer: {}
+  provider: {}
+
+volumes:
+  ecc_provider_data: {}
+  uc_provider_data: {}
+  ecc_consumer_data: {}
+  uc_consumer_data: {}
+  be_dataapp_consumer_data: {}
+  trueconnector_be_dataapp_provider_data:
+    external: true
