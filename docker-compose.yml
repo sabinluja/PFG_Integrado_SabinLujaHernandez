@@ -109,9 +109,10 @@ services:
 
   # ---------------------------------------------------------------------------
   # IA DataApp — 3 instancias desplegadas en el PROVIDER
-  # La imagen se construye desde ia-dataapp/ (empaquetada y enviada por el Consumer)
-  # Cada instancia comparte los resources y data, pero tiene su propio puerto
-  # El Usage Control del ECC provider gestiona el acceso a cada instancia
+  # La imagen se construye desde ia-dataapp/
+  # Cada instancia comparte data/ y log/ pero tiene su propio puerto
+  # El Consumer envía el algorithm.py vía IDS al endpoint /upload-algorithm
+  # El Provider ejecuta el algoritmo sobre el CSV en las 3 instancias
   # ---------------------------------------------------------------------------
 
   ia-dataapp-1:
@@ -131,7 +132,8 @@ services:
       - provider
     container_name: be-dataapp-provider
     ports:
-      - "8183:8183"
+      - "8183:8183"   # Java app (ECC se comunica aquí)
+      - "5001:8500"   # Flask app (upload-algorithm / execute)
     expose:
       - "9000"
     environment:
@@ -150,8 +152,9 @@ services:
       - VALIDATE_SELF_DESCRIPTION=${VALIDATE_SELF_DESCRIPTION}
       - INSTANCE_ID=1
     volumes:
-      - ./ia-dataapp/resources:/config         # configuración be-dataapp (application, firewall, etc.)
-      - ./ia-dataapp/data:/home/nobody/data/   # datos provider (be-dataapp_data_provider)
+      - ./ia-dataapp/resources:/config
+      - ./ia-dataapp/data:/home/nobody/data/
+      - ./ia-dataapp/log:/home/nobody/log
       - ./certs:/cert
     depends_on:
       - ecc-provider
@@ -175,6 +178,7 @@ services:
     container_name: ia-dataapp-2
     ports:
       - "8185:8183"
+      - "5002:8500"   # Flask app instancia 2
     expose:
       - "9001"
     environment:
@@ -195,6 +199,7 @@ services:
     volumes:
       - ./ia-dataapp/resources:/config
       - ./ia-dataapp/data:/home/nobody/data/
+      - ./ia-dataapp/log:/home/nobody/log
       - ./certs:/cert
     depends_on:
       - ecc-provider
@@ -218,6 +223,7 @@ services:
     container_name: ia-dataapp-3
     ports:
       - "8186:8183"
+      - "5003:8500"   # Flask app instancia 3
     expose:
       - "9002"
     environment:
@@ -238,6 +244,7 @@ services:
     volumes:
       - ./ia-dataapp/resources:/config
       - ./ia-dataapp/data:/home/nobody/data/
+      - ./ia-dataapp/log:/home/nobody/log
       - ./certs:/cert
     depends_on:
       - ecc-provider

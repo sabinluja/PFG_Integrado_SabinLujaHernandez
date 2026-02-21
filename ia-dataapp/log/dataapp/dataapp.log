@@ -1,0 +1,810 @@
+21-02-2026 12:03:59.973 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on 7bbdfe0da643 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:03:59.977 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:03:59.986 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on de957029a50c with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:03:59.991 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:04:00.162 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on 26956e77f251 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:04:00.170 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:04:06.259 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:04:06.308 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:04:06.451 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:04:06.459 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:04:06.515 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:04:06.519 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:04:09.676 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:04:09.791 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:04:09.747 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:04:12.878 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:04:12.879 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:04:13.008 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:04:13.010 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:04:13.391 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:04:13.393 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:04:14.559 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:04:14.586 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:04:14.641 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:04:14.720 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:04:14.750 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:04:14.850 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:04:15.088 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:04:15.208 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:04:15.306 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:04:16.915 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 18.905 seconds (JVM running for 20.666) 
+21-02-2026 12:04:17.214 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 19.287 seconds (JVM running for 20.932) 
+21-02-2026 12:04:17.788 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 19.652 seconds (JVM running for 21.285) 
+21-02-2026 12:06:20.876 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+21-02-2026 12:06:22.073 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+21-02-2026 12:06:22.073 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+21-02-2026 12:06:22.343 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+21-02-2026 12:06:25.536 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+21-02-2026 12:06:25.549 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+21-02-2026 12:06:25.550 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+21-02-2026 12:06:25.822 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+21-02-2026 12:06:26.669 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+21-02-2026 12:06:26.681 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.h.ContractRequestMessageHandler - ContractRequestMessageHandler 
+21-02-2026 12:06:26.681 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.h.ContractRequestMessageHandler - Returning default contract agreement 
+21-02-2026 12:06:26.682 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+21-02-2026 12:06:26.900 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+21-02-2026 12:06:27.074 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.h.ContractRequestMessageHandler - Found permission 
+21-02-2026 12:06:30.461 [https-jsse-nio-8183-exec-1] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+21-02-2026 12:06:30.484 [https-jsse-nio-8183-exec-1] INFO  i.e.i.d.h.ContractAgreementMessageHandler - Handling header through ContractAgreementMessageHandler 
+21-02-2026 12:06:31.149 [https-jsse-nio-8183-exec-2] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+21-02-2026 12:06:31.161 [https-jsse-nio-8183-exec-2] INFO  i.e.i.d.h.ArtifactMessageHandler - Handling header through ArtifactMessageHandler 
+21-02-2026 12:30:34.348 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on a2b1f28e7765 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:30:34.351 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:30:34.353 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on 1f3e0f97ffad with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:30:34.355 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:30:34.386 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on 8794953d5939 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:30:34.395 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:30:39.716 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:30:39.723 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:30:39.960 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:30:39.967 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:30:40.184 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:30:40.192 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:30:42.855 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:30:43.097 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:30:43.279 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:30:44.686 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:30:44.688 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:30:45.150 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:30:45.153 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:30:45.159 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:30:45.163 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:30:46.612 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:30:46.639 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:30:46.749 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:30:47.264 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:30:47.275 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:30:47.287 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:30:47.298 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:30:47.386 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:30:47.398 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:30:49.162 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 16.442 seconds (JVM running for 17.725) 
+21-02-2026 12:30:49.783 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 17.1 seconds (JVM running for 18.324) 
+21-02-2026 12:30:49.784 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 17.08 seconds (JVM running for 18.277) 
+21-02-2026 12:31:38.287 [https-jsse-nio-8183-exec-2] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+21-02-2026 12:31:39.759 [https-jsse-nio-8183-exec-2] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+21-02-2026 12:31:39.759 [https-jsse-nio-8183-exec-2] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+21-02-2026 12:31:40.167 [https-jsse-nio-8183-exec-2] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+21-02-2026 12:31:43.331 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+21-02-2026 12:31:43.346 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+21-02-2026 12:31:43.347 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+21-02-2026 12:31:43.635 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+21-02-2026 12:31:44.633 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+21-02-2026 12:31:44.646 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.h.ContractRequestMessageHandler - ContractRequestMessageHandler 
+21-02-2026 12:31:44.646 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.h.ContractRequestMessageHandler - Returning default contract agreement 
+21-02-2026 12:31:44.647 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+21-02-2026 12:31:44.862 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+21-02-2026 12:31:45.083 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.h.ContractRequestMessageHandler - Found permission 
+21-02-2026 12:31:45.830 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+21-02-2026 12:31:45.840 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.h.ContractAgreementMessageHandler - Handling header through ContractAgreementMessageHandler 
+21-02-2026 12:31:46.421 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+21-02-2026 12:31:46.433 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.h.ArtifactMessageHandler - Handling header through ArtifactMessageHandler 
+21-02-2026 12:34:21.187 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on d7f58a09c017 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:34:21.193 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:34:21.306 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on be584e659948 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:34:21.309 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:34:21.618 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on 15e0e5c98a26 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:34:21.621 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:34:26.529 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:34:26.540 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:34:26.646 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:34:26.652 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:34:27.168 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:34:27.175 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:34:29.457 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:34:29.524 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:34:29.872 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:34:31.080 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:34:31.105 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:34:31.351 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:34:31.353 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:34:31.492 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:34:31.512 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:34:33.262 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:34:33.281 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:34:33.346 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:34:33.598 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:34:33.598 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:34:33.665 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:34:33.665 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:34:33.698 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:34:33.753 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:34:36.021 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 16.18 seconds (JVM running for 17.445) 
+21-02-2026 12:34:36.194 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 16.247 seconds (JVM running for 17.454) 
+21-02-2026 12:34:36.151 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 16.435 seconds (JVM running for 17.604) 
+21-02-2026 12:37:43.334 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on 6323c2aa0ada with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:37:43.336 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:37:43.473 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on 8b6811c4a774 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:37:43.476 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:37:43.481 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on e5043286a9e1 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:37:43.483 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:37:49.181 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:37:49.218 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:37:49.675 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:37:49.679 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:37:49.744 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:37:49.752 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:37:52.847 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:37:53.171 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:37:53.247 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:37:54.587 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:37:54.591 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:37:54.823 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:37:54.832 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:37:55.011 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:37:55.012 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:37:56.655 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:37:56.733 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:37:56.838 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:37:57.161 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:37:57.196 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:37:57.237 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:37:25.873 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:37:25.904 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:38:00.156 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:38:01.858 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 17.403 seconds (JVM running for 18.692) 
+21-02-2026 12:38:02.590 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 18.147 seconds (JVM running for 19.368) 
+21-02-2026 12:38:02.687 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 18.254 seconds (JVM running for 19.48) 
+21-02-2026 12:38:49.047 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+21-02-2026 12:38:50.410 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+21-02-2026 12:38:50.410 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+21-02-2026 12:38:50.949 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+21-02-2026 12:38:54.339 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+21-02-2026 12:38:54.352 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+21-02-2026 12:38:54.352 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+21-02-2026 12:38:54.633 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+21-02-2026 12:38:55.567 [https-jsse-nio-8183-exec-1] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+21-02-2026 12:38:55.577 [https-jsse-nio-8183-exec-1] INFO  i.e.i.d.h.ContractRequestMessageHandler - ContractRequestMessageHandler 
+21-02-2026 12:38:55.578 [https-jsse-nio-8183-exec-1] INFO  i.e.i.d.h.ContractRequestMessageHandler - Returning default contract agreement 
+21-02-2026 12:38:55.578 [https-jsse-nio-8183-exec-1] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+21-02-2026 12:38:55.828 [https-jsse-nio-8183-exec-1] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+21-02-2026 12:38:56.021 [https-jsse-nio-8183-exec-1] INFO  i.e.i.d.h.ContractRequestMessageHandler - Found permission 
+21-02-2026 12:38:56.824 [https-jsse-nio-8183-exec-2] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+21-02-2026 12:38:56.831 [https-jsse-nio-8183-exec-2] INFO  i.e.i.d.h.ContractAgreementMessageHandler - Handling header through ContractAgreementMessageHandler 
+21-02-2026 12:38:57.455 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+21-02-2026 12:38:57.462 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.h.ArtifactMessageHandler - Handling header through ArtifactMessageHandler 
+21-02-2026 12:40:24.992 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on 4d08b0bb7b7c with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:40:24.996 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:40:25.084 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on 603670a42687 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:40:25.088 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:40:25.223 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on 7c807b22bdd8 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:40:25.225 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:40:30.779 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:40:30.803 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:40:30.887 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:40:30.891 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:40:31.054 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:40:31.058 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:40:34.007 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:40:34.167 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:40:34.228 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:40:35.762 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:40:35.764 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:40:35.842 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:40:35.845 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:40:35.931 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:40:35.933 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:40:37.633 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:40:37.658 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:40:37.709 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:40:37.754 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:40:37.762 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:40:37.813 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:40:37.870 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:40:37.872 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:40:37.980 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:40:40.175 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 16.962 seconds (JVM running for 18.263) 
+21-02-2026 12:40:40.405 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 17.355 seconds (JVM running for 18.67) 
+21-02-2026 12:40:40.407 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 16.919 seconds (JVM running for 18.523) 
+21-02-2026 12:43:38.379 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on e417403a900f with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:43:38.383 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:43:38.462 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on fb53466fa52f with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:43:38.464 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:43:38.496 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on 813373b039a7 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:43:38.503 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:43:43.795 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:43:43.799 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:43:43.841 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:43:43.846 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:43:43.848 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:43:43.852 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:43:46.425 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:43:46.890 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:43:46.935 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:43:48.174 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:43:48.176 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:43:48.585 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:43:48.613 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:43:49.195 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:43:49.197 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:43:49.897 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:43:49.935 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:43:50.038 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:43:50.386 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:43:50.486 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:43:50.650 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:43:51.056 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:43:51.078 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:43:51.247 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:43:55.024 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 15.656 seconds (JVM running for 16.812) 
+21-02-2026 12:43:56.088 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 16.699 seconds (JVM running for 17.81) 
+21-02-2026 12:43:56.567 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 17.163 seconds (JVM running for 18.246) 
+21-02-2026 12:46:38.192 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on 5a8819584d0c with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:46:38.198 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:46:38.237 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on e4f1a3611ef8 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:46:38.243 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:46:38.273 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 11.0.21 on 2a0130393c35 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+21-02-2026 12:46:38.279 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+21-02-2026 12:46:43.922 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:46:43.926 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:46:43.993 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:46:43.997 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:46:44.012 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+21-02-2026 12:46:44.015 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+21-02-2026 12:46:46.672 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:46:46.692 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:46:46.862 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+21-02-2026 12:46:48.489 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:46:48.491 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:46:48.564 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:46:48.567 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:46:48.579 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response WARNING: Skipping tlog verification is an insecure practice that lacks of transparency and auditability verification for the signature.
+Error: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+main.go:74: error during command execution: getting ctlog public keys: updating local metadata and targets: error updating to TUF remote mirror: invalid key
+remote status:{
+	"mirror": "https://sigstore-tuf-root.storage.googleapis.com",
+	"metadata": {
+		"timestamp.json": {
+			"version": 600,
+			"len": 447,
+			"expiration": "27 Feb 26 19:28 UTC",
+			"error": ""
+		}
+	}
+}
+ 
+21-02-2026 12:46:48.586 [restartedMain] WARN  i.e.i.d.c.CertificationCheck - WARNING: You're using uncertified version of DataApp! 
+21-02-2026 12:46:50.221 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:46:50.249 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:46:50.257 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:46:50.300 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:46:50.398 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:46:50.404 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:46:50.500 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:46:50.591 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+21-02-2026 12:46:50.701 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+21-02-2026 12:46:52.809 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 16.388 seconds (JVM running for 17.615) 
+21-02-2026 12:46:53.111 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 16.796 seconds (JVM running for 18.064) 
+21-02-2026 12:46:53.133 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 16.73 seconds (JVM running for 17.977) 
