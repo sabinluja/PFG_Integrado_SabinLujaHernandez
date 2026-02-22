@@ -15,6 +15,7 @@ RUN mkdir -p /home/nobody/data/output /home/nobody/log && \
 
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
+RUN sed -i 's/\r//' /start.sh
 
 USER nobody
 
