@@ -5,7 +5,7 @@
 			<pattern>%d{dd-MM-yyyy HH:mm:ss.SSS} [%thread] %-5level %logger{35} - %msg %n</pattern>
 		</encoder>
 	</appender>
-	<property name="LOG_DIR" value="/home/nobody/log/dataapp" />
+	<property name="LOG_DIR" value="/home/nobody/log"/>
 	<appender name="FILE_LOG" class="ch.qos.logback.core.rolling.RollingFileAppender">
 		<file>${LOG_DIR}/dataapp.log</file>
 		<rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">

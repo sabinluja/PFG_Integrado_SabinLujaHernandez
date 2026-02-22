@@ -1,9 +1,3 @@
-"""
-algorithm.py - Algoritmo enviado por el Consumer al Provider via IDS.
-El Provider ejecuta este fichero en sus 3 instancias de ia-dataapp.
-
-REQUISITO: debe tener una función run(data_path) que devuelva un dict.
-"""
 import pandas as pd
 
 
