@@ -2130,7 +2130,7 @@
                   "pm.test(\"Status code is 200\", function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "pm.test(\"Algorithm sent via IDS\", function () {",
+                  "pm.test(\"Algorithm sent successfully\", function () {",
                   "    var jsonData = pm.response.json();",
                   "    pm.expect(jsonData[\"status\"]).to.eql(\"ok\");",
                   "    console.log(\"Response: \" + JSON.stringify(jsonData));",
@@ -2142,35 +2142,29 @@
           ],
           "request": {
             "auth": {
-              "type": "basic",
-              "basic": [
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
                 {
-                  "key": "username",
-                  "value": "idsUser",
-                  "type": "string"
-                },
-                {
-                  "key": "password",
-                  "value": "passwordIdsUser",
-                  "type": "string"
+                  "key": "algorithm",
+                  "type": "file",
+                  "src": "algorithm.py"
                 }
               ]
             },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ArtifactRequestMessage\",\n    \"requestedArtifact\": \"http://w3id.org/engrd/connector/artifact/algorithm\",\n    \"transferContract\": \"{{transfer_contract}}\",\n    \"payload\": \"import pandas as pd\\\\ndef run(data_path: str) -> dict:\\\\n    df = pd.read_csv(data_path)\\\\n    result = {'rows': len(df), 'columns': list(df.columns), 'summary': {}}\\\\n    numeric_cols = df.select_dtypes(include='number').columns\\\\n    for col in numeric_cols:\\\\n        result['summary'][col] = {'mean': round(df[col].mean(), 4), 'std': round(df[col].std(), 4), 'min': round(df[col].min(), 4), 'max': round(df[col].max(), 4), 'median': round(df[col].median(), 4)}\\\\n    return result\"\n}"
-            },
             "url": {
-              "raw": "{{Proxy_Endpoint}}",
+              "raw": "http://localhost:5001/upload-algorithm",
+              "protocol": "http",
               "host": [
-                "{{Proxy_Endpoint}}"
+                "localhost"
+              ],
+              "port": "5001",
+              "path": [
+                "upload-algorithm"
               ]
             }
           }
