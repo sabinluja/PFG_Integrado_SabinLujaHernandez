@@ -25,6 +25,7 @@ services:
     environment:
       - "JDK_JAVA_OPTIONS=-Xmx1024m"
       - "SPRING_PROFILES_ACTIVE=docker"
+      # ↓ Apunta al endpoint /data del be-dataapp-provider (ia-dataapp-1, Java ECC port 8183)
       - DATA_APP_ENDPOINT=${PROVIDER_DATA_APP_ENDPOINT}
       - MULTIPART_EDGE=${PROVIDER_MULTIPART_EDGE}
       - MULTIPART_ECC=${MULTIPART_ECC}
@@ -111,13 +112,18 @@ services:
   # IA DataApp — 3 instancias FL sobre el provider
   #
   # ia-dataapp-1 (be-dataapp-provider):
-  #   - FL Worker    :8500  → externo 5001
-  #   - FL Coordinator :8600 → externo 8600  ← ÚNICO coordinador central
-  #   - Java ECC     :8183  → externo 8183
+  #   - FL Worker      :8500  → externo 5001
+  #   - FL Coordinator :8600  → externo 8600  ← ÚNICO coordinador central
+  #   - Java ECC       :8183  → externo 8183  ← DATA_APP_ENDPOINT del ECC Provider
   #
   # ia-dataapp-2 / ia-dataapp-3:
-  #   - FL Worker    :8500  → externos 5002, 5003
-  #   - Java ECC     :8183  → externos 8185, 8186
+  #   - FL Worker      :8500  → externos 5002, 5003
+  #   - Java ECC       :8183  → externos 8185, 8186
+  #
+  # Flujo IDS para upload-algorithm:
+  #   Consumer → ECC-Consumer(:8449) → ECC-Provider(:8449)
+  #   → be-dataapp-provider:8183/data  (Java ECC proxy → Python /data)
+  #   → guarda algorithm.py + distribuye a workers 2 y 3
   # ---------------------------------------------------------------------------
 
   ia-dataapp-1:
@@ -137,9 +143,9 @@ services:
       - provider
     container_name: be-dataapp-provider
     ports:
-      - "8183:8183"    # Java DataApp (ECC)
-      - "5001:8500"    # FL Worker
-      - "8600:8600"    # FL Coordinator ← único punto de entrada FL
+      - "8183:8183" # Java DataApp (ECC) ← DATA_APP_ENDPOINT apunta aquí
+      - "5001:8500" # FL Worker (Python FastAPI)
+      - "8600:8600" # FL Coordinator ← único punto de entrada FL
     expose:
       - "9000"
     environment:
@@ -157,7 +163,7 @@ services:
       - FIREWALL=${PROVIDER_DATA_APP_FIREWALL}
       - VALIDATE_SELF_DESCRIPTION=${VALIDATE_SELF_DESCRIPTION}
       - INSTANCE_ID=1
-      # URLs de los workers (usadas por el coordinador FL)
+      # URLs de los workers (usadas por el coordinador FL y para distribuir algorithm.py)
       - WORKER_1_URL=http://be-dataapp-provider:8500
       - WORKER_2_URL=http://ia-dataapp-2:8500
       - WORKER_3_URL=http://ia-dataapp-3:8500
@@ -167,7 +173,8 @@ services:
       - ./ia-dataapp/resources:/config
       - ./ia-dataapp/data:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
-      - ./ia-dataapp:/app-src:ro          # algorithm.py accesible en /app-src
+      # algorithm.py compartido entre las 3 instancias via volumen nombrado
+      - ia_algorithm:/app-src
       - ./certs:/cert
     depends_on:
       - ecc-provider
@@ -190,8 +197,8 @@ services:
       - provider
     container_name: ia-dataapp-2
     ports:
-      - "8185:8183"    # Java DataApp (ECC)
-      - "5002:8500"    # FL Worker
+      - "8185:8183" # Java DataApp (ECC)
+      - "5002:8500" # FL Worker
     expose:
       - "9001"
     environment:
@@ -213,7 +220,8 @@ services:
       - ./ia-dataapp/resources:/config
       - ./ia-dataapp/data:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
-      - ./ia-dataapp:/app-src:ro
+      # Mismo volumen compartido: cuando instancia-1 escribe algorithm.py, 2 y 3 lo ven
+      - ia_algorithm:/app-src
       - ./certs:/cert
     depends_on:
       - ecc-provider
@@ -236,8 +244,8 @@ services:
       - provider
     container_name: ia-dataapp-3
     ports:
-      - "8186:8183"    # Java DataApp (ECC)
-      - "5003:8500"    # FL Worker
+      - "8186:8183" # Java DataApp (ECC)
+      - "5003:8500" # FL Worker
     expose:
       - "9002"
     environment:
@@ -259,14 +267,14 @@ services:
       - ./ia-dataapp/resources:/config
       - ./ia-dataapp/data:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
-      - ./ia-dataapp:/app-src:ro
+      - ia_algorithm:/app-src
       - ./certs:/cert
     depends_on:
       - ecc-provider
       - uc-dataapp-provider
 
   # ---------------------------------------------------------------------------
-  # CONSUMER SIDE — sin cambios respecto al original
+  # CONSUMER SIDE
   # ---------------------------------------------------------------------------
 
   ecc-consumer:
@@ -372,7 +380,10 @@ services:
       - ./consumer/pip:/etc
 
   be-dataapp-consumer:
-    image: rdlabengpa/ids_be_data_app:v0.3.8
+    build:
+      context: ./consumer
+      dockerfile: Dockerfile.consumer
+    image: be-dataapp-consumer:latest
     deploy:
       resources:
         limits:
@@ -383,6 +394,7 @@ services:
         max-size: "100M"
     networks:
       - consumer
+      - provider
     container_name: be-dataapp-consumer
     ports:
       - "8184:8183"
@@ -403,10 +415,33 @@ services:
       - ISSUER_CONNECTOR_URI=${CONSUMER_ISSUER_CONNECTOR_URI}
       - FIREWALL=${CONSUMER_DATA_APP_FIREWALL}
       - VALIDATE_SELF_DESCRIPTION=${VALIDATE_SELF_DESCRIPTION}
+      # Variables para ids_auto_send.py
+      - ALGORITHM_PATH=/algorithm/algorithm.py
+      - ECC_CONSUMER_URL=https://be-dataapp-consumer:8183
+      - FORWARD_TO=https://ecc-provider:8889/data
+      - PROVIDER_DATA_APP=http://be-dataapp-provider:8500
+      - CONSUMER_CONNECTOR=${CONSUMER_ISSUER_CONNECTOR_URI}
+      - PROVIDER_CONNECTOR=${PROVIDER_ISSUER_CONNECTOR_URI}
+      - ECC_USER=idsUser
+      - ECC_PASS=passwordIdsUser
+      - MAX_WAIT_SECONDS=120
+      - RETRY_INTERVAL=5
+      # URLs directas a los workers Python (para push_algorithm_to_workers)
+      - WORKER_1_URL=http://be-dataapp-provider:8500
+      - WORKER_2_URL=http://ia-dataapp-2:8500
+      - WORKER_3_URL=http://ia-dataapp-3:8500
     volumes:
       - ./ia-dataapp/resources:/config
       - ./certs:/cert
       - be_dataapp_consumer_data:/home/nobody/data
+      - ./ia-dataapp/algorithm.py:/algorithm/algorithm.py:ro
+      - ./consumer/ids_auto_send.py:/app/ids_auto_send.py:ro
+    depends_on:
+      - ecc-consumer
+      - ecc-provider
+      - ia-dataapp-1
+      - ia-dataapp-2
+      - ia-dataapp-3
 
 networks:
   consumer: {}
@@ -418,5 +453,8 @@ volumes:
   ecc_consumer_data: {}
   uc_consumer_data: {}
   be_dataapp_consumer_data: {}
+  # Volumen compartido entre las 3 instancias FL para sincronizar algorithm.py
+  # Cuando instancia-1 recibe el algoritmo vía IDS, workers 2 y 3 lo ven inmediatamente
+  ia_algorithm: {}
   trueconnector_be_dataapp_provider_data:
     external: true

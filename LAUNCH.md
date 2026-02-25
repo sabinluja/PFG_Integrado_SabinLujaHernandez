@@ -32,6 +32,7 @@ docker build -t ia-dataapp:latest ./ia-dataapp
 docker-compose up -d
 
 docker-compose build ia-dataapp-1
+docker compose build be-dataapp-consumer
 docker-compose up -d
 ```
 > **Note:** The `byoa-dataapp-provider-1` service builds the base image used by instances 2 and 3.
@@ -47,7 +48,7 @@ docker compose logs -f
 Stops running containers but preserves data volumes and networks.
 
 ```bash
-docker compose down
+docker compose down docker logs be-dataapp-consumer
 ```
 
 ### 4. ⚠️ Deep Clean & Reset (Hard Reset)
