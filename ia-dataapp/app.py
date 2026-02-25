@@ -1,143 +1,260 @@
+"""
+app.py — IA DataApp API  (worker de Federated Learning)
+========================================================
+Cada instancia (ia-dataapp-1/2/3) expone:
+
+  Endpoints sistema:
+    GET  /health
+    GET  /status
+
+  Endpoints algoritmo (compatibilidad original):
+    POST /upload-algorithm
+    POST /execute
+    GET  /result
+
+  Endpoints Federated Learning:
+    POST /fl/train         ← coordinador llama aquí cada ronda
+    POST /fl/set-model     ← coordinador empuja modelo global
+    GET  /fl/model         ← pesos globales actuales
+    GET  /fl/history       ← historial de métricas por ronda
+"""
+
 import os
 import importlib.util
 import logging
 import json
+import sys
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from typing import Optional
 import uvicorn
 
 app = FastAPI(
-    title="IA DataApp API",
-    description="API para recibir y ejecutar algoritmos del Consumer sobre datos del Provider",
-    version="1.0.0"
+    title="IA DataApp — FL Worker",
+    description="Worker de Federated Learning con soporte IDS connectors",
+    version="2.0.0"
 )
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [Instance-%(name)s] %(levelname)s %(message)s"
+)
 logger = logging.getLogger(__name__)
 
-DATA_DIR = "/home/nobody/data"
-INPUT_DIR = os.path.join(DATA_DIR, "input")
-OUTPUT_DIR = os.path.join(DATA_DIR, "output")
-ALGORITHM_PATH = os.path.join(DATA_DIR, "algorithm.py")
-INSTANCE_ID = os.getenv("INSTANCE_ID", "1")
+DATA_DIR       = "/home/nobody/data"
+INPUT_DIR      = os.path.join(DATA_DIR, "input")
+OUTPUT_DIR     = os.path.join(DATA_DIR, "output")
+# Busca algorithm.py primero en el volumen montado (ia-dataapp/), luego en /app (imagen)
+_ALGO_MOUNTED = "/app-src/algorithm.py"   # ia-dataapp/algorithm.py montado como volumen
+_ALGO_BAKED   = "/app/algorithm.py"       # copiado en el build de la imagen
+ALGORITHM_PATH = _ALGO_MOUNTED if os.path.exists(_ALGO_MOUNTED) else _ALGO_BAKED
+INSTANCE_ID    = os.getenv("INSTANCE_ID", "1")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-os.makedirs(INPUT_DIR, exist_ok=True)
+os.makedirs(INPUT_DIR,  exist_ok=True)
+
+LOCAL_MODEL_FILE = os.path.join(OUTPUT_DIR, f"local_model_{INSTANCE_ID}.json")
 
 
-def load_and_run_algorithm(data_path):
-    """Carga dinámicamente el algorithm.py y lo ejecuta."""
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def load_algorithm_module():
+    """Carga dinámicamente algorithm.py."""
     if not os.path.exists(ALGORITHM_PATH):
         raise FileNotFoundError(f"algorithm.py no encontrado en {ALGORITHM_PATH}")
-
-    spec = importlib.util.spec_from_file_location("algorithm", ALGORITHM_PATH)
+    spec   = importlib.util.spec_from_file_location("algorithm", ALGORITHM_PATH)
     module = importlib.util.module_from_spec(spec)
+    sys.modules["algorithm"] = module
     spec.loader.exec_module(module)
-
-    if not hasattr(module, "run"):
-        raise AttributeError("algorithm.py debe tener una función run(data_path)")
-
-    return module.run(data_path)
+    return module
 
 
-@app.get("/health", summary="Health check", tags=["Sistema"])
+def get_csv_path() -> str:
+    """
+    Selecciona el CSV correspondiente a esta instancia.
+    Prioridad:
+      1. unsw_nb15_worker_<INSTANCE_ID>.csv  (partición específica)
+      2. Cualquier CSV disponible en input/   (fallback)
+    """
+    specific = os.path.join(INPUT_DIR, f"unsw_nb15_worker_{INSTANCE_ID}.csv")
+    if os.path.exists(specific):
+        return specific
+
+    csv_files = sorted([f for f in os.listdir(INPUT_DIR) if f.endswith(".csv")])
+    if not csv_files:
+        raise FileNotFoundError(
+            f"No hay CSV en {INPUT_DIR}. "
+            "Ejecuta prepare_dataset.py primero."
+        )
+    # Fallback: intentar usar el CSV según índice de instancia
+    idx = min(int(INSTANCE_ID) - 1, len(csv_files) - 1)
+    return os.path.join(INPUT_DIR, csv_files[idx])
+
+
+# ── Schemas ───────────────────────────────────────────────────────────────────
+
+class FLTrainRequest(BaseModel):
+    global_weights_b64: Optional[str] = None
+    round: int = 1
+
+class FLSetModelRequest(BaseModel):
+    weights_b64: str
+    round: int
+
+
+# ── Endpoints sistema ─────────────────────────────────────────────────────────
+
+@app.get("/health", tags=["Sistema"])
 def health():
-    return {"status": "ok", "instance": INSTANCE_ID}
+    return {"status": "ok", "instance": INSTANCE_ID, "role": "fl_worker"}
 
 
-@app.get("/status", summary="Estado de la instancia", tags=["Sistema"])
+@app.get("/status", tags=["Sistema"])
 def status():
-    """Muestra el estado actual: algoritmo cargado, CSV disponible, outputs generados."""
-    algorithm_exists = os.path.exists(ALGORITHM_PATH)
-    csv_files = [f for f in os.listdir(INPUT_DIR) if f.endswith(".csv")]
+    csv_files    = [f for f in os.listdir(INPUT_DIR) if f.endswith(".csv")]
     output_files = os.listdir(OUTPUT_DIR) if os.path.exists(OUTPUT_DIR) else []
+    try:
+        csv_selected = get_csv_path()
+    except FileNotFoundError:
+        csv_selected = None
 
     return {
-        "instance": INSTANCE_ID,
-        "algorithm_loaded": algorithm_exists,
-        "csv_available": csv_files,
-        "outputs": output_files
+        "instance"        : INSTANCE_ID,
+        "algorithm_loaded": os.path.exists(ALGORITHM_PATH),
+        "csv_available"   : csv_files,
+        "csv_selected"    : csv_selected,
+        "fl_model_loaded" : os.path.exists(LOCAL_MODEL_FILE),
+        "outputs"         : output_files
     }
 
 
-@app.post("/upload-algorithm", summary="Recibe el algorithm.py del Consumer", tags=["Algoritmo"])
+# ── Endpoints algoritmo (compatibilidad) ─────────────────────────────────────
+
+@app.post("/upload-algorithm", tags=["Algoritmo"])
 async def upload_algorithm(algorithm: UploadFile = File(...)):
-    """
-    Recibe el algorithm.py enviado por el Consumer vía IDS.
-    Al compartir volumen, las 3 instancias lo verán automáticamente.
-    """
+    """Recibe algorithm.py del Consumer vía IDS y lo guarda en el volumen montado (ia-dataapp/)."""
     try:
-        content = await algorithm.read()
-        with open(ALGORITHM_PATH, "wb") as f:
-            f.write(content)
-
-        logger.info(f"[Instance {INSTANCE_ID}] algorithm.py recibido: {len(content)} bytes")
-
-        return {
-            "status": "ok",
-            "message": "algorithm.py guardado correctamente",
-            "instance": INSTANCE_ID,
-            "path": ALGORITHM_PATH,
-            "size_bytes": len(content)
-        }
-
+        content_bytes = await algorithm.read()
+        # Guardar siempre en el volumen montado para que persista y sea visible en el host
+        save_path = _ALGO_MOUNTED
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        with open(save_path, "wb") as f:
+            f.write(content_bytes)
+        logger.info(f"algorithm.py guardado en {save_path}: {len(content_bytes)} bytes")
+        return {"status": "ok", "instance": INSTANCE_ID, "path": save_path, "size_bytes": len(content_bytes)}
     except Exception as e:
-        logger.error(f"[Instance {INSTANCE_ID}] Error al recibir algorithm.py: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/execute", summary="Ejecuta el algoritmo sobre el CSV", tags=["Algoritmo"])
-@app.get("/execute", summary="Ejecuta el algoritmo sobre el CSV", tags=["Algoritmo"])
+@app.post("/execute", tags=["Algoritmo"])
+@app.get("/execute",  tags=["Algoritmo"])
 def execute():
-    """
-    Ejecuta el algorithm.py sobre el CSV del Provider.
-    El resultado se guarda en /home/nobody/data/output/result_instance_X.json
-    """
+    """Ejecuta algorithm.py sobre el CSV local. Compatibilidad con flujo original."""
     try:
-        csv_files = [f for f in os.listdir(INPUT_DIR) if f.endswith(".csv")]
-        if not csv_files:
-            raise HTTPException(status_code=404, detail="No se encontró ningún CSV en input/")
-        data_path = os.path.join(INPUT_DIR, csv_files[0])
-        
-        logger.info(f"[Instance {INSTANCE_ID}] Ejecutando algoritmo sobre {data_path}")
+        algo      = load_algorithm_module()
+        data_path = get_csv_path()
+        result    = algo.run(data_path)
 
-        result = load_and_run_algorithm(data_path)
-
-        output_file = os.path.join(OUTPUT_DIR, f"result_instance_{INSTANCE_ID}.json")
-        with open(output_file, "w") as f:
+        out = os.path.join(OUTPUT_DIR, f"result_instance_{INSTANCE_ID}.json")
+        with open(out, "w") as f:
             json.dump(result, f, indent=2, default=str)
 
-        logger.info(f"[Instance {INSTANCE_ID}] Resultado guardado en {output_file}")
+        logger.info(f"Ejecución completada → {out}")
+        return {"status": "ok", "instance": INSTANCE_ID, "result": result}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error en execute: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.get("/result", tags=["Algoritmo"])
+def get_result():
+    out = os.path.join(OUTPUT_DIR, f"result_instance_{INSTANCE_ID}.json")
+    if not os.path.exists(out):
+        raise HTTPException(status_code=404, detail="Sin resultado aún")
+    with open(out) as f:
+        return {"instance": INSTANCE_ID, "result": json.load(f)}
+
+
+# ── Endpoints Federated Learning ──────────────────────────────────────────────
+
+@app.post("/fl/train", tags=["Federated Learning"])
+def fl_train(req: FLTrainRequest):
+    """
+    El coordinador FL llama aquí en cada ronda.
+    Entrena el modelo local con los pesos globales y devuelve los pesos actualizados.
+    Los datos de entrenamiento NUNCA salen de esta instancia.
+    """
+    logger.info(f"FL ronda {req.round} iniciada")
+    try:
+        algo      = load_algorithm_module()
+        data_path = get_csv_path()
+        result    = algo.run(data_path, global_weights_b64=req.global_weights_b64)
+
+        # Guardar métricas de la ronda (sin pesos — privacidad)
+        round_file = os.path.join(OUTPUT_DIR, f"fl_round_{req.round}_instance_{INSTANCE_ID}.json")
+        with open(round_file, "w") as f:
+            json.dump({
+                "round"    : req.round,
+                "instance" : INSTANCE_ID,
+                "n_samples": result.get("n_samples"),
+                "metrics"  : result.get("metrics"),
+            }, f, indent=2)
+
+        logger.info(
+            f"Ronda {req.round} OK | "
+            f"acc={result['metrics']['accuracy']:.4f} | "
+            f"auc={result['metrics']['auc']:.4f}"
+        )
         return {
-            "status": "ok",
-            "instance": INSTANCE_ID,
-            "data_used": data_path,
-            "result": result,
-            "output_file": output_file
+            "status"      : "ok",
+            "instance"    : INSTANCE_ID,
+            "round"       : req.round,
+            "weights_b64" : result["weights_b64"],
+            "n_samples"   : result["n_samples"],
+            "metrics"     : result["metrics"],
+            "input_dim"   : result.get("input_dim"),
+            "feature_cols": result.get("feature_cols"),
         }
 
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=f"{str(e)} - Primero envía el algorithm.py via /upload-algorithm")
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.error(f"[Instance {INSTANCE_ID}] Error en ejecución: {e}")
+        logger.error(f"Error en fl/train ronda {req.round}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/result", summary="Devuelve el último resultado", tags=["Algoritmo"])
-def get_result():
-    """Devuelve el último resultado generado por esta instancia."""
-    output_file = os.path.join(OUTPUT_DIR, f"result_instance_{INSTANCE_ID}.json")
-    if not os.path.exists(output_file):
-        raise HTTPException(status_code=404, detail="No hay resultado disponible aún")
+@app.post("/fl/set-model", tags=["Federated Learning"])
+def fl_set_model(req: FLSetModelRequest):
+    """Recibe y persiste el modelo global actualizado por el coordinador."""
+    with open(LOCAL_MODEL_FILE, "w") as f:
+        json.dump({"round": req.round, "weights_b64": req.weights_b64}, f)
+    logger.info(f"Modelo global ronda {req.round} almacenado")
+    return {"status": "ok", "instance": INSTANCE_ID, "round": req.round}
 
-    with open(output_file, "r") as f:
-        result = json.load(f)
 
-    return {
-        "instance": INSTANCE_ID,
-        "result": result
-    }
+@app.get("/fl/model", tags=["Federated Learning"])
+def fl_get_model():
+    """Devuelve los pesos del modelo global almacenados en esta instancia."""
+    if not os.path.exists(LOCAL_MODEL_FILE):
+        raise HTTPException(status_code=404, detail="Sin modelo global aún")
+    with open(LOCAL_MODEL_FILE) as f:
+        return json.load(f)
+
+
+@app.get("/fl/history", tags=["Federated Learning"])
+def fl_history():
+    """Historial de métricas FL de esta instancia por ronda."""
+    files = sorted([
+        f for f in os.listdir(OUTPUT_DIR)
+        if f.startswith("fl_round_") and f"_instance_{INSTANCE_ID}.json" in f
+    ])
+    history = []
+    for fname in files:
+        with open(os.path.join(OUTPUT_DIR, fname)) as f:
+            history.append(json.load(f))
+    return {"instance": INSTANCE_ID, "history": history}
 
 
 if __name__ == "__main__":

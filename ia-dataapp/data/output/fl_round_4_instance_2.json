@@ -1,0 +1,12 @@
+{
+  "round": 4,
+  "instance": "2",
+  "n_samples": 20746,
+  "metrics": {
+    "loss": 0.178608,
+    "accuracy": 0.931932,
+    "auc": 0.981076,
+    "precision": 0.952711,
+    "recall": 0.915066
+  }
+}

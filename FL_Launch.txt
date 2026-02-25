@@ -1,0 +1,91 @@
+Fase 1 — Verificar que los contenedores están vivos
+bash# Ver que los 3 workers están arriba
+curl http://localhost:5001/health
+curl http://localhost:5002/health
+curl http://localhost:5003/health
+
+# Verificar el coordinador (solo instancia 1)
+curl http://localhost:8600/health
+Respuesta esperada de cada worker:
+json{"status": "ok", "instance": "1", "role": "fl_worker"}
+Respuesta esperada del coordinador:
+json{"status": "ok", "role": "fl_coordinator", "workers": ["http://be-dataapp-provider:8500", ...]}
+
+Fase 2 — Verificar que cada worker ve su CSV
+curl http://localhost:5001/status
+curl http://localhost:5002/status
+curl http://localhost:5003/status
+Respuesta esperada — lo crítico es que csv_selected no sea null y algorithm_loaded sea true:
+json{
+  "instance": "1",
+  "algorithm_loaded": true,
+  "csv_available": ["unsw_nb15_worker_1.csv"],
+  "csv_selected": "/home/nobody/data/input/unsw_nb15_worker_1.csv",
+  "fl_model_loaded": false
+}
+Si csv_available está vacío, el volumen no está montado correctamente.
+
+Fase 3 — Probar UN worker manualmente (sin coordinador)
+Esto verifica que algorithm.py carga bien y TensorFlow funciona:
+
+bash# Llamar directamente al worker 1 como lo haría el coordinador
+
+BASH
+curl -X POST http://localhost:8600/fl/start \
+  -H "Content-Type: application/json" \
+  -d '{"rounds": 5}'
+
+Respuesta esperada (tarda ~30 segundos la primera vez por TF):
+json{
+  "status": "ok",
+  "instance": "1",
+  "round": 1,
+  "n_samples": 18000,
+  "metrics": {
+    "loss": 0.45,
+    "accuracy": 0.82,
+    "auc": 0.88,
+    "precision": 0.79,
+    "recall": 0.85
+  },
+  "weights_b64": "...(string muy largo)..."
+}
+Si esto funciona, el FL funcionará. Si falla, el error te dirá exactamente qué está mal (TF no instalado, CSV no encontrado, etc.).
+
+Fase 4 — Probar UNA sola ronda completa (coordinador + 3 workers)
+bashcurl -X POST http://localhost:8600/fl/round
+Esto ejecuta exactamente una ronda: coordinador llama a los 3 workers en paralelo, hace FedAvg, guarda el modelo global. Respuesta esperada:
+json{
+  "round": 1,
+  "workers_ok": 3,
+  "total_samples": 54000,
+  "global_metrics": {
+    "loss": 0.43,
+    "accuracy": 0.84,
+    "auc": 0.90,
+    "precision": 0.81,
+    "recall": 0.87
+  }
+}
+Lo crítico aquí es "workers_ok": 3 — si es menos de 3, algún worker falló.
+
+Fase 5 — Lanzar el FL completo (5 rondas)
+bash# Lanzar
+curl -X POST http://localhost:8600/fl/start \
+     -H "Content-Type: application/json" \
+     -d "{\"rounds\": 5}"
+
+# Monitorizar cada 10 segundos
+curl http://localhost:8600/fl/status
+
+# Ver resultados cuando termine
+curl http://localhost:8600/fl/results
+```
+
+**Lo que debes observar** en los resultados para confirmar que FL funciona correctamente: la `accuracy` y el `auc` deben **subir ronda a ronda**. No tiene que ser dramático, pero sí una tendencia ascendente. Por ejemplo:
+```
+Ronda 1 → accuracy: 0.82, auc: 0.88
+Ronda 2 → accuracy: 0.85, auc: 0.91
+Ronda 3 → accuracy: 0.87, auc: 0.93
+...
+Si las métricas suben, el sistema FL está funcionando correctamente: los workers están aprendiendo de forma colaborativa sin compartir datos.

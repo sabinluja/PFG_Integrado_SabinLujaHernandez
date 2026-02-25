@@ -32,3 +32,39 @@
 25-02-2026 00:00:50.132 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.h.ContractRequestMessageHandler - Found permission 
 25-02-2026 00:00:52.333 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
 25-02-2026 00:00:52.344 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.h.ContractAgreementMessageHandler - Handling header through ContractAgreementMessageHandler 
+25-02-2026 22:45:01.786 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 17.0.18 on cbd222991da4 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+25-02-2026 22:45:01.788 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+25-02-2026 22:45:01.873 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 17.0.18 on 60c57445880a with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+25-02-2026 22:45:01.876 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+25-02-2026 22:45:06.367 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 17.0.18 on e3347f83da63 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+25-02-2026 22:45:06.371 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+25-02-2026 22:45:06.380 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+25-02-2026 22:45:06.384 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+25-02-2026 22:45:06.645 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+25-02-2026 22:45:06.648 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+25-02-2026 22:45:08.840 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+25-02-2026 22:45:08.852 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response /bin/sh: 1: cosign: not found
+ 
+25-02-2026 22:45:08.854 [restartedMain] INFO  i.e.i.d.c.CertificationCheck - Using certified version: 0.3.8 
+25-02-2026 22:45:09.004 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+25-02-2026 22:45:09.061 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response /bin/sh: 1: cosign: not found
+ 
+25-02-2026 22:45:09.067 [restartedMain] INFO  i.e.i.d.c.CertificationCheck - Using certified version: 0.3.8 
+25-02-2026 22:45:10.430 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+25-02-2026 22:45:10.432 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+25-02-2026 22:45:10.917 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+25-02-2026 22:45:10.930 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+25-02-2026 22:45:10.940 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+25-02-2026 22:45:10.968 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+25-02-2026 22:45:11.003 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+25-02-2026 22:45:11.177 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+25-02-2026 22:45:13.008 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+25-02-2026 22:45:13.018 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response /bin/sh: 1: cosign: not found
+ 
+25-02-2026 22:45:13.020 [restartedMain] INFO  i.e.i.d.c.CertificationCheck - Using certified version: 0.3.8 
+25-02-2026 22:45:13.461 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 12.872 seconds (JVM running for 13.667) 
+25-02-2026 22:45:13.573 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 12.86 seconds (JVM running for 13.755) 
+25-02-2026 22:45:14.467 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+25-02-2026 22:45:14.506 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+25-02-2026 22:45:14.617 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+25-02-2026 22:45:16.120 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 11.019 seconds (JVM running for 12.009) 

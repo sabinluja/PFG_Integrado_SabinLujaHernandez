@@ -19,9 +19,9 @@ services:
       - consumer
     container_name: ecc-provider
     ports:
-      - "${PROVIDER_PORT}:8449"       # HTTP endpoints
-      - "8889:8889"                   # REST inter-connector
-      - "8086:8086"                   # WS inter-connector
+      - "${PROVIDER_PORT}:8449"
+      - "8889:8889"
+      - "8086:8086"
     environment:
       - "JDK_JAVA_OPTIONS=-Xmx1024m"
       - "SPRING_PROFILES_ACTIVE=docker"
@@ -108,23 +108,28 @@ services:
       - ./provider/pip:/etc
 
   # ---------------------------------------------------------------------------
-  # IA DataApp — 3 instancias desplegadas en el PROVIDER
-  # La imagen se construye desde ia-dataapp/
-  # Cada instancia comparte data/ y log/ pero tiene su propio puerto
-  # El Consumer envía el algorithm.py vía IDS al endpoint /upload-algorithm
-  # El Provider ejecuta el algoritmo sobre el CSV en las 3 instancias
+  # IA DataApp — 3 instancias FL sobre el provider
+  #
+  # ia-dataapp-1 (be-dataapp-provider):
+  #   - FL Worker    :8500  → externo 5001
+  #   - FL Coordinator :8600 → externo 8600  ← ÚNICO coordinador central
+  #   - Java ECC     :8183  → externo 8183
+  #
+  # ia-dataapp-2 / ia-dataapp-3:
+  #   - FL Worker    :8500  → externos 5002, 5003
+  #   - Java ECC     :8183  → externos 8185, 8186
   # ---------------------------------------------------------------------------
 
   ia-dataapp-1:
     build:
       context: ./ia-dataapp
       dockerfile: Dockerfile
-    image: ia-dataapp-1:latest
+    image: ia-dataapp:latest
     deploy:
       resources:
         limits:
           cpus: "1"
-          memory: 512M
+          memory: 1536M
     logging:
       options:
         max-size: "100M"
@@ -132,8 +137,9 @@ services:
       - provider
     container_name: be-dataapp-provider
     ports:
-      - "8183:8183"   # Java app (ECC se comunica aquí)
-      - "5001:8500"   # Flask app (upload-algorithm / execute)
+      - "8183:8183"    # Java DataApp (ECC)
+      - "5001:8500"    # FL Worker
+      - "8600:8600"    # FL Coordinator ← único punto de entrada FL
     expose:
       - "9000"
     environment:
@@ -151,10 +157,17 @@ services:
       - FIREWALL=${PROVIDER_DATA_APP_FIREWALL}
       - VALIDATE_SELF_DESCRIPTION=${VALIDATE_SELF_DESCRIPTION}
       - INSTANCE_ID=1
+      # URLs de los workers (usadas por el coordinador FL)
+      - WORKER_1_URL=http://be-dataapp-provider:8500
+      - WORKER_2_URL=http://ia-dataapp-2:8500
+      - WORKER_3_URL=http://ia-dataapp-3:8500
+      - FL_ROUNDS=5
+      - ROUND_TIMEOUT=180
     volumes:
       - ./ia-dataapp/resources:/config
       - ./ia-dataapp/data:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
+      - ./ia-dataapp:/app-src:ro          # algorithm.py accesible en /app-src
       - ./certs:/cert
     depends_on:
       - ecc-provider
@@ -164,12 +177,12 @@ services:
     build:
       context: ./ia-dataapp
       dockerfile: Dockerfile
-    image: ia-dataapp-2:latest
+    image: ia-dataapp:latest
     deploy:
       resources:
         limits:
           cpus: "1"
-          memory: 512M
+          memory: 1536M
     logging:
       options:
         max-size: "100M"
@@ -177,8 +190,8 @@ services:
       - provider
     container_name: ia-dataapp-2
     ports:
-      - "8185:8183"
-      - "5002:8500"   # Flask app instancia 2
+      - "8185:8183"    # Java DataApp (ECC)
+      - "5002:8500"    # FL Worker
     expose:
       - "9001"
     environment:
@@ -200,6 +213,7 @@ services:
       - ./ia-dataapp/resources:/config
       - ./ia-dataapp/data:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
+      - ./ia-dataapp:/app-src:ro
       - ./certs:/cert
     depends_on:
       - ecc-provider
@@ -209,12 +223,12 @@ services:
     build:
       context: ./ia-dataapp
       dockerfile: Dockerfile
-    image: ia-dataapp-3:latest
+    image: ia-dataapp:latest
     deploy:
       resources:
         limits:
           cpus: "1"
-          memory: 512M
+          memory: 1536M
     logging:
       options:
         max-size: "100M"
@@ -222,8 +236,8 @@ services:
       - provider
     container_name: ia-dataapp-3
     ports:
-      - "8186:8183"
-      - "5003:8500"   # Flask app instancia 3
+      - "8186:8183"    # Java DataApp (ECC)
+      - "5003:8500"    # FL Worker
     expose:
       - "9002"
     environment:
@@ -245,13 +259,14 @@ services:
       - ./ia-dataapp/resources:/config
       - ./ia-dataapp/data:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
+      - ./ia-dataapp:/app-src:ro
       - ./certs:/cert
     depends_on:
       - ecc-provider
       - uc-dataapp-provider
 
   # ---------------------------------------------------------------------------
-  # CONSUMER SIDE
+  # CONSUMER SIDE — sin cambios respecto al original
   # ---------------------------------------------------------------------------
 
   ecc-consumer:
@@ -269,9 +284,9 @@ services:
       - provider
     container_name: ecc-consumer
     ports:
-      - "${CONSUMER_PORT}:8449"       # HTTP endpoints
-      - "8890:8889"                   # REST inter-connector
-      - "8087:8086"                   # WS inter-connector
+      - "${CONSUMER_PORT}:8449"
+      - "8890:8889"
+      - "8087:8086"
     environment:
       - "JDK_JAVA_OPTIONS=-Xmx1024m"
       - "SPRING_PROFILES_ACTIVE=docker"
