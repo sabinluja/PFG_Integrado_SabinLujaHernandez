@@ -407,13 +407,127 @@ async def ids_data_endpoint(request: Request):
                 status_code=500
             )
 
-    # ── Caso B: Mensaje IDS genérico (extensible para futuros flujos) ─────────
+    # ── Caso B: ArtifactRequestMessage para fl_global_model ─────────────────
+    #    El Consumer solicita el modelo global cuando detecta FL completado.
+    #    Solo instancia 1 (coordinador) tiene el modelo global.
+    requested = (
+        parsed.get("ids_header", {}).get("ids:requestedArtifact", {})
+        if isinstance(parsed.get("ids_header"), dict) else {}
+    )
+    requested_id = (
+        requested.get("@id", "") if isinstance(requested, dict) else str(requested)
+    )
+    header_str = str(parsed.get("ids_header", ""))
+
+    is_model_request = (
+        "fl_global_model" in requested_id
+        or "fl_global_model" in header_str
+    )
+    is_results_request = (
+        "fl_results" in requested_id
+        or "fl_results" in header_str
+    )
+
+    if is_model_request or is_results_request:
+        artifact_label = "fl_global_model" if is_model_request else "fl_results"
+        model_file   = os.path.join(OUTPUT_DIR, "global_model.json")
+        results_file = os.path.join(OUTPUT_DIR, "fl_results.json")
+
+        target_file = model_file if is_model_request else results_file
+
+        if not os.path.exists(target_file):
+            detail = f"Artefacto {artifact_label} no disponible todavía. FL no completado."
+            logger.warning(f"[/data] {detail}")
+            return Response(
+                content=build_ids_response(False, detail, CONNECTOR_URI),
+                media_type="application/json",
+                status_code=404
+            )
+
+        try:
+            import base64 as _b64, datetime as _dt
+            with open(target_file) as _f:
+                artifact_data = json.load(_f)
+
+            # Enriquecer con metadata IDS
+            artifact_data["artifact_type"] = artifact_label
+            artifact_data["source"]        = "fl_coordinator"
+            artifact_data["provider_uri"]  = CONNECTOR_URI
+            artifact_data["served_at"]     = _dt.datetime.utcnow().isoformat() + "Z"
+
+            # Si es modelo, añadir global_metrics con el nombre que espera el Consumer
+            if is_model_request and "metrics" in artifact_data and "global_metrics" not in artifact_data:
+                artifact_data["global_metrics"] = artifact_data["metrics"]
+
+            # Si es resultados, construir summary si no existe
+            if is_results_request and isinstance(artifact_data, list):
+                history = artifact_data
+                artifact_data = {
+                    "artifact_type" : "fl_results",
+                    "source"        : "fl_coordinator",
+                    "provider_uri"  : CONNECTOR_URI,
+                    "served_at"     : _dt.datetime.utcnow().isoformat() + "Z",
+                    "total_rounds"  : len(history),
+                    "history"       : history,
+                    "summary"       : {
+                        "rounds_completed": len(history),
+                        "workers_used"    : history[-1].get("workers_ok", 0) if history else 0,
+                        "total_samples"   : history[-1].get("total_samples", 0) if history else 0,
+                        "final_metrics"   : history[-1].get("global_metrics", {}) if history else {},
+                        "first_metrics"   : history[0].get("global_metrics", {}) if history else {},
+                        "accuracy_delta"  : round(
+                            history[-1].get("global_metrics", {}).get("accuracy", 0) -
+                            history[0].get("global_metrics", {}).get("accuracy", 0), 6
+                        ) if len(history) >= 2 else 0,
+                        "auc_delta"       : round(
+                            history[-1].get("global_metrics", {}).get("auc", 0) -
+                            history[0].get("global_metrics", {}).get("auc", 0), 6
+                        ) if len(history) >= 2 else 0,
+                    }
+                }
+
+            payload_b64 = _b64.b64encode(
+                json.dumps(artifact_data).encode("utf-8")
+            ).decode("utf-8")
+
+            detail = f"Artefacto {artifact_label} entregado. Instancia {INSTANCE_ID}."
+            logger.info(f"[/data] ✅ {detail} ({len(payload_b64)} bytes b64)")
+
+            # Respuesta IDS con el artefacto embebido en ids:result
+            response_body = {
+                "@context"           : "https://w3id.org/idsa/contexts/context.jsonld",
+                "@type"              : "ids:ArtifactResponseMessage",
+                "@id"                : f"https://w3id.org/idsa/autogen/artifactResponseMessage/{CONNECTOR_URI}",
+                "ids:modelVersion"   : "4.1.0",
+                "ids:issued"         : {
+                    "@value": _dt.datetime.utcnow().isoformat() + "Z",
+                    "@type" : "xsd:dateTimeStamp"
+                },
+                "ids:issuerConnector": {"@id": CONNECTOR_URI},
+                "ids:payload"        : payload_b64,
+                "ids:result"         : detail
+            }
+            return Response(
+                content=json.dumps(response_body, indent=2),
+                media_type="application/json",
+                status_code=200
+            )
+
+        except Exception as e:
+            logger.error(f"[/data] Error sirviendo artefacto {artifact_label}: {e}", exc_info=True)
+            return Response(
+                content=build_ids_response(False, str(e), CONNECTOR_URI),
+                media_type="application/json",
+                status_code=500
+            )
+
+    # ── Caso C: Mensaje IDS genérico ─────────────────────────────────────────
     detail = (
         f"Mensaje IDS recibido por instancia {INSTANCE_ID}. "
         f"Tipo: {msg_type}. "
         f"Payload: {len(payload_bytes)} bytes."
     )
-    logger.info(f"[/data] Mensaje no reconocido como upload, respondiendo genéricamente.")
+    logger.info(f"[/data] Mensaje no reconocido, respondiendo genéricamente.")
     return Response(
         content=build_ids_response(True, detail, CONNECTOR_URI),
         media_type="application/json",

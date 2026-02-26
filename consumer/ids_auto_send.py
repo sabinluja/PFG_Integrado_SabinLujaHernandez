@@ -8,13 +8,19 @@ algorithm.py vía IDS ArtifactRequestMessage y termina.
 
 Variables de entorno (configuradas en docker-compose.yml):
   ALGORITHM_PATH       ruta al algorithm.py dentro del contenedor
-  ECC_CONSUMER_URL     URL del ECC Consumer  (https://ecc-consumer:8449)  ← OJO: el ECC, no el Java DataApp
+  ECC_CONSUMER_URL     URL del Java DataApp Consumer (:8183) — aquí está /proxy
   FORWARD_TO           URL interna del ECC Provider para IDS
   PROVIDER_DATA_APP    URL del DataApp Provider Python (para verificación)
   CONSUMER_CONNECTOR   URI del conector Consumer
   PROVIDER_CONNECTOR   URI del conector Provider
   MAX_WAIT_SECONDS     segundos máximos esperando a que arranquen los ECCs
   RETRY_INTERVAL       segundos entre reintentos
+
+Nota sobre el endpoint /proxy:
+  El /proxy reside en el Java DataApp (:8183), NO en el ECC (:8449).
+  El Java DataApp actúa como proxy: recibe el JSON, construye el
+  multipart IDS y lo reenvía al ECC Consumer (:8887) internamente.
+  Flujo: /proxy(:8183) → ecc-consumer:8887 → ecc-provider:8889 → provider
 """
 
 import os
@@ -32,8 +38,9 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # ── Configuración desde entorno ───────────────────────────────────────────────
 ALGORITHM_PATH     = os.getenv("ALGORITHM_PATH",     "/algorithm/algorithm.py")
 
-# CORRECTO: apunta al ECC Consumer (:8449), no al Java DataApp (:8183)
-ECC_CONSUMER_URL   = os.getenv("ECC_CONSUMER_URL",   "https://ecc-consumer:8449")
+# El /proxy está en el Java DataApp (:8183), no en el ECC (:8449)
+# El Java DataApp reenvía internamente al ECC Consumer (:8887)
+ECC_CONSUMER_URL   = os.getenv("ECC_CONSUMER_URL",   "https://be-dataapp-consumer:8183")
 
 PROVIDER_DATA_APP  = os.getenv("PROVIDER_DATA_APP",  "http://be-dataapp-provider:8500")
 CONSUMER_CONNECTOR = os.getenv("CONSUMER_CONNECTOR", "http://w3id.org/engrd/connector/consumer")
@@ -76,18 +83,19 @@ def wait_for_service(url: str, name: str, timeout: int) -> bool:
 
 def send_algorithm_via_ids() -> bool:
     """
-    Envía algorithm.py al Provider vía IDS usando el endpoint /proxy del ECC Consumer.
+    Envía algorithm.py al Provider vía IDS usando el endpoint /proxy del Java DataApp Consumer.
 
-    El ECC Consumer (:8449/proxy) acepta un JSON con:
+    El Java DataApp (:8183/proxy) acepta un JSON con:
       - multipart        : "form"
       - Forward-To       : URL del ECC Provider
       - messageType      : tipo de mensaje IDS
       - requestedArtifact: URI del artefacto
       - payload          : contenido del fichero en base64
 
-    Este es el mismo formato que usa Postman en el flujo IDS estándar.
-    El ECC Consumer toma este JSON, construye el multipart IDS correcto
-    y lo reenvía al ECC Provider.
+    El Java DataApp construye el multipart IDS y lo reenvía al ECC Consumer (:8887)
+    que lo encamina al ECC Provider (:8889) y finalmente al be-dataapp-provider.
+
+    Flujo: /proxy(:8183) → ecc-consumer:8887 → ecc-provider:8889 → be-dataapp-provider
     """
     if not os.path.exists(ALGORITHM_PATH):
         log(f"❌ algorithm.py no encontrado en {ALGORITHM_PATH}")
@@ -99,7 +107,7 @@ def send_algorithm_via_ids() -> bool:
     algo_b64 = base64.b64encode(algo_bytes).decode("utf-8")
     log(f"📄 algorithm.py leído: {len(algo_bytes)} bytes")
 
-    # El endpoint /proxy es del ECC Consumer (puerto 8449), no del Java DataApp
+    # /proxy está en el Java DataApp (:8183) — él reenvía al ECC Consumer internamente
     proxy_url = f"{ECC_CONSUMER_URL}/proxy"
 
     body = {
@@ -215,12 +223,12 @@ def main():
 
     # ── 1. Esperar servicios ───────────────────────────────────────────────────
     log("⏳ Esperando servicios...")
-    ecc_ok      = wait_for_service(f"{ECC_CONSUMER_URL}/",        "ECC-Consumer",        MAX_WAIT_SECONDS)
-    provider_ok = wait_for_service(f"{PROVIDER_DATA_APP}/health", "be-dataapp-provider", MAX_WAIT_SECONDS)
+    ecc_ok      = wait_for_service(f"{ECC_CONSUMER_URL}/",        "Java DataApp Consumer :8183", MAX_WAIT_SECONDS)
+    provider_ok = wait_for_service(f"{PROVIDER_DATA_APP}/health", "be-dataapp-provider",         MAX_WAIT_SECONDS)
 
     if not ecc_ok:
-        log("❌ ECC Consumer no disponible. Abortando envío IDS.")
-        log("   El sistema sigue funcionando — copia algorithm.py manualmente")
+        log("❌ Java DataApp Consumer no disponible. Abortando envío IDS.")
+        log("   Asegúrate de que be-dataapp-consumer:8183 está arriba.")
         sys.exit(1)
 
     if not provider_ok:

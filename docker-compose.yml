@@ -169,6 +169,12 @@ services:
       - WORKER_3_URL=http://ia-dataapp-3:8500
       - FL_ROUNDS=5
       - ROUND_TIMEOUT=180
+      # ── Envío IDS del modelo y resultados al Consumer al terminar FL ──────
+      - ECC_PROVIDER_DATAAPP_URL=https://be-dataapp-provider:8183
+      - FORWARD_TO_CONSUMER=https://ecc-consumer:8889/data
+      - ECC_USER=idsUser
+      - ECC_PASS=passwordIdsUser
+      - SEND_MODEL_VIA_IDS=true
     volumes:
       - ./ia-dataapp/resources:/config
       - ./ia-dataapp/data:/home/nobody/data/
@@ -398,6 +404,7 @@ services:
     container_name: be-dataapp-consumer
     ports:
       - "8184:8183"
+      - "8501:8500" # FastAPI ids_receive_results (modelo + resultados FL)
     expose:
       - "9000"
     environment:
@@ -424,18 +431,23 @@ services:
       - PROVIDER_CONNECTOR=${PROVIDER_ISSUER_CONNECTOR_URI}
       - ECC_USER=idsUser
       - ECC_PASS=passwordIdsUser
+      - ISSUER_CONNECTOR_URI=${CONSUMER_ISSUER_CONNECTOR_URI}
       - MAX_WAIT_SECONDS=120
       - RETRY_INTERVAL=5
-      # URLs directas a los workers Python (para push_algorithm_to_workers)
-      - WORKER_1_URL=http://be-dataapp-provider:8500
-      - WORKER_2_URL=http://ia-dataapp-2:8500
-      - WORKER_3_URL=http://ia-dataapp-3:8500
+      # Variables para ids_fl_poller.py
+      - PROVIDER_COORDINATOR_URL=http://be-dataapp-provider:8600
+      - FORWARD_TO_PROVIDER=https://ecc-provider:8889/data
+      - POLL_INTERVAL_SECONDS=15
+      - MAX_POLL_MINUTES=60
+      - CONSUMER_FASTAPI_URL=http://localhost:8500
     volumes:
       - ./ia-dataapp/resources:/config
       - ./certs:/cert
       - be_dataapp_consumer_data:/home/nobody/data
       - ./ia-dataapp/algorithm.py:/algorithm/algorithm.py:ro
       - ./consumer/ids_auto_send.py:/app/ids_auto_send.py:ro
+      - ./consumer/ids_receive_results.py:/app/ids_receive_results.py:ro
+      - ./consumer/ids_fl_poller.py:/app/ids_fl_poller.py:ro
     depends_on:
       - ecc-consumer
       - ecc-provider

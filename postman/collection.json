@@ -2624,6 +2624,223 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "15 - Consumer Status (IDS delivery check)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Modelo recibido del Provider vía IDS\", function () {",
+                  "    var data = pm.response.json();",
+                  "    pm.expect(data.model_received).to.be.true;",
+                  "    console.log(\"model_received  : \" + data.model_received);",
+                  "    console.log(\"results_received: \" + data.results_received);",
+                  "    if (data.model_info) {",
+                  "        console.log(\"Modelo — ronda: \" + data.model_info.round",
+                  "            + \" | acc: \" + data.model_info.global_metrics.accuracy",
+                  "            + \" | auc: \" + data.model_info.global_metrics.auc);",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test(\"Resultados FL recibidos del Provider vía IDS\", function () {",
+                  "    var data = pm.response.json();",
+                  "    pm.expect(data.results_received).to.be.true;",
+                  "    if (data.results_info) {",
+                  "        console.log(\"Resultados — rondas: \" + data.results_info.total_rounds);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8501/status",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8501",
+              "path": [
+                "status"
+              ]
+            },
+            "description": "Verifica que el Consumer recibió modelo global y resultados FL del Provider vía IDS.\nmodel_received y results_received deben ser true."
+          },
+          "response": []
+        },
+        {
+          "name": "16 - Consumer FL Results Summary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Resumen FL recibido con mejora de accuracy\", function () {",
+                  "    var data = pm.response.json();",
+                  "    pm.expect(data.status).to.eql(\"received\");",
+                  "    pm.expect(data.rounds_completed).to.be.above(0);",
+                  "    pm.expect(data.workers_used).to.eql(3);",
+                  "    console.log(\"══════════════════════════════════\");",
+                  "    console.log(\"  RESUMEN FL — CONSUMER\");",
+                  "    console.log(\"══════════════════════════════════\");",
+                  "    console.log(\"  Rondas completadas : \" + data.rounds_completed);",
+                  "    console.log(\"  Workers utilizados : \" + data.workers_used);",
+                  "    console.log(\"  Total muestras     : \" + data.total_samples);",
+                  "    console.log(\"  Primera ronda      : acc=\" + data.first_round.accuracy + \" auc=\" + data.first_round.auc);",
+                  "    console.log(\"  Última ronda       : acc=\" + data.final_round.accuracy + \" auc=\" + data.final_round.auc);",
+                  "    console.log(\"  Mejora accuracy    : +\" + data.improvement.accuracy_delta);",
+                  "    console.log(\"  Mejora AUC         : +\" + data.improvement.auc_delta);",
+                  "    console.log(\"══════════════════════════════════\");",
+                  "});",
+                  "",
+                  "pm.test(\"Accuracy mejoró ronda a ronda (tendencia ascendente)\", function () {",
+                  "    var data = pm.response.json();",
+                  "    if (data.first_round && data.final_round) {",
+                  "        pm.expect(data.final_round.accuracy).to.be.above(data.first_round.accuracy);",
+                  "        pm.expect(data.improvement.accuracy_delta).to.be.above(0);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8501/fl/results/summary",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8501",
+              "path": [
+                "fl",
+                "results",
+                "summary"
+              ]
+            },
+            "description": "Resumen ejecutivo del FL tal como lo recibió el Consumer del Provider vía IDS.\nVerifica mejora de accuracy y AUC entre primera y última ronda.\nEsto confirma que el ciclo IDS completo funciona:\n  Consumer → [IDS] algorithm.py → Provider\n  Provider → [IDS] global_model + fl_results → Consumer"
+          },
+          "response": []
+        },
+        {
+          "name": "17 - Consumer FL Results (historial completo)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Historial FL completo recibido vía IDS\", function () {",
+                  "    var data = pm.response.json();",
+                  "    pm.expect(data.status).to.eql(\"received\");",
+                  "    pm.expect(data.history).to.be.an(\"array\");",
+                  "    pm.expect(data.history.length).to.be.above(0);",
+                  "    // Todos los workers OK en cada ronda",
+                  "    data.history.forEach(function(r) {",
+                  "        pm.expect(r.workers_ok).to.eql(3);",
+                  "    });",
+                  "    // Log por ronda",
+                  "    console.log(\"Historial por ronda (recibido del Provider vía IDS):\");",
+                  "    data.history.forEach(function(r) {",
+                  "        console.log(\"  Ronda \" + r.round",
+                  "            + \" | acc=\" + r.global_metrics.accuracy",
+                  "            + \" | auc=\" + r.global_metrics.auc",
+                  "            + \" | workers_ok=\" + r.workers_ok);",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8501/fl/results",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8501",
+              "path": [
+                "fl",
+                "results"
+              ]
+            },
+            "description": "Historial completo de métricas FL por ronda, recibido del Provider vía IDS.\nVerifica que workers_ok=3 en todas las rondas."
+          },
+          "response": []
+        },
+        {
+          "name": "18 - Consumer FL Model (global)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Modelo global recibido con métricas finales\", function () {",
+                  "    var data = pm.response.json();",
+                  "    pm.expect(data.status).to.eql(\"received\");",
+                  "    pm.expect(data.round).to.be.above(0);",
+                  "    pm.expect(data.global_metrics).to.be.an(\"object\");",
+                  "    pm.expect(data.weights_available).to.be.true;",
+                  "    console.log(\"Modelo global — ronda \" + data.round);",
+                  "    console.log(\"  accuracy  : \" + data.global_metrics.accuracy);",
+                  "    console.log(\"  auc       : \" + data.global_metrics.auc);",
+                  "    console.log(\"  precision : \" + data.global_metrics.precision);",
+                  "    console.log(\"  recall    : \" + data.global_metrics.recall);",
+                  "    console.log(\"  pesos     : \" + (data.weights_available ? \"disponibles\" : \"no disponibles\"));",
+                  "    console.log(\"  recibido  : \" + data.received_at);",
+                  "    console.log(\"  provider  : \" + data.provider_uri);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8501/fl/model",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8501",
+              "path": [
+                "fl",
+                "model"
+              ]
+            },
+            "description": "Modelo global FL recibido del Provider vía IDS (sin pesos, solo métricas).\nVerifica que weights_available=true — los pesos están en /fl/model/full."
+          },
+          "response": []
         }
       ]
     }
