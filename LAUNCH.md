@@ -34,6 +34,7 @@ docker-compose up -d
 docker-compose build ia-dataapp-1
 docker compose build be-dataapp-consumer
 docker-compose up -d
+
 ```
 > **Note:** The `byoa-dataapp-provider-1` service builds the base image used by instances 2 and 3.
 

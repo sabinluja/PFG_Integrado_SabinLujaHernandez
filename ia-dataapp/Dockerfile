@@ -25,8 +25,10 @@ COPY algorithm.py      /app/algorithm.py
 RUN mkdir -p \
         /home/nobody/data/input \
         /home/nobody/data/output \
-        /home/nobody/log && \
-    chown -R nobody:nogroup /home/nobody /app
+        /home/nobody/log \
+        /app-src && \
+    chown -R nobody:nogroup /home/nobody /app && \
+    chmod 777 /app-src
 
 COPY start.sh /start.sh
 RUN chmod +x /start.sh && sed -i 's/\r//' /start.sh

@@ -114,3 +114,317 @@
 26-02-2026 00:41:36.795 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.h.ArtifactMessageHandler - Handling header through ArtifactMessageHandler 
 26-02-2026 00:48:19.591 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
 26-02-2026 00:48:19.610 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.h.ArtifactMessageHandler - Handling header through ArtifactMessageHandler 
+26-02-2026 00:55:13.744 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 17.0.18 on cf4e09901f96 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+26-02-2026 00:55:13.746 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+26-02-2026 00:55:13.745 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 17.0.18 on d192ebbf3a07 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+26-02-2026 00:55:13.748 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+26-02-2026 00:55:18.498 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+26-02-2026 00:55:18.498 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+26-02-2026 00:55:18.501 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+26-02-2026 00:55:18.502 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+26-02-2026 00:55:19.052 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 17.0.18 on 442bbf77319e with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+26-02-2026 00:55:19.054 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+26-02-2026 00:55:21.007 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+26-02-2026 00:55:21.019 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response /bin/sh: 1: cosign: not found
+ 
+26-02-2026 00:55:21.020 [restartedMain] INFO  i.e.i.d.c.CertificationCheck - Using certified version: 0.3.8 
+26-02-2026 00:55:21.043 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+26-02-2026 00:55:21.052 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response /bin/sh: 1: cosign: not found
+ 
+26-02-2026 00:55:21.055 [restartedMain] INFO  i.e.i.d.c.CertificationCheck - Using certified version: 0.3.8 
+26-02-2026 00:55:22.684 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 00:55:22.760 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 00:55:22.830 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 00:55:22.845 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+26-02-2026 00:55:22.850 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 00:55:23.039 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+26-02-2026 00:55:23.061 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+26-02-2026 00:55:23.090 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+26-02-2026 00:55:24.774 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 12.113 seconds (JVM running for 13.204) 
+26-02-2026 00:55:25.020 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 12.353 seconds (JVM running for 13.45) 
+26-02-2026 00:55:25.365 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+26-02-2026 00:55:25.371 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response /bin/sh: 1: cosign: not found
+ 
+26-02-2026 00:55:25.373 [restartedMain] INFO  i.e.i.d.c.CertificationCheck - Using certified version: 0.3.8 
+26-02-2026 00:55:26.671 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 00:55:26.691 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 00:55:26.774 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+26-02-2026 00:55:28.256 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 10.47 seconds (JVM running for 11.554) 
+26-02-2026 00:55:58.522 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:55:59.733 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.h.ArtifactMessageHandler - Handling header through ArtifactMessageHandler 
+26-02-2026 00:57:04.217 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:57:04.234 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 00:57:04.235 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 00:57:04.625 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 00:57:12.876 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:57:12.885 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 00:57:12.887 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 00:57:13.133 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 00:57:19.919 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:57:19.929 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.h.ContractRequestMessageHandler - ContractRequestMessageHandler 
+26-02-2026 00:57:19.929 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.h.ContractRequestMessageHandler - Returning default contract agreement 
+26-02-2026 00:57:19.929 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 00:57:20.164 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 00:57:20.361 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.h.ContractRequestMessageHandler - Found permission 
+26-02-2026 00:57:24.109 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:57:24.118 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.h.ContractAgreementMessageHandler - Handling header through ContractAgreementMessageHandler 
+26-02-2026 00:59:06.495 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:59:06.503 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 00:59:06.504 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 00:59:06.731 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 00:59:07.379 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:59:07.386 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 00:59:07.386 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 00:59:07.549 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 00:59:08.184 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:59:08.190 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.h.ContractRequestMessageHandler - ContractRequestMessageHandler 
+26-02-2026 00:59:08.191 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.h.ContractRequestMessageHandler - Returning default contract agreement 
+26-02-2026 00:59:08.191 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 00:59:08.350 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 00:59:08.447 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.h.ContractRequestMessageHandler - Found permission 
+26-02-2026 00:59:09.042 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:59:09.053 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.h.ContractAgreementMessageHandler - Handling header through ContractAgreementMessageHandler 
+26-02-2026 00:59:09.557 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:59:09.563 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.h.ArtifactMessageHandler - Handling header through ArtifactMessageHandler 
+26-02-2026 00:59:19.473 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:59:19.482 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 00:59:19.482 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 00:59:19.640 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 00:59:20.201 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:59:20.207 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 00:59:20.208 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 00:59:20.329 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 00:59:21.559 [https-jsse-nio-8183-exec-1] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:59:21.568 [https-jsse-nio-8183-exec-1] INFO  i.e.i.d.h.ContractRequestMessageHandler - ContractRequestMessageHandler 
+26-02-2026 00:59:21.568 [https-jsse-nio-8183-exec-1] INFO  i.e.i.d.h.ContractRequestMessageHandler - Returning default contract agreement 
+26-02-2026 00:59:21.569 [https-jsse-nio-8183-exec-1] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 00:59:21.745 [https-jsse-nio-8183-exec-1] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 00:59:21.818 [https-jsse-nio-8183-exec-1] INFO  i.e.i.d.h.ContractRequestMessageHandler - Found permission 
+26-02-2026 00:59:22.260 [https-jsse-nio-8183-exec-2] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:59:22.301 [https-jsse-nio-8183-exec-2] INFO  i.e.i.d.h.ContractAgreementMessageHandler - Handling header through ContractAgreementMessageHandler 
+26-02-2026 00:59:22.859 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:59:22.865 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.h.ArtifactMessageHandler - Handling header through ArtifactMessageHandler 
+26-02-2026 00:59:30.815 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:59:30.821 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 00:59:30.822 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 00:59:30.961 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 00:59:31.490 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:59:31.497 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 00:59:31.499 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 00:59:31.669 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 00:59:32.181 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:59:32.188 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.h.ContractRequestMessageHandler - ContractRequestMessageHandler 
+26-02-2026 00:59:32.188 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.h.ContractRequestMessageHandler - Returning default contract agreement 
+26-02-2026 00:59:32.188 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 00:59:32.375 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 00:59:32.422 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.h.ContractRequestMessageHandler - Found permission 
+26-02-2026 00:59:32.892 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:59:32.897 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.h.ContractAgreementMessageHandler - Handling header through ContractAgreementMessageHandler 
+26-02-2026 00:59:33.385 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 00:59:33.390 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.h.ArtifactMessageHandler - Handling header through ArtifactMessageHandler 
+26-02-2026 14:11:36.907 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 17.0.18 on b68baaafa04f with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+26-02-2026 14:11:36.907 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 17.0.18 on 8493506020ad with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+26-02-2026 14:11:36.915 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+26-02-2026 14:11:36.916 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+26-02-2026 14:11:42.319 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 17.0.18 on e2ded3cba1d4 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+26-02-2026 14:11:42.322 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+26-02-2026 14:11:42.681 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+26-02-2026 14:11:42.684 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+26-02-2026 14:11:42.889 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+26-02-2026 14:11:42.896 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+26-02-2026 14:11:45.452 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+26-02-2026 14:11:45.496 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response /bin/sh: 1: cosign: not found
+ 
+26-02-2026 14:11:45.600 [restartedMain] INFO  i.e.i.d.c.CertificationCheck - Using certified version: 0.3.8 
+26-02-2026 14:11:45.782 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+26-02-2026 14:11:45.793 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response /bin/sh: 1: cosign: not found
+ 
+26-02-2026 14:11:45.851 [restartedMain] INFO  i.e.i.d.c.CertificationCheck - Using certified version: 0.3.8 
+26-02-2026 14:11:47.273 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+26-02-2026 14:11:47.280 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+26-02-2026 14:11:47.848 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:11:47.873 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:11:48.017 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:11:48.042 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:11:48.072 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+26-02-2026 14:11:48.156 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+26-02-2026 14:11:50.127 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+26-02-2026 14:11:50.138 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response /bin/sh: 1: cosign: not found
+ 
+26-02-2026 14:11:50.139 [restartedMain] INFO  i.e.i.d.c.CertificationCheck - Using certified version: 0.3.8 
+26-02-2026 14:11:50.639 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 15.24 seconds (JVM running for 16.181) 
+26-02-2026 14:11:50.696 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 15.298 seconds (JVM running for 16.303) 
+26-02-2026 14:11:51.561 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:11:51.621 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:11:51.659 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+26-02-2026 14:11:52.947 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 12.305 seconds (JVM running for 13.456) 
+26-02-2026 14:21:54.168 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 17.0.18 on 6ef903d3700f with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+26-02-2026 14:21:54.168 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 17.0.18 on d92f9d76a4c0 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+26-02-2026 14:21:54.170 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+26-02-2026 14:21:54.170 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+26-02-2026 14:21:59.090 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 17.0.18 on 62d3551dfb45 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+26-02-2026 14:21:59.098 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+26-02-2026 14:22:00.500 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+26-02-2026 14:22:00.507 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+26-02-2026 14:22:00.879 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+26-02-2026 14:22:00.884 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+26-02-2026 14:22:03.785 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+26-02-2026 14:22:03.801 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response /bin/sh: 1: cosign: not found
+ 
+26-02-2026 14:22:03.857 [restartedMain] INFO  i.e.i.d.c.CertificationCheck - Using certified version: 0.3.8 
+26-02-2026 14:22:03.866 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+26-02-2026 14:22:03.874 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response /bin/sh: 1: cosign: not found
+ 
+26-02-2026 14:22:03.884 [restartedMain] INFO  i.e.i.d.c.CertificationCheck - Using certified version: 0.3.8 
+26-02-2026 14:22:04.820 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+26-02-2026 14:22:04.829 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+26-02-2026 14:22:05.808 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:22:05.829 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:22:05.833 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:22:05.863 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:22:05.940 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+26-02-2026 14:22:05.972 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+26-02-2026 14:22:07.493 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+26-02-2026 14:22:07.504 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response /bin/sh: 1: cosign: not found
+ 
+26-02-2026 14:22:07.505 [restartedMain] INFO  i.e.i.d.c.CertificationCheck - Using certified version: 0.3.8 
+26-02-2026 14:22:07.736 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 15.355 seconds (JVM running for 16.667) 
+26-02-2026 14:22:07.766 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 15.375 seconds (JVM running for 16.697) 
+26-02-2026 14:22:08.977 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:22:08.993 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:22:09.108 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+26-02-2026 14:22:10.576 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 13.135 seconds (JVM running for 14.639) 
+26-02-2026 14:33:34.649 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 17.0.18 on d6211fe2024a with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+26-02-2026 14:33:34.651 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+26-02-2026 14:33:34.679 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 17.0.18 on 8469b89a06d5 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+26-02-2026 14:33:34.681 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+26-02-2026 14:33:42.045 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+26-02-2026 14:33:42.049 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+26-02-2026 14:33:42.079 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+26-02-2026 14:33:42.082 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+26-02-2026 14:33:42.538 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Starting ApplicationDataApp v0.3.8 using Java 17.0.18 on 27df0507bb25 with PID 1 (/home/nobody/app/application.jar started by nobody in /home/nobody) 
+26-02-2026 14:33:42.540 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - The following 1 profile is active: "docker" 
+26-02-2026 14:33:44.552 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+26-02-2026 14:33:44.563 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response /bin/sh: 1: cosign: not found
+ 
+26-02-2026 14:33:44.587 [restartedMain] INFO  i.e.i.d.c.CertificationCheck - Using certified version: 0.3.8 
+26-02-2026 14:33:44.618 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+26-02-2026 14:33:44.664 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response /bin/sh: 1: cosign: not found
+ 
+26-02-2026 14:33:44.687 [restartedMain] INFO  i.e.i.d.c.CertificationCheck - Using certified version: 0.3.8 
+26-02-2026 14:33:46.132 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:33:46.149 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:33:46.321 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+26-02-2026 14:33:46.625 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:33:46.703 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:33:46.795 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Creating additional connector for port 8183 
+26-02-2026 14:33:46.810 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - TLS enabled, adding to new connector 
+26-02-2026 14:33:46.865 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+26-02-2026 14:33:48.445 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 12.268 seconds (JVM running for 13.182) 
+26-02-2026 14:33:48.760 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 12.621 seconds (JVM running for 13.687) 
+26-02-2026 14:33:48.931 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Executing process.../bin/sh -c echo | cosign verify --insecure-ignore-tlog --key /cert/trueconn.pub rdlabengpa/ids_be_data_app:v0.3.8 
+26-02-2026 14:33:48.993 [restartedMain] INFO  i.e.i.d.service.ProcessExecutor - Process returned response /bin/sh: 1: cosign: not found
+ 
+26-02-2026 14:33:48.994 [restartedMain] INFO  i.e.i.d.c.CertificationCheck - Using certified version: 0.3.8 
+26-02-2026 14:33:50.142 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:33:50.199 [restartedMain] INFO  i.e.i.d.c.SecureRestTemplateCustomizer - Registered SSL truststore /cert/ssl-server.jks for client requests 
+26-02-2026 14:33:50.301 [pool-1-thread-1] INFO  i.e.i.s.w.r.s.HttpWebSocketServerBean - Creating resource using file /cert/ssl-server.jks 
+26-02-2026 14:33:51.606 [restartedMain] INFO  i.e.idsa.dataapp.ApplicationDataApp - Started ApplicationDataApp in 10.38 seconds (JVM running for 11.36) 
+26-02-2026 14:34:21.723 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:34:23.043 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.h.ArtifactMessageHandler - Handling header through ArtifactMessageHandler 
+26-02-2026 14:36:15.318 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:36:15.336 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 14:36:15.337 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:36:18.459 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:36:19.526 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:36:19.537 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 14:36:19.537 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:36:19.758 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:36:20.387 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:36:20.395 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.h.ContractRequestMessageHandler - ContractRequestMessageHandler 
+26-02-2026 14:36:20.396 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.h.ContractRequestMessageHandler - Returning default contract agreement 
+26-02-2026 14:36:20.397 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:36:20.619 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:36:20.746 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.h.ContractRequestMessageHandler - Found permission 
+26-02-2026 14:36:21.372 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:36:21.379 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.h.ContractAgreementMessageHandler - Handling header through ContractAgreementMessageHandler 
+26-02-2026 14:52:15.719 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:52:15.732 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 14:52:15.732 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:52:15.854 [https-jsse-nio-8183-exec-3] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:52:16.460 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:52:16.467 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 14:52:16.467 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:52:16.624 [https-jsse-nio-8183-exec-4] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:52:17.416 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:52:17.426 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.h.ContractRequestMessageHandler - ContractRequestMessageHandler 
+26-02-2026 14:52:17.426 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.h.ContractRequestMessageHandler - Returning default contract agreement 
+26-02-2026 14:52:17.427 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:52:17.625 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:52:17.722 [https-jsse-nio-8183-exec-5] INFO  i.e.i.d.h.ContractRequestMessageHandler - Found permission 
+26-02-2026 14:52:18.173 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:52:18.184 [https-jsse-nio-8183-exec-6] INFO  i.e.i.d.h.ContractAgreementMessageHandler - Handling header through ContractAgreementMessageHandler 
+26-02-2026 14:53:07.160 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:53:07.170 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 14:53:07.171 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:53:07.386 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:53:07.976 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:53:07.986 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 14:53:07.988 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:53:08.189 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:53:08.721 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:53:08.727 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.h.ContractRequestMessageHandler - ContractRequestMessageHandler 
+26-02-2026 14:53:08.727 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.h.ContractRequestMessageHandler - Returning default contract agreement 
+26-02-2026 14:53:08.727 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:53:08.880 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:53:08.930 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.h.ContractRequestMessageHandler - Found permission 
+26-02-2026 14:53:09.420 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:53:09.427 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.h.ContractAgreementMessageHandler - Handling header through ContractAgreementMessageHandler 
+26-02-2026 14:55:19.270 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:55:19.277 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 14:55:19.277 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:55:19.401 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:55:19.912 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:55:19.918 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 14:55:19.918 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:55:20.082 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:55:20.607 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:55:20.612 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.h.ContractRequestMessageHandler - ContractRequestMessageHandler 
+26-02-2026 14:55:20.613 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.h.ContractRequestMessageHandler - Returning default contract agreement 
+26-02-2026 14:55:20.613 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:55:20.787 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:55:20.865 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.h.ContractRequestMessageHandler - Found permission 
+26-02-2026 14:55:21.301 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:55:21.306 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.h.ContractAgreementMessageHandler - Handling header through ContractAgreementMessageHandler 
+26-02-2026 14:57:03.757 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:57:03.764 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 14:57:03.766 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:57:03.889 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:57:04.398 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:57:04.402 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 14:57:04.403 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:57:04.488 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:57:04.975 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:57:04.981 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.h.ContractRequestMessageHandler - ContractRequestMessageHandler 
+26-02-2026 14:57:04.981 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.h.ContractRequestMessageHandler - Returning default contract agreement 
+26-02-2026 14:57:04.981 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:57:05.098 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:57:05.178 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.h.ContractRequestMessageHandler - Found permission 
+26-02-2026 14:57:05.864 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:57:05.869 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.h.ContractAgreementMessageHandler - Handling header through ContractAgreementMessageHandler 
+26-02-2026 14:59:22.533 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:59:22.538 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 14:59:22.539 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:59:22.657 [https-jsse-nio-8183-exec-7] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:59:27.651 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:59:27.657 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.h.DescriptionRequestMessageHandler - DescriptionRequestMessage 
+26-02-2026 14:59:27.657 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:59:27.763 [https-jsse-nio-8183-exec-8] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:59:30.668 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:59:30.673 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.h.ContractRequestMessageHandler - ContractRequestMessageHandler 
+26-02-2026 14:59:30.673 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.h.ContractRequestMessageHandler - Returning default contract agreement 
+26-02-2026 14:59:30.674 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Fetching self description from ECC https://ecc-provider:8449 
+26-02-2026 14:59:30.750 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.s.i.SelfDescriptionServiceImpl - Deserializing self description. 
+26-02-2026 14:59:30.831 [https-jsse-nio-8183-exec-9] INFO  i.e.i.d.h.ContractRequestMessageHandler - Found permission 
+26-02-2026 14:59:40.591 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.w.r.DataControllerBodyForm - Multipart/form request 
+26-02-2026 14:59:40.599 [https-jsse-nio-8183-exec-10] INFO  i.e.i.d.h.ContractAgreementMessageHandler - Handling header through ContractAgreementMessageHandler 

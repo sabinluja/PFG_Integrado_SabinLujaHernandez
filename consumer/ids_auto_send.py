@@ -1,16 +1,16 @@
 """
 ids_auto_send.py — Envío automático de algorithm.py al Provider vía IDS
 =======================================================================
-Corre UNA sola vez al arrancar el contenedor ids-algorithm-sender.
+Corre UNA sola vez al arrancar el contenedor be-dataapp-consumer.
 
 Espera a que ECC-Consumer y ECC-Provider estén listos, luego envía
 algorithm.py vía IDS ArtifactRequestMessage y termina.
 
 Variables de entorno (configuradas en docker-compose.yml):
   ALGORITHM_PATH       ruta al algorithm.py dentro del contenedor
-  ECC_CONSUMER_URL     URL del ECC Consumer  (https://ecc-consumer:8449)
-  PROVIDER_ECC_URL     URL del ECC Provider  (https://ecc-provider:8449)
-  PROVIDER_DATA_APP    URL del DataApp Provider (para verificación)
+  ECC_CONSUMER_URL     URL del ECC Consumer  (https://ecc-consumer:8449)  ← OJO: el ECC, no el Java DataApp
+  FORWARD_TO           URL interna del ECC Provider para IDS
+  PROVIDER_DATA_APP    URL del DataApp Provider Python (para verificación)
   CONSUMER_CONNECTOR   URI del conector Consumer
   PROVIDER_CONNECTOR   URI del conector Provider
   MAX_WAIT_SECONDS     segundos máximos esperando a que arranquen los ECCs
@@ -31,7 +31,10 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ── Configuración desde entorno ───────────────────────────────────────────────
 ALGORITHM_PATH     = os.getenv("ALGORITHM_PATH",     "/algorithm/algorithm.py")
+
+# CORRECTO: apunta al ECC Consumer (:8449), no al Java DataApp (:8183)
 ECC_CONSUMER_URL   = os.getenv("ECC_CONSUMER_URL",   "https://ecc-consumer:8449")
+
 PROVIDER_DATA_APP  = os.getenv("PROVIDER_DATA_APP",  "http://be-dataapp-provider:8500")
 CONSUMER_CONNECTOR = os.getenv("CONSUMER_CONNECTOR", "http://w3id.org/engrd/connector/consumer")
 PROVIDER_CONNECTOR = os.getenv("PROVIDER_CONNECTOR", "http://w3id.org/engrd/connector/provider")
@@ -43,14 +46,7 @@ ECC_PASS           = os.getenv("ECC_PASS",  "passwordIdsUser")
 # Forward-To: URL interna Docker del ECC Provider
 FORWARD_TO = os.getenv("FORWARD_TO", "https://ecc-provider:8889/data")
 
-# El Java DataApp Consumer expone /proxy — igual que usa Postman
-# Es distinto al /proxy del ECC (que requiere auth diferente)
-PROXY_PATH = "/proxy"
-
 # URLs directas a los Python FastAPI workers (red interna Docker)
-# El ecc-provider llama al Java ECC (be-dataapp-provider:8183), que responde
-# con datos del datalake local pero NO reenvía al Python :8500.
-# La entrega real del algoritmo se hace directamente al Python.
 WORKER_URLS = [
     os.getenv("WORKER_1_URL", "http://be-dataapp-provider:8500"),
     os.getenv("WORKER_2_URL", "http://ia-dataapp-2:8500"),
@@ -78,45 +74,21 @@ def wait_for_service(url: str, name: str, timeout: int) -> bool:
     return False
 
 
-def build_ids_header() -> str:
-    """Construye el IDS ArtifactRequestMessage JSON-LD."""
-    msg_id = str(uuid.uuid4())
-    return json.dumps({
-        "@context"             : "https://w3id.org/idsa/contexts/context.jsonld",
-        "@type"                : "ids:ArtifactRequestMessage",
-        "@id"                  : f"https://w3id.org/idsa/autogen/artifactRequestMessage/{msg_id}",
-        "ids:modelVersion"     : "4.1.0",
-        "ids:issued"           : {
-            "@value": datetime.datetime.utcnow().isoformat() + "Z",
-            "@type" : "xsd:dateTimeStamp"
-        },
-        "ids:issuerConnector"  : {"@id": CONSUMER_CONNECTOR},
-        "ids:senderAgent"      : {"@id": CONSUMER_CONNECTOR},
-        "ids:recipientConnector": [{"@id": PROVIDER_CONNECTOR}],
-        "ids:requestedArtifact": {"@id": "https://w3id.org/idsa/autogen/artifact/algorithm.py"},
-        "ids:contentVersion"   : "1.0",
-        "ids:description"      : [{
-            "@value": "Automatic FL algorithm deployment",
-            "@language": "en"
-        }]
-    })
-
-
-def send_algorithm() -> bool:
+def send_algorithm_via_ids() -> bool:
     """
-    Envía algorithm.py al Provider vía IDS.
+    Envía algorithm.py al Provider vía IDS usando el endpoint /proxy del ECC Consumer.
 
-    El Java DataApp Consumer (/proxy) espera un JSON body con estos campos:
-      - multipart        : tipo de multipart ("form")
+    El ECC Consumer (:8449/proxy) acepta un JSON con:
+      - multipart        : "form"
       - Forward-To       : URL del ECC Provider
       - messageType      : tipo de mensaje IDS
       - requestedArtifact: URI del artefacto
       - payload          : contenido del fichero en base64
 
-    Este es exactamente el mismo formato que usa Postman en el paso 5.
+    Este es el mismo formato que usa Postman en el flujo IDS estándar.
+    El ECC Consumer toma este JSON, construye el multipart IDS correcto
+    y lo reenvía al ECC Provider.
     """
-
-    # 1. Leer fichero
     if not os.path.exists(ALGORITHM_PATH):
         log(f"❌ algorithm.py no encontrado en {ALGORITHM_PATH}")
         return False
@@ -124,13 +96,12 @@ def send_algorithm() -> bool:
     with open(ALGORITHM_PATH, "rb") as f:
         algo_bytes = f.read()
 
-    # Codificar en base64 para incluirlo en el JSON
     algo_b64 = base64.b64encode(algo_bytes).decode("utf-8")
     log(f"📄 algorithm.py leído: {len(algo_bytes)} bytes")
 
+    # El endpoint /proxy es del ECC Consumer (puerto 8449), no del Java DataApp
     proxy_url = f"{ECC_CONSUMER_URL}/proxy"
 
-    # 2. Body JSON — formato que espera el Java DataApp Consumer
     body = {
         "multipart"        : "form",
         "Forward-To"       : FORWARD_TO,
@@ -139,11 +110,11 @@ def send_algorithm() -> bool:
         "payload"          : algo_b64
     }
 
-    log(f"📤 Enviando a {proxy_url}")
-    log(f"   Forward-To: {FORWARD_TO}")
+    log(f"📤 Enviando vía IDS:")
+    log(f"   Proxy URL  : {proxy_url}")
+    log(f"   Forward-To : {FORWARD_TO}")
     log(f"   messageType: ArtifactRequestMessage")
 
-    # 3. POST al Java DataApp Consumer
     try:
         resp = requests.post(
             proxy_url,
@@ -156,15 +127,16 @@ def send_algorithm() -> bool:
         log(f"   Body: {resp.text[:300]}")
 
         if resp.status_code == 200:
-            log(f"✅ algorithm.py enviado correctamente vía IDS")
+            log("✅ algorithm.py enviado correctamente vía IDS")
             return True
         else:
-            log(f"❌ Error: {resp.status_code} — {resp.text[:300]}")
+            log(f"❌ Error IDS: {resp.status_code} — {resp.text[:300]}")
             return False
 
     except Exception as e:
-        log(f"❌ Error enviando: {e}")
+        log(f"❌ Error enviando vía IDS: {e}")
         return False
+
 
 def push_algorithm_to_workers(algo_bytes: bytes) -> bool:
     """
@@ -172,15 +144,11 @@ def push_algorithm_to_workers(algo_bytes: bytes) -> bool:
 
     Por qué es necesario:
       El ecc-provider enruta mensajes IDS al Java DataApp embebido
-      (be-dataapp-provider:8183), que responde con datos del datalake local
-      (contrato demo). El Java DataApp NO reenvía el payload al Python
-      FastAPI en :8500. Por tanto, el algoritmo debe entregarse directamente.
-
-    Los workers 1, 2 y 3 comparten el volumen ia_algorithm montado en
-    /app-src/. En cuanto worker 1 recibe el fichero, los otros lo ven via
-    volumen compartido. Pero para garantía se envía a los 3.
+      (be-dataapp-provider:8183/data). Ese endpoint en el app.py Python
+      maneja el mensaje y guarda el algoritmo. Pero como garantía adicional,
+      también se hace push directo a los 3 workers.
     """
-    log("📬 Distribuyendo algorithm.py directamente a los workers Python...")
+    log("📬 Push directo de algorithm.py a los 3 workers Python...")
     all_ok = True
     for i, base_url in enumerate(WORKER_URLS, start=1):
         url = f"{base_url}/upload-algorithm"
@@ -191,118 +159,115 @@ def push_algorithm_to_workers(algo_bytes: bytes) -> bool:
                 timeout=30,
             )
             if resp.status_code == 200:
-                log(f"   ✅ Worker {i} ({base_url}): algorithm.py entregado")
+                log(f"   ✅ Worker {i} ({base_url}): OK")
             else:
-                log(f"   ❌ Worker {i} ({base_url}): HTTP {resp.status_code} — {resp.text[:100]}")
+                log(f"   ❌ Worker {i} ({base_url}): HTTP {resp.status_code}")
                 all_ok = False
         except Exception as e:
-            log(f"   ❌ Worker {i} ({base_url}): error de conexión ({e})")
+            log(f"   ❌ Worker {i} ({base_url}): conexión fallida ({e})")
             all_ok = False
     return all_ok
 
 
-def verify_workers() -> bool:
-    """Verifica una vez que los 3 workers tienen algorithm.py."""
-    log("🔍 Verificando workers...")
-    all_ok = True
-    # Los workers son accesibles internamente por nombre de contenedor
-    worker_names = ["be-dataapp-provider", "ia-dataapp-2", "ia-dataapp-3"]
-    for i, name in enumerate(worker_names, start=1):
-        url = f"http://{name}:8500/status"
-        try:
-            resp = requests.get(url, timeout=10)
-            data = resp.json()
-            loaded = data.get("algorithm_loaded", False)
-            icon   = "✅" if loaded else "❌"
-            log(f"   {icon} Worker {i} ({name}): algorithm_loaded={loaded}")
-            if not loaded:
-                all_ok = False
-        except Exception as e:
-            log(f"   ⚠️  Worker {i} ({name}): no responde ({e})")
-            all_ok = False
-    return all_ok
-
-
-def verify_workers_with_retry(max_wait: int = 30, interval: int = 5) -> bool:
-    """Reintenta la verificación de workers durante max_wait segundos.
-    
-    El flujo IDS completo (Consumer → ECC → Provider → distribuir a workers)
-    puede tardar más de 3s. Con retry evitamos falsos negativos.
-    """
+def verify_workers(max_wait: int = 30, interval: int = 5) -> bool:
+    """Verifica con retry que los 3 workers tienen algorithm.py cargado."""
     deadline = time.time() + max_wait
     attempt  = 0
+    worker_names = ["be-dataapp-provider", "ia-dataapp-2", "ia-dataapp-3"]
+
     while time.time() < deadline:
         attempt += 1
         log(f"🔍 Verificando workers (intento {attempt})...")
-        if verify_workers():
-            log("✅ Todos los workers tienen algorithm.py cargado")
+        all_ok = True
+        for i, name in enumerate(worker_names, start=1):
+            try:
+                resp = requests.get(f"http://{name}:8500/status", timeout=10)
+                loaded = resp.json().get("algorithm_loaded", False)
+                icon   = "✅" if loaded else "❌"
+                log(f"   {icon} Worker {i} ({name}): algorithm_loaded={loaded}")
+                if not loaded:
+                    all_ok = False
+            except Exception as e:
+                log(f"   ⚠️  Worker {i} ({name}): no responde ({e})")
+                all_ok = False
+
+        if all_ok:
+            log("✅ Todos los workers tienen algorithm.py")
             return True
+
         remaining = int(deadline - time.time())
         if remaining > 0:
-            log(f"⏳ Workers aún no listos, reintentando en {interval}s ({remaining}s restantes)...")
+            log(f"⏳ Reintentando en {interval}s ({remaining}s restantes)...")
             time.sleep(interval)
-    log("⚠️  Algunos workers no confirmaron carga del algoritmo tras el tiempo de espera")
+
+    log("⚠️  Algunos workers no confirmaron carga del algoritmo")
     return False
 
 
 def main():
-    log("=" * 50)
+    log("=" * 55)
     log("  IDS Algorithm Auto-Sender arrancando")
-    log("=" * 50)
-    log(f"  Algorithm : {ALGORITHM_PATH}")
-    log(f"  ECC       : {ECC_CONSUMER_URL}")
-    log(f"  Forward-To: {FORWARD_TO}")
-    log("=" * 50)
+    log("=" * 55)
+    log(f"  Algorithm  : {ALGORITHM_PATH}")
+    log(f"  ECC proxy  : {ECC_CONSUMER_URL}/proxy")
+    log(f"  Forward-To : {FORWARD_TO}")
+    log("=" * 55)
 
-    # 1. Esperar a que arranquen los servicios necesarios
-    # Esperamos al ECC Consumer y al DataApp Provider (worker 1)
-    log("⏳ Esperando a que los servicios estén listos...")
-
-    ecc_ok      = wait_for_service(f"{ECC_CONSUMER_URL}/",          "ECC-Consumer",        MAX_WAIT_SECONDS)
-    provider_ok = wait_for_service(f"{PROVIDER_DATA_APP}/health",   "be-dataapp-provider", MAX_WAIT_SECONDS)
+    # ── 1. Esperar servicios ───────────────────────────────────────────────────
+    log("⏳ Esperando servicios...")
+    ecc_ok      = wait_for_service(f"{ECC_CONSUMER_URL}/",        "ECC-Consumer",        MAX_WAIT_SECONDS)
+    provider_ok = wait_for_service(f"{PROVIDER_DATA_APP}/health", "be-dataapp-provider", MAX_WAIT_SECONDS)
 
     if not ecc_ok:
-        log("❌ ECC Consumer no está disponible. Abortando.")
+        log("❌ ECC Consumer no disponible. Abortando envío IDS.")
+        log("   El sistema sigue funcionando — copia algorithm.py manualmente")
         sys.exit(1)
 
     if not provider_ok:
-        log("⚠️  be-dataapp-provider no responde, intentando enviar igualmente...")
+        log("⚠️  be-dataapp-provider no responde aún, continuando...")
 
-    # 2. Pequeña pausa adicional para que el ECC Provider también esté listo
-    log("⏳ Pausa de 10s para que ECC-Provider termine de inicializar...")
+    # ── 2. Pausa adicional para ECC-Provider ───────────────────────────────────
+    log("⏳ Pausa 10s para que ECC-Provider termine de inicializar...")
     time.sleep(10)
 
-    # 3. Enviar algorithm.py vía IDS
-    success = send_algorithm()
+    # ── 3. Envío vía IDS ───────────────────────────────────────────────────────
+    ids_ok = send_algorithm_via_ids()
 
-    if not success:
-        log("❌ Envío fallido. Reintentando una vez más en 15s...")
+    if not ids_ok:
+        log("⚠️  Envío IDS falló. Reintentando en 15s...")
         time.sleep(15)
-        success = send_algorithm()
+        ids_ok = send_algorithm_via_ids()
 
-    if not success:
-        log("❌ No se pudo enviar algorithm.py. Revisa los logs de ecc-consumer y ecc-provider.")
-        sys.exit(1)
-
-    # 4. Entregar algorithm.py directamente a los workers Python
-    #    (el Java DataApp embebido no reenvía el payload al Python FastAPI)
+    # ── 4. Push directo a workers (garantía adicional) ─────────────────────────
     with open(ALGORITHM_PATH, "rb") as f:
         algo_bytes = f.read()
+
+    time.sleep(3)
     push_ok = push_algorithm_to_workers(algo_bytes)
+
     if not push_ok:
-        log("⚠️  Algunos workers no recibieron el algoritmo directamente, reintentando en 10s...")
+        log("⚠️  Push directo parcial. Reintentando en 10s...")
         time.sleep(10)
         push_algorithm_to_workers(algo_bytes)
 
-    # 5. Verificar workers con retry (el flujo IDS puede tardar varios segundos)
-    time.sleep(3)  # pausa mínima inicial
-    verify_workers_with_retry(max_wait=30, interval=5)
+    # ── 5. Verificar ──────────────────────────────────────────────────────────
+    time.sleep(3)
+    all_ready = verify_workers(max_wait=30, interval=5)
 
-    log("=" * 50)
-    log("✅ ids-algorithm-sender completado. Contenedor terminando.")
-    log("   Los workers tienen algorithm.py y están listos para FL.")
-    log("   Lanza el FL con: curl -X POST http://localhost:8600/fl/start -d '{\"rounds\":5}'")
-    log("=" * 50)
+    log("=" * 55)
+    if ids_ok and all_ready:
+        log("✅ Flujo IDS completado. Workers listos para FL.")
+    elif all_ready:
+        log("✅ Workers listos (push directo). Flujo IDS tuvo problemas.")
+    else:
+        log("⚠️  Completado con advertencias. Revisa los logs.")
+
+    log("")
+    log("  Para lanzar FL:")
+    log("  curl -X POST http://localhost:8600/fl/start \\")
+    log('       -H "Content-Type: application/json" \\')
+    log('       -d \'{"rounds": 5}\'')
+    log("=" * 55)
     sys.exit(0)
 
 
