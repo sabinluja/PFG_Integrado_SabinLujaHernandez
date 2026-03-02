@@ -146,9 +146,15 @@ def status():
         try:
             with open(MODEL_FILE) as f:
                 d = json.load(f)
+            # Normalizar: el poller puede guardar el payload con distintas estructuras
+            global_metrics = (
+                d.get("global_metrics")
+                or d.get("metrics")
+                or {}
+            )
             model_info = {
-                "round"         : d.get("round"),
-                "global_metrics": d.get("global_metrics"),
+                "round"         : d.get("round") or d.get("current_round"),
+                "global_metrics": global_metrics if global_metrics else None,
                 "received_at"   : d.get("received_at"),
                 "provider_uri"  : d.get("provider_uri"),
             }
@@ -159,10 +165,30 @@ def status():
         try:
             with open(RESULTS_FILE) as f:
                 d = json.load(f)
+            # Reconstruir summary si viene como lista (historial plano)
+            summary = d.get("summary")
+            history = d.get("history", [])
+            total   = d.get("total_rounds") or len(history)
+            if not summary and history:
+                summary = {
+                    "rounds_completed": len(history),
+                    "workers_used"    : history[-1].get("workers_ok", 0),
+                    "total_samples"   : history[-1].get("total_samples", 0),
+                    "final_metrics"   : history[-1].get("global_metrics", {}),
+                    "first_metrics"   : history[0].get("global_metrics", {}),
+                    "accuracy_delta"  : round(
+                        history[-1].get("global_metrics", {}).get("accuracy", 0) -
+                        history[0].get("global_metrics", {}).get("accuracy", 0), 6
+                    ) if len(history) >= 2 else 0,
+                    "auc_delta"       : round(
+                        history[-1].get("global_metrics", {}).get("auc", 0) -
+                        history[0].get("global_metrics", {}).get("auc", 0), 6
+                    ) if len(history) >= 2 else 0,
+                }
             results_info = {
-                "total_rounds"  : d.get("total_rounds"),
+                "total_rounds"  : total,
                 "received_at"   : d.get("received_at"),
-                "summary"       : d.get("summary"),
+                "summary"       : summary,
             }
         except Exception:
             pass
@@ -259,6 +285,19 @@ async def ids_data_endpoint(request: Request):
             if raw_data is None:
                 raise ValueError(f"No se pudo decodificar el artefacto ({len(payload_bytes)} bytes payload, header_payload={'sí' if header_payload else 'no'})")
 
+            # ── Detectar datos demo del Java DataApp ──────────────────────────
+            # El Java DataApp intercepta solicitudes IDS y responde con datos
+            # demo hardcodeados (firstName, lastName, address...). Si detectamos
+            # esto, loggeamos y respondemos OK sin sobrescribir los datos FL reales.
+            if isinstance(raw_data, dict) and "firstName" in raw_data:
+                logger.info("⚠️  Payload es datos demo del Java DataApp — ignorando")
+                logger.info(f"   Contenido demo: {str(raw_data)[:100]}")
+                return Response(
+                    content=build_ids_response(True, "IDS message received (demo payload ignored)"),
+                    media_type="application/json",
+                    status_code=200
+                )
+
             data          = raw_data
             artifact_type = data.get("artifact_type", "unknown")
             logger.info(f"artifact_type detectado: {artifact_type}")
@@ -342,10 +381,11 @@ def get_model():
         )
     with open(MODEL_FILE) as f:
         data = json.load(f)
+    global_metrics = data.get("global_metrics") or data.get("metrics") or None
     return {
         "status"           : "received",
-        "round"            : data.get("round"),
-        "global_metrics"   : data.get("global_metrics"),
+        "round"            : data.get("round") or data.get("current_round"),
+        "global_metrics"   : global_metrics,
         "received_at"      : data.get("received_at"),
         "provider_uri"     : data.get("provider_uri"),
         "ids_message_type" : data.get("ids_message_type"),
@@ -399,7 +439,24 @@ def get_results_summary():
         return JSONResponse(status_code=404, content={"error": "Resultados no recibidos todavía."})
     with open(RESULTS_FILE) as f:
         data = json.load(f)
-    summary = data.get("summary", {})
+    summary = data.get("summary") or {}
+    history = data.get("history", [])
+    if not summary and history:
+        summary = {
+            "rounds_completed": len(history),
+            "workers_used"    : history[-1].get("workers_ok", 0),
+            "total_samples"   : history[-1].get("total_samples", 0),
+            "final_metrics"   : history[-1].get("global_metrics", {}),
+            "first_metrics"   : history[0].get("global_metrics", {}),
+            "accuracy_delta"  : round(
+                history[-1].get("global_metrics", {}).get("accuracy", 0) -
+                history[0].get("global_metrics", {}).get("accuracy", 0), 6
+            ) if len(history) >= 2 else 0,
+            "auc_delta"       : round(
+                history[-1].get("global_metrics", {}).get("auc", 0) -
+                history[0].get("global_metrics", {}).get("auc", 0), 6
+            ) if len(history) >= 2 else 0,
+        }
     return {
         "status"            : "received",
         "received_at"       : data.get("received_at"),

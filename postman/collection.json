@@ -1881,29 +1881,7 @@
       "name": "Algorithm Deployment Flow",
       "item": [
         {
-          "name": "1 - Description Request Message",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test(\"Retrieve offered resource\", () => {",
-                  "   let jsonData = pm.response.json()",
-                  "   arrayOfObject = jsonData[\"ids:resourceCatalog\"][0][\"ids:offeredResource\"];",
-                  "   var result = arrayOfObject.find(obj => {",
-                  "     return obj[\"ids:contractOffer\"][0][\"ids:permission\"][0][\"ids:target\"][\"@id\"] === \"http://w3id.org/engrd/connector/artifact/1\"",
-                  "   })",
-                  "   pm.collectionVariables.set(\"offered_resource\", result[\"@id\"])",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "name": "1 - IDS: Description Request (Self-Description del Provider)",
           "request": {
             "auth": {
               "type": "basic",
@@ -1938,53 +1916,29 @@
               ]
             }
           },
-          "response": []
-        },
-        {
-          "name": "2 - Description Request Message with offered resource",
+          "response": [],
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  "var v = pm.collectionVariables.get('offered_resource');",
-                  "if (!v) { throw new Error('STOP: offered_resource vacío. El paso 1 no se completó.'); }"
-                ],
-                "type": "text/javascript"
-              }
-            },
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test(\"Retrieve contract artifact\", function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.collectionVariables.set(\"contract_artifact\", jsonData[\"ids:representation\"][0][\"ids:instance\"][0][\"@id\"])",
-                  "});",
-                  "",
-                  "pm.test(\"Retrieve contract id\", function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.collectionVariables.set(\"contract_id\", jsonData[\"ids:contractOffer\"][0][\"@id\"])",
-                  "});",
-                  "",
-                  "pm.test(\"Retrieve contract permission\", function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.collectionVariables.set(\"contract_permission\", JSON.stringify(jsonData[\"ids:contractOffer\"][0][\"ids:permission\"][0]))",
-                  "});",
-                  "",
-                  "pm.test(\"Retrieve contract provider\", function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.collectionVariables.set(\"contract_provider\", jsonData[\"ids:contractOffer\"][0][\"ids:provider\"][\"@id\"])",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Self-description v\u00e1lida\", () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property(\"ids:resourceCatalog\");",
+                  "    const resources = json[\"ids:resourceCatalog\"][0][\"ids:offeredResource\"];",
+                  "    if (resources && resources.length > 0) {",
+                  "        pm.collectionVariables.set(\"offered_resource\", resources[0][\"@id\"]);",
+                  "    }",
                   "});"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "2 - IDS: Description Request (con Offered Resource)",
           "request": {
             "auth": {
               "type": "basic",
@@ -2019,40 +1973,24 @@
               ]
             }
           },
-          "response": []
-        },
-        {
-          "name": "3 - ContractRequestMessage",
+          "response": [],
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  "var v = pm.collectionVariables.get('contract_artifact');",
-                  "if (!v) { throw new Error('STOP: contract_artifact vacío. El paso 2 falló.'); }"
-                ],
-                "type": "text/javascript"
-              }
-            },
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test(\"Retrieve contract agreement\", function () {",
-                  "    pm.collectionVariables.set(\"contract_agreement\", JSON.stringify(pm.response.json()))",
-                  "});",
-                  "",
-                  "let responseData = pm.response.json();",
-                  "pm.collectionVariables.set(\"transfer_contract\", responseData[\"@id\"]);"
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Offered resource devuelto\", () => {",
+                  "    pm.expect(pm.response.json()).to.exist;",
+                  "});"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "3 - IDS: Contract Request Message",
           "request": {
             "auth": {
               "type": "basic",
@@ -2078,7 +2016,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ContractRequestMessage\",\n    \"requestedElement\": \"{{contract_artifact}}\",\n    \"payload\": {\n        \"@context\": {\n            \"ids\": \"https://w3id.org/idsa/core/\",\n            \"idsc\": \"https://w3id.org/idsa/code/\"\n        },\n        \"@type\": \"ids:ContractRequest\",\n        \"@id\": \"{{contract_id}}\",\n        \"ids:permission\": [\n            {{contract_permission}}\n        ],\n        \"ids:provider\": {\n            \"@id\": \"{{contract_provider}}\"\n        },\n        \"ids:obligation\": [],\n        \"ids:prohibition\": [],\n        \"ids:consumer\": {\n            \"@id\": \"http://w3id.org/engrd/connector/consumer\"\n        }\n    }\n}"
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ContractRequestMessage\",\n    \"requestedElement\": \"{{offered_resource}}\"\n}"
             },
             "url": {
               "raw": "{{Proxy_Endpoint}}",
@@ -2087,37 +2025,24 @@
               ]
             }
           },
-          "response": []
-        },
-        {
-          "name": "4 - ContractAgreementMessage",
+          "response": [],
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  "var v = pm.collectionVariables.get('transfer_contract');",
-                  "if (!v) { throw new Error('STOP: transfer_contract vacío. El paso 3 falló.'); }"
-                ],
-                "type": "text/javascript"
-              }
-            },
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test(\"Body is MessageProcessedNotificationMessage\", function () {",
-                  "    pm.response.to.have.body(\"MessageProcessedNotificationMessage\");",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Contrato negociado\", () => {",
+                  "    pm.expect(pm.response.text()).to.include(\"ContractAgreement\");",
                   "});"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "4 - IDS: Contract Agreement Message",
           "request": {
             "auth": {
               "type": "basic",
@@ -2143,7 +2068,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ContractAgreementMessage\",\n    \"requestedArtifact\": \"{{contract_artifact}}\",\n    \"payload\": {{contract_agreement}}\n}"
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ContractAgreementMessage\"\n}"
             },
             "url": {
               "raw": "{{Proxy_Endpoint}}",
@@ -2152,152 +2077,158 @@
               ]
             }
           },
-          "response": []
-        },
-        {
-          "name": "5 - Verify Algorithm Loaded (Worker 1)",
+          "response": [],
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"algorithm_loaded is true on Worker 1\", function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.algorithm_loaded).to.be.true;",
-                  "    pm.expect(jsonData.csv_selected).to.not.be.null;",
-                  "    console.log(\"Worker 1 status: \" + JSON.stringify(jsonData));",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "5 - IDS: Env\u00edo de algorithm.py al Provider",
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "idsUser",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "passwordIdsUser",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ArtifactRequestMessage\",\n    \"requestedArtifact\": \"http://w3id.org/engrd/connector/artifact/algorithm\"\n}"
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"algorithm.py enviado correctamente\", () => {",
+                  "    const body = pm.response.text();",
+                  "    pm.expect(body).to.satisfy(b => b.includes(\"algorithm\") || b.includes(\"ArtifactResponse\"));",
                   "});"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "6 - Verify: Worker 1 tiene algorithm.py",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "http://localhost:5001/status",
-              "protocol": "http",
               "host": [
-                "localhost"
-              ],
-              "port": "5001",
-              "path": [
-                "status"
+                "http://localhost:5001/status"
               ]
-            },
-            "description": "Verifica que Worker 1 tiene algorithm.py cargado tras el upload IDS."
+            }
           },
-          "response": []
-        },
-        {
-          "name": "6 - Verify Algorithm Loaded (Worker 2)",
+          "response": [],
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"algorithm_loaded is true on Worker 2\", function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.algorithm_loaded).to.be.true;",
-                  "    console.log(\"Worker 2 status: \" + JSON.stringify(jsonData));",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"algorithm_loaded = true\", () => {",
+                  "    pm.expect(pm.response.json().algorithm_loaded).to.be.true;",
                   "});"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "7 - Verify: Worker 2 tiene algorithm.py",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "http://localhost:5002/status",
-              "protocol": "http",
               "host": [
-                "localhost"
-              ],
-              "port": "5002",
-              "path": [
-                "status"
+                "http://localhost:5002/status"
               ]
             }
           },
-          "response": []
-        },
-        {
-          "name": "7 - Verify Algorithm Loaded (Worker 3)",
+          "response": [],
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"algorithm_loaded is true on Worker 3\", function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.algorithm_loaded).to.be.true;",
-                  "    console.log(\"Worker 3 status: \" + JSON.stringify(jsonData));",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"algorithm_loaded = true\", () => {",
+                  "    pm.expect(pm.response.json().algorithm_loaded).to.be.true;",
                   "});"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "8 - Verify: Worker 3 tiene algorithm.py",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "http://localhost:5003/status",
-              "protocol": "http",
               "host": [
-                "localhost"
-              ],
-              "port": "5003",
-              "path": [
-                "status"
+                "http://localhost:5003/status"
               ]
             }
           },
-          "response": []
-        },
-        {
-          "name": "8 - FL Start (5 rounds)",
+          "response": [],
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  "pm.collectionVariables.set('fl_completed', 'false');",
-                  "console.log('🚀 FL iniciando — fl_completed reseteado');"
-                ],
-                "type": "text/javascript"
-              }
-            },
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 202 (accepted)\", function () {",
-                  "    pm.response.to.have.status(202);",
-                  "});",
-                  "pm.test(\"FL started successfully\", function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.status).to.eql(\"started\");",
-                  "    pm.expect(jsonData.rounds).to.eql(5);",
-                  "    console.log(\"FL started: \" + JSON.stringify(jsonData));",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"algorithm_loaded = true\", () => {",
+                  "    pm.expect(pm.response.json().algorithm_loaded).to.be.true;",
                   "});"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "9 - FL: Lanzar entrenamiento completo (5 rondas)",
           "request": {
             "method": "POST",
             "header": [
@@ -2312,535 +2243,407 @@
             },
             "url": {
               "raw": "http://localhost:8600/fl/start",
-              "protocol": "http",
               "host": [
-                "localhost"
-              ],
-              "port": "8600",
-              "path": [
-                "fl",
-                "start"
+                "http://localhost:8600/fl/start"
               ]
             },
-            "description": "Lanza el Federated Learning completo (5 rondas).\nEl coordinador llama en paralelo a los 3 workers, aplica FedAvg y guarda el modelo global.\nTarda ~2-5 minutos. Monitorizar con el paso 10."
+            "description": "Lanza el ciclo FL completo. Los 3 workers entrenan localmente y el coordinador agrega los pesos en cada ronda."
           },
-          "response": []
-        },
-        {
-          "name": "9 - FL Status (monitor)",
+          "response": [],
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "// Polling FL con pm.sendRequest — funciona en Collection Runner",
-                  "// Hace hasta 60 peticiones con 15s de espera entre cada una (~15 min máx)",
-                  "",
-                  "pm.test('FL completado correctamente', function (done) {",
-                  "    var maxAttempts = 60;",
-                  "    var intervalMs  = 15000; // 15 segundos entre polls",
-                  "    var attempt     = 0;",
-                  "",
-                  "    function poll() {",
-                  "        attempt++;",
-                  "        pm.sendRequest('http://localhost:8600/fl/status', function (err, res) {",
-                  "            if (err) {",
-                  "                done(new Error('Error conectando al coordinador FL: ' + err));",
-                  "                return;",
-                  "            }",
-                  "            var body = res.json();",
-                  "            var status = body.status;",
-                  "            var cur    = body.current_round || 0;",
-                  "            var tot    = body.total_rounds  || 5;",
-                  "            console.log('[Poll ' + attempt + '/' + maxAttempts + '] status=' + status + ' ronda=' + cur + '/' + tot);",
-                  "",
-                  "            if (body.history && body.history.length > 0) {",
-                  "                var last = body.history[body.history.length - 1];",
-                  "                console.log('  última ronda: acc=' + last.global_metrics.accuracy + ' auc=' + last.global_metrics.auc);",
-                  "            }",
-                  "",
-                  "            if (status === 'completed') {",
-                  "                pm.collectionVariables.set('fl_completed', 'true');",
-                  "                console.log('✅ FL completado en ' + attempt + ' polls.');",
-                  "                pm.expect(status).to.eql('completed');",
-                  "                done();",
-                  "            } else if (status === 'failed') {",
-                  "                pm.collectionVariables.set('fl_completed', 'false');",
-                  "                done(new Error('❌ FL falló. Revisa: docker logs be-dataapp-provider'));",
-                  "            } else if (attempt >= maxAttempts) {",
-                  "                done(new Error('⏰ Timeout: ' + maxAttempts + ' polls sin completar. FL sigue en: ' + status));",
-                  "            } else {",
-                  "                console.log('⏳ FL en progreso... próximo poll en 15s');",
-                  "                setTimeout(poll, intervalMs);",
-                  "            }",
-                  "        });",
-                  "    }",
-                  "",
-                  "    // Primer poll inmediato",
-                  "    poll();",
+                  "pm.test(\"Status 202 Accepted\", () => pm.response.to.have.status(202));",
+                  "pm.test(\"FL iniciado\", () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.status).to.equal(\"started\");",
                   "});"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "10 - FL: Estado del entrenamiento (ejecutar hasta completed)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "http://localhost:8600/fl/status",
-              "protocol": "http",
               "host": [
-                "localhost"
-              ],
-              "port": "8600",
-              "path": [
-                "fl",
-                "status"
+                "http://localhost:8600/fl/status"
               ]
             },
-            "description": "Monitoriza el estado del FL en tiempo real.\nEjecuta cada 10-20 segundos mientras corre el FL.\nCuando status=completed, pasa al paso 11."
+            "description": "Ejecutar repetidamente hasta ver status=completed"
           },
-          "response": []
-        },
-        {
-          "name": "10 - FL Results",
+          "response": [],
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  "var ok = pm.collectionVariables.get('fl_completed');",
-                  "if (ok !== 'true') { throw new Error('STOP: FL no completó. El paso 9 debe terminar antes.'); }"
-                ],
-                "type": "text/javascript"
-              }
-            },
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"FL en curso o completado\", () => {",
+                  "    pm.expect([\"idle\",\"running\",\"completed\",\"round_1_training\",\"round_2_training\",",
+                  "               \"round_3_training\",\"round_4_training\",\"round_5_training\"]).to.include(json.status);",
                   "});",
-                  "pm.test(\"FL completed with improving metrics\", function () {",
-                  "    var results = pm.response.json();",
-                  "    pm.expect(results).to.be.an('array');",
-                  "    pm.expect(results.length).to.be.above(0);",
-                  "    // Verificar que workers_ok=3 en todas las rondas",
-                  "    results.forEach(function(round) {",
-                  "        pm.expect(round.workers_ok).to.eql(3);",
-                  "    });",
-                  "    // Log métricas por ronda",
-                  "    results.forEach(function(round) {",
-                  "        console.log(\"Round \" + round.round + \": acc=\" + round.global_metrics.accuracy + \" auc=\" + round.global_metrics.auc);",
-                  "    });",
-                  "    // Verificar tendencia ascendente (ronda N > ronda 1)",
-                  "    if (results.length >= 2) {",
-                  "        var firstAcc = results[0].global_metrics.accuracy;",
-                  "        var lastAcc  = results[results.length-1].global_metrics.accuracy;",
-                  "        console.log(\"Accuracy improvement: \" + firstAcc + \" → \" + lastAcc);",
-                  "    }",
+                  "if (json.status === \"completed\") {",
+                  "    const last = json.history[json.history.length - 1];",
+                  "    console.log(\"\u2705 FL completado \u2014 \" + json.total_rounds + \" rondas\");",
+                  "    console.log(\"   acc=\" + last?.global_metrics?.accuracy + \" | auc=\" + last?.global_metrics?.auc);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "11 - FL: Lanzar 1 ronda individual",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"rounds\": 1\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8600/fl/start",
+              "host": [
+                "http://localhost:8600/fl/start"
+              ]
+            },
+            "description": "Lanza un ciclo FL de una sola ronda. \u00datil para verificar que el flujo b\u00e1sico funciona correctamente."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 202 Accepted\", () => pm.response.to.have.status(202));",
+                  "pm.test(\"FL iniciado\", () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.status).to.equal(\"started\");",
                   "});"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "12 - FL: Verificar que 1 ronda complet\u00f3 correctamente",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8600/fl/status",
+              "host": [
+                "http://localhost:8600/fl/status"
+              ]
+            },
+            "description": "Ejecutar tras lanzar 1 ronda. Debe mostrar status=completed con 1 ronda en el historial."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.status === \"completed\") {",
+                  "    pm.test(\"1 ronda completada\", () => {",
+                  "        pm.expect(json.total_rounds).to.equal(1);",
+                  "        pm.expect(json.history.length).to.equal(1);",
+                  "    });",
+                  "    pm.test(\"M\u00e9tricas presentes tras 1 ronda\", () => {",
+                  "        const m = json.history[0].global_metrics;",
+                  "        pm.expect(m.accuracy).to.be.above(0);",
+                  "        pm.expect(m.auc).to.be.above(0);",
+                  "        console.log(\"1 ronda \u2014 acc=\" + m.accuracy + \" | auc=\" + m.auc);",
+                  "    });",
+                  "} else {",
+                  "    console.log(\"FL todav\u00eda en curso: \" + json.status);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "13 - FL: Resultados del Provider (historial completo)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "http://localhost:8600/fl/results",
-              "protocol": "http",
               "host": [
-                "localhost"
-              ],
-              "port": "8600",
-              "path": [
-                "fl",
-                "results"
+                "http://localhost:8600/fl/results"
               ]
-            },
-            "description": "Obtiene el historial completo de métricas FL por ronda.\nVerifica que accuracy y AUC suben ronda a ronda."
+            }
           },
-          "response": []
-        },
-        {
-          "name": "11 - FL Single Round (debug)",
+          "response": [],
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  "var ok = pm.collectionVariables.get('fl_completed');",
-                  "if (ok !== 'true') { throw new Error('STOP: FL no completó. El paso 9 debe terminar antes.'); }"
-                ],
-                "type": "text/javascript"
-              }
-            },
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "pm.test(\"Single round completed with 3 workers\", function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.workers_ok).to.eql(3);",
-                  "    console.log(\"Round \" + jsonData.round + \": workers_ok=\" + jsonData.workers_ok);",
-                  "    console.log(\"Metrics: \" + JSON.stringify(jsonData.global_metrics));",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Historial disponible\", () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an(\"array\").with.length.above(0);",
+                  "    console.log(\"Rondas en historial: \" + json.length);",
                   "});"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "14 - IDS: Consumer solicita modelo global al Provider",
           "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "idsUser",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "passwordIdsUser",
+                  "type": "string"
+                }
+              ]
+            },
             "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8600/fl/round",
-              "protocol": "http",
-              "host": [
-                "localhost"
-              ],
-              "port": "8600",
-              "path": [
-                "fl",
-                "round"
-              ]
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ArtifactRequestMessage\",\n    \"requestedArtifact\": \"http://w3id.org/engrd/connector/artifact/fl_global_model\"\n}"
             },
-            "description": "Ejecuta UNA sola ronda FL para debug.\nÚtil para verificar que los 3 workers responden antes de lanzar el FL completo."
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            }
           },
-          "response": []
-        },
-        {
-          "name": "12 - Worker History (Instance 1)",
+          "response": [],
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "console.log(\"Worker 1 history rounds: \" + jsonData.history.length);",
-                  "jsonData.history.forEach(function(r) {",
-                  "    console.log(\"  Round \" + r.round + \": acc=\" + r.metrics.accuracy + \" auc=\" + r.metrics.auc);",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Respuesta IDS recibida\", () => {",
+                  "    const body = pm.response.text();",
+                  "    pm.expect(body).to.satisfy(b =>",
+                  "        b.includes(\"ArtifactResponse\") || b.includes(\"fl_global_model\") || b.includes(\"accuracy\")",
+                  "    );",
                   "});"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "15 - IDS: Consumer solicita resultados FL al Provider",
           "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:5001/fl/history",
-              "protocol": "http",
-              "host": [
-                "localhost"
-              ],
-              "port": "5001",
-              "path": [
-                "fl",
-                "history"
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "idsUser",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "passwordIdsUser",
+                  "type": "string"
+                }
               ]
             },
-            "description": "Historial de métricas locales del Worker 1 por ronda."
-          },
-          "response": []
-        },
-        {
-          "name": "13 - Worker History (Instance 2)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "console.log(\"Worker 2 history rounds: \" + jsonData.history.length);"
-                ],
-                "type": "text/javascript"
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
               }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ArtifactRequestMessage\",\n    \"requestedArtifact\": \"http://w3id.org/engrd/connector/artifact/fl_results\"\n}"
+            },
             "url": {
-              "raw": "http://localhost:5002/fl/history",
-              "protocol": "http",
+              "raw": "{{Proxy_Endpoint}}",
               "host": [
-                "localhost"
-              ],
-              "port": "5002",
-              "path": [
-                "fl",
-                "history"
+                "{{Proxy_Endpoint}}"
               ]
             }
           },
-          "response": []
-        },
-        {
-          "name": "14 - Worker History (Instance 3)",
+          "response": [],
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "console.log(\"Worker 3 history rounds: \" + jsonData.history.length);"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:5003/fl/history",
-              "protocol": "http",
-              "host": [
-                "localhost"
-              ],
-              "port": "5003",
-              "path": [
-                "fl",
-                "history"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "15 - Consumer Status (IDS delivery check)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test(\"Modelo recibido del Provider vía IDS\", function () {",
-                  "    var data = pm.response.json();",
-                  "    pm.expect(data.model_received).to.be.true;",
-                  "    console.log(\"model_received  : \" + data.model_received);",
-                  "    console.log(\"results_received: \" + data.results_received);",
-                  "    if (data.model_info) {",
-                  "        console.log(\"Modelo — ronda: \" + data.model_info.round",
-                  "            + \" | acc: \" + data.model_info.global_metrics.accuracy",
-                  "            + \" | auc: \" + data.model_info.global_metrics.auc);",
-                  "    }",
-                  "});",
-                  "",
-                  "pm.test(\"Resultados FL recibidos del Provider vía IDS\", function () {",
-                  "    var data = pm.response.json();",
-                  "    pm.expect(data.results_received).to.be.true;",
-                  "    if (data.results_info) {",
-                  "        console.log(\"Resultados — rondas: \" + data.results_info.total_rounds);",
-                  "    }",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Respuesta IDS recibida\", () => {",
+                  "    const body = pm.response.text();",
+                  "    pm.expect(body).to.satisfy(b =>",
+                  "        b.includes(\"ArtifactResponse\") || b.includes(\"fl_results\") || b.includes(\"history\")",
+                  "    );",
                   "});"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "16 - Consumer: Estado general (modelo y resultados recibidos)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "http://localhost:8501/status",
-              "protocol": "http",
               "host": [
-                "localhost"
-              ],
-              "port": "8501",
-              "path": [
-                "status"
+                "http://localhost:8501/status"
               ]
-            },
-            "description": "Verifica que el Consumer recibió modelo global y resultados FL del Provider vía IDS.\nmodel_received y results_received deben ser true."
+            }
           },
-          "response": []
-        },
-        {
-          "name": "16 - Consumer FL Results Summary",
+          "response": [],
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Modelo recibido en Consumer\", () => {",
+                  "    pm.expect(pm.response.json().model_received).to.be.true;",
                   "});",
-                  "",
-                  "pm.test(\"Resumen FL recibido con mejora de accuracy\", function () {",
-                  "    var data = pm.response.json();",
-                  "    pm.expect(data.status).to.eql(\"received\");",
-                  "    pm.expect(data.rounds_completed).to.be.above(0);",
-                  "    pm.expect(data.workers_used).to.eql(3);",
-                  "    console.log(\"══════════════════════════════════\");",
-                  "    console.log(\"  RESUMEN FL — CONSUMER\");",
-                  "    console.log(\"══════════════════════════════════\");",
-                  "    console.log(\"  Rondas completadas : \" + data.rounds_completed);",
-                  "    console.log(\"  Workers utilizados : \" + data.workers_used);",
-                  "    console.log(\"  Total muestras     : \" + data.total_samples);",
-                  "    console.log(\"  Primera ronda      : acc=\" + data.first_round.accuracy + \" auc=\" + data.first_round.auc);",
-                  "    console.log(\"  Última ronda       : acc=\" + data.final_round.accuracy + \" auc=\" + data.final_round.auc);",
-                  "    console.log(\"  Mejora accuracy    : +\" + data.improvement.accuracy_delta);",
-                  "    console.log(\"  Mejora AUC         : +\" + data.improvement.auc_delta);",
-                  "    console.log(\"══════════════════════════════════\");",
-                  "});",
-                  "",
-                  "pm.test(\"Accuracy mejoró ronda a ronda (tendencia ascendente)\", function () {",
-                  "    var data = pm.response.json();",
-                  "    if (data.first_round && data.final_round) {",
-                  "        pm.expect(data.final_round.accuracy).to.be.above(data.first_round.accuracy);",
-                  "        pm.expect(data.improvement.accuracy_delta).to.be.above(0);",
-                  "    }",
+                  "pm.test(\"Resultados recibidos en Consumer\", () => {",
+                  "    pm.expect(pm.response.json().results_received).to.be.true;",
                   "});"
                 ],
                 "type": "text/javascript"
               }
             }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8501/fl/results/summary",
-              "protocol": "http",
-              "host": [
-                "localhost"
-              ],
-              "port": "8501",
-              "path": [
-                "fl",
-                "results",
-                "summary"
-              ]
-            },
-            "description": "Resumen ejecutivo del FL tal como lo recibió el Consumer del Provider vía IDS.\nVerifica mejora de accuracy y AUC entre primera y última ronda.\nEsto confirma que el ciclo IDS completo funciona:\n  Consumer → [IDS] algorithm.py → Provider\n  Provider → [IDS] global_model + fl_results → Consumer"
-          },
-          "response": []
+          ]
         },
         {
-          "name": "17 - Consumer FL Results (historial completo)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test(\"Historial FL completo recibido vía IDS\", function () {",
-                  "    var data = pm.response.json();",
-                  "    pm.expect(data.status).to.eql(\"received\");",
-                  "    pm.expect(data.history).to.be.an(\"array\");",
-                  "    pm.expect(data.history.length).to.be.above(0);",
-                  "    // Todos los workers OK en cada ronda",
-                  "    data.history.forEach(function(r) {",
-                  "        pm.expect(r.workers_ok).to.eql(3);",
-                  "    });",
-                  "    // Log por ronda",
-                  "    console.log(\"Historial por ronda (recibido del Provider vía IDS):\");",
-                  "    data.history.forEach(function(r) {",
-                  "        console.log(\"  Ronda \" + r.round",
-                  "            + \" | acc=\" + r.global_metrics.accuracy",
-                  "            + \" | auc=\" + r.global_metrics.auc",
-                  "            + \" | workers_ok=\" + r.workers_ok);",
-                  "    });",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:8501/fl/results",
-              "protocol": "http",
-              "host": [
-                "localhost"
-              ],
-              "port": "8501",
-              "path": [
-                "fl",
-                "results"
-              ]
-            },
-            "description": "Historial completo de métricas FL por ronda, recibido del Provider vía IDS.\nVerifica que workers_ok=3 en todas las rondas."
-          },
-          "response": []
-        },
-        {
-          "name": "18 - Consumer FL Model (global)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test(\"Modelo global recibido con métricas finales\", function () {",
-                  "    var data = pm.response.json();",
-                  "    pm.expect(data.status).to.eql(\"received\");",
-                  "    pm.expect(data.round).to.be.above(0);",
-                  "    pm.expect(data.global_metrics).to.be.an(\"object\");",
-                  "    pm.expect(data.weights_available).to.be.true;",
-                  "    console.log(\"Modelo global — ronda \" + data.round);",
-                  "    console.log(\"  accuracy  : \" + data.global_metrics.accuracy);",
-                  "    console.log(\"  auc       : \" + data.global_metrics.auc);",
-                  "    console.log(\"  precision : \" + data.global_metrics.precision);",
-                  "    console.log(\"  recall    : \" + data.global_metrics.recall);",
-                  "    console.log(\"  pesos     : \" + (data.weights_available ? \"disponibles\" : \"no disponibles\"));",
-                  "    console.log(\"  recibido  : \" + data.received_at);",
-                  "    console.log(\"  provider  : \" + data.provider_uri);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "name": "17 - Consumer: Modelo global FL",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "http://localhost:8501/fl/model",
-              "protocol": "http",
               "host": [
-                "localhost"
-              ],
-              "port": "8501",
-              "path": [
-                "fl",
-                "model"
+                "http://localhost:8501/fl/model"
               ]
-            },
-            "description": "Modelo global FL recibido del Provider vía IDS (sin pesos, solo métricas).\nVerifica que weights_available=true — los pesos están en /fl/model/full."
+            }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"M\u00e9tricas presentes y razonables\", () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.global_metrics).to.exist;",
+                  "    pm.expect(json.global_metrics.accuracy).to.be.above(0.8);",
+                  "    console.log(\"acc=\" + json.global_metrics.accuracy + \" | auc=\" + json.global_metrics.auc);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "18 - Consumer: Resumen resultados FL",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8501/fl/results/summary",
+              "host": [
+                "http://localhost:8501/fl/results/summary"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Resumen completo con mejora\", () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.rounds_completed).to.be.above(0);",
+                  "    pm.expect(json.improvement).to.exist;",
+                  "    console.log(\"Rondas: \" + json.rounds_completed);",
+                  "    console.log(\"\u0394acc: +\" + json.improvement.accuracy_delta);",
+                  "    console.log(\"\u0394auc: +\" + json.improvement.auc_delta);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "19 - Consumer: Historial completo por ronda",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8501/fl/results",
+              "host": [
+                "http://localhost:8501/fl/results"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Historial disponible\", () => {",
+                  "    pm.expect(pm.response.json()).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     }

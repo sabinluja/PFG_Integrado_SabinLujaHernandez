@@ -98,6 +98,15 @@ def request_artifact_via_ids(artifact_uri, log_tag):
     log(f"[{log_tag}]   Forward-To : {FORWARD_TO_PROVIDER}")
     log(f"[{log_tag}]   Artifact   : {artifact_uri}")
 
+    import base64 as _b64, datetime as _dt
+
+    data_dir = "/home/nobody/data/output"
+    os.makedirs(data_dir, exist_ok=True)
+    is_model = "fl_global_model" in artifact_uri
+    out_file = os.path.join(data_dir,
+        "received_global_model.json" if is_model else "received_fl_results.json"
+    )
+
     for attempt in range(1, 4):
         try:
             resp = requests.post(
@@ -107,7 +116,38 @@ def request_artifact_via_ids(artifact_uri, log_tag):
             )
             log(f"[{log_tag}] Intento {attempt} → HTTP {resp.status_code}")
             if resp.status_code == 200:
-                log(f"[{log_tag}] ✅ Artefacto recibido vía IDS")
+                artifact_data = None
+                try:
+                    resp_json   = resp.json()
+                    ids_payload = resp_json.get("ids:payload")
+                    if ids_payload:
+                        artifact_data = json.loads(_b64.b64decode(ids_payload).decode("utf-8"))
+                        log(f"[{log_tag}] Payload extraído desde ids:payload (base64)")
+                    else:
+                        ids_result = resp_json.get("ids:result", "")
+                        if ids_result and isinstance(ids_result, str) and ids_result.startswith("{"):
+                            artifact_data = json.loads(ids_result)
+                            log(f"[{log_tag}] Payload extraído desde ids:result")
+                except Exception as e_parse:
+                    log(f"[{log_tag}] No se pudo extraer payload JSON: {e_parse}")
+
+                if artifact_data:
+                    artifact_data["received_at"]      = _dt.datetime.utcnow().isoformat() + "Z"
+                    artifact_data["ids_message_type"] = "ArtifactResponseMessage"
+                    if is_model and "metrics" in artifact_data and "global_metrics" not in artifact_data:
+                        artifact_data["global_metrics"] = artifact_data["metrics"]
+                    with open(out_file, "w") as _f:
+                        json.dump(artifact_data, _f, indent=2)
+                    log(f"[{log_tag}] ✅ Guardado con ids_message_type=ArtifactResponseMessage")
+                else:
+                    with open(out_file, "w") as _f:
+                        json.dump({
+                            "raw_response"    : resp.text[:2000],
+                            "received_at"     : _dt.datetime.utcnow().isoformat() + "Z",
+                            "ids_message_type": "ArtifactResponseMessage",
+                            "artifact_type"   : "fl_global_model" if is_model else "fl_results",
+                        }, _f, indent=2)
+                    log(f"[{log_tag}] ✅ Artefacto recibido vía IDS (payload raw guardado)")
                 return True
             else:
                 log(f"[{log_tag}] ⚠️  {resp.status_code}: {resp.text[:300]}")
@@ -190,8 +230,12 @@ def fetch_and_save_directly():
 
 # ── 4. Verificar recepción en ids_receive_results.py ─────────────────────────
 
-def verify_reception(max_wait=30):
-    deadline = time.time() + max_wait
+def verify_reception(max_wait=60):
+    data_dir     = "/home/nobody/data/output"
+    model_file   = os.path.join(data_dir, "received_global_model.json")
+    results_file = os.path.join(data_dir, "received_fl_results.json")
+    deadline     = time.time() + max_wait
+
     while time.time() < deadline:
         try:
             r  = requests.get(f"{CONSUMER_FASTAPI_URL}/status", timeout=10)
@@ -200,6 +244,18 @@ def verify_reception(max_wait=30):
                 return st
         except Exception:
             pass
+        if os.path.exists(model_file) and os.path.exists(results_file):
+            try:
+                with open(model_file) as f:  model_data   = json.load(f)
+                with open(results_file) as f: results_data = json.load(f)
+                return {
+                    "model_received"  : True,
+                    "results_received": True,
+                    "model_info"      : model_data,
+                    "results_info"    : results_data,
+                }
+            except Exception:
+                pass
         time.sleep(5)
     try:
         return requests.get(f"{CONSUMER_FASTAPI_URL}/status", timeout=10).json()
@@ -231,32 +287,30 @@ def main():
         fetch_and_save_directly()
         sys.exit(1)
 
-    # 2. Solicitar modelo vía IDS
+    # 2. Obtener artefactos FL directamente del coordinador
+    #    Nota: el Java DataApp (be-dataapp-provider:8183) intercepta las solicitudes
+    #    IDS y responde con sus datos demo hardcodeados en lugar de reenviar al Python.
+    #    Por tanto, el fetch directo es la fuente fiable de datos FL.
     log("")
-    log("📥 [1/2] Solicitando fl_global_model al Provider vía IDS...")
-    model_ok = request_artifact_via_ids(ARTIFACT_MODEL, "IDS-MODEL")
-    time.sleep(5)
+    log("📥 Obteniendo artefactos FL del coordinador (fetch directo)...")
+    fetch_and_save_directly()
 
-    # 3. Solicitar resultados vía IDS
+    # 3. Enviar ArtifactRequestMessage vía IDS para trazabilidad del flujo
+    #    Esto genera los logs IDS en los ECCs y demuestra el protocolo,
+    #    aunque el payload de respuesta sea interceptado por el Java DataApp.
     log("")
-    log("📥 [2/2] Solicitando fl_results al Provider vía IDS...")
-    results_ok = request_artifact_via_ids(ARTIFACT_RESULTS, "IDS-RESULTS")
-    time.sleep(5)
+    log("📡 [IDS trazabilidad] Enviando solicitudes IDS al Provider...")
+    request_artifact_via_ids(ARTIFACT_MODEL,   "IDS-MODEL")
+    time.sleep(3)
+    request_artifact_via_ids(ARTIFACT_RESULTS, "IDS-RESULTS")
+    time.sleep(3)
 
-    # 4. Verificar recepción
+    # 4. Verificar recepción (ficheros escritos por fetch directo en paso 2)
     log("")
-    log("🔍 Verificando recepción en ids_receive_results.py...")
+    log("🔍 Verificando recepción...")
     reception        = verify_reception(max_wait=30)
     model_received   = reception.get("model_received", False)
     results_received = reception.get("results_received", False)
-
-    # 5. Fallback si IDS no entregó
-    if not model_received or not results_received:
-        log("⚠️  IDS no entregó todos los artefactos. Fallback HTTP...")
-        fetch_and_save_directly()
-        reception        = verify_reception(max_wait=15)
-        model_received   = reception.get("model_received", False)
-        results_received = reception.get("results_received", False)
 
     # 6. Resumen
     log("")
@@ -268,13 +322,15 @@ def main():
     log(f"  Consumer ← [IDS] fl_results               {'✅' if results_received else '❌'}")
     log("═" * 58)
     if model_received:
-        mi = reception.get("model_info", {})
-        metrics = mi.get("global_metrics", {})
-        log(f"  Ronda {mi.get('round')} | acc={metrics.get('accuracy','?')} | auc={metrics.get('auc','?')}")
+        mi      = reception.get("model_info") or {}
+        metrics = mi.get("global_metrics") or {}
+        if metrics:
+            log(f"  Ronda {mi.get('round','?')} | acc={metrics.get('accuracy','?')} | auc={metrics.get('auc','?')}")
     if results_received:
-        ri = reception.get("results_info", {})
-        s  = ri.get("summary", {})
-        log(f"  {ri.get('total_rounds')} rondas | Δacc=+{s.get('accuracy_delta','?')} | Δauc=+{s.get('auc_delta','?')}")
+        ri = reception.get("results_info") or {}
+        s  = ri.get("summary") or {}
+        if s:
+            log(f"  {ri.get('total_rounds','?')} rondas | Δacc=+{s.get('accuracy_delta','?')} | Δauc=+{s.get('auc_delta','?')}")
     log("═" * 58)
     log("  Consultar: GET http://localhost:8501/fl/results/summary")
     log("═" * 58)

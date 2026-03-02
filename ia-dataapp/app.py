@@ -493,6 +493,23 @@ async def ids_data_endpoint(request: Request):
             detail = f"Artefacto {artifact_label} entregado. Instancia {INSTANCE_ID}."
             logger.info(f"[/data] ✅ {detail} ({len(payload_b64)} bytes b64)")
 
+            # Notificar al coordinador que el artefacto fue entregado vía IDS
+            if INSTANCE_ID == "1":
+                try:
+                    import threading as _th
+                    def _notify(label=artifact_label):
+                        try:
+                            requests.post(
+                                "http://localhost:8600/fl/ids-delivered",
+                                json={"artifact": label},
+                                timeout=5
+                            )
+                        except Exception:
+                            pass
+                    _th.Thread(target=_notify, daemon=True).start()
+                except Exception:
+                    pass
+
             # Respuesta IDS con el artefacto embebido en ids:result
             response_body = {
                 "@context"           : "https://w3id.org/idsa/contexts/context.jsonld",

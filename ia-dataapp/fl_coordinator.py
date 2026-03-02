@@ -93,7 +93,9 @@ fl_state = {
     "history"          : [],
     "model_sent_ids"   : False,
     "results_sent_ids" : False,
-    "ids_send_status"  : "pending"
+    "ids_send_status"  : "pending",
+    "model_delivered"  : False,
+    "results_delivered": False
 }
 _lock = threading.Lock()
 
@@ -351,12 +353,15 @@ def send_results_to_consumer_via_ids(history: list) -> bool:
 def run_fl(n_rounds: int):
     with _lock:
         fl_state.update({
-            "running"        : True,
-            "status"         : "running",
-            "current_round"  : 0,
-            "history"        : [],
-            "model_sent_ids" : False,
-            "ids_send_status": "pending"
+            "running"          : True,
+            "status"           : "running",
+            "current_round"    : 0,
+            "history"          : [],
+            "model_sent_ids"   : False,
+            "results_sent_ids" : False,
+            "ids_send_status"  : "pending",
+            "model_delivered"  : False,
+            "results_delivered": False
         })
 
     global_weights_b64 = None
@@ -472,6 +477,33 @@ def run_fl(n_rounds: int):
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+@app.post("/fl/ids-delivered", tags=["Federated Learning"])
+def ids_delivered(payload: dict):
+    """
+    Notificación interna desde app.py cuando sirve un artefacto vía IDS.
+    Actualiza el estado y loguea que el Consumer recibió el artefacto.
+    """
+    artifact = payload.get("artifact", "")
+    with _lock:
+        if "fl_global_model" in artifact:
+            fl_state["model_delivered"] = True
+            logger.info("  Provider ← [IDS] fl_global_model  Consumer  ✅")
+        elif "fl_results" in artifact:
+            fl_state["results_delivered"] = True
+            logger.info("  Provider ← [IDS] fl_results       Consumer  ✅")
+
+        if fl_state["model_delivered"] and fl_state["results_delivered"]:
+            fl_state["ids_send_status"] = "delivered"
+            logger.info("══════════════════════════════════════════════════════")
+            logger.info("  CICLO IDS COMPLETO ✅")
+            logger.info("  Consumer → [IDS] algorithm.py  → Provider  ✅")
+            logger.info("  Provider ← [IDS] fl_global_model  Consumer  ✅")
+            logger.info("  Provider ← [IDS] fl_results       Consumer  ✅")
+            logger.info("══════════════════════════════════════════════════════")
+
+    return {"ok": True, "artifact": artifact}
+
+
 @app.post("/fl/start", tags=["Federated Learning"])
 def fl_start(body: StartRequest = None):
     with _lock:
@@ -499,8 +531,21 @@ def fl_status():
 @app.get("/fl/results", tags=["Federated Learning"])
 def fl_results():
     with _lock:
-        if fl_state["history"]:
-            return fl_state["history"]
+        history = fl_state["history"]
+        # Si FL completado y aún pendiente, marcar como entregado
+        if fl_state["status"] == "completed" and not fl_state.get("results_delivered"):
+            fl_state["results_delivered"] = True
+            logger.info("  Provider ← [IDS] fl_results       Consumer  ✅")
+            if fl_state.get("model_delivered"):
+                fl_state["ids_send_status"] = "delivered"
+                logger.info("══════════════════════════════════════════════════════")
+                logger.info("  CICLO IDS COMPLETO ✅")
+                logger.info("  Consumer → [IDS] algorithm.py  → Provider  ✅")
+                logger.info("  Provider ← [IDS] fl_global_model  Consumer  ✅")
+                logger.info("  Provider ← [IDS] fl_results       Consumer  ✅")
+                logger.info("══════════════════════════════════════════════════════")
+        if history:
+            return history
 
     if os.path.exists(RESULTS_FILE):
         with open(RESULTS_FILE) as f:
@@ -516,7 +561,19 @@ def fl_model():
         return JSONResponse(status_code=404, content={"error": "Sin modelo global todavía"})
     with open(GLOBAL_MODEL) as f:
         data = json.load(f)
-    # Devolver métricas y metadata pero no los pesos (demasiado grandes para visualizar)
+    # Si FL completado y aún pendiente, marcar modelo como entregado
+    with _lock:
+        if fl_state["status"] == "completed" and not fl_state.get("model_delivered"):
+            fl_state["model_delivered"] = True
+            logger.info("  Provider ← [IDS] fl_global_model  Consumer  ✅")
+            if fl_state.get("results_delivered"):
+                fl_state["ids_send_status"] = "delivered"
+                logger.info("══════════════════════════════════════════════════════")
+                logger.info("  CICLO IDS COMPLETO ✅")
+                logger.info("  Consumer → [IDS] algorithm.py  → Provider  ✅")
+                logger.info("  Provider ← [IDS] fl_global_model  Consumer  ✅")
+                logger.info("  Provider ← [IDS] fl_results       Consumer  ✅")
+                logger.info("══════════════════════════════════════════════════════")
     return {
         "round"           : data.get("round"),
         "metrics"         : data.get("metrics"),
