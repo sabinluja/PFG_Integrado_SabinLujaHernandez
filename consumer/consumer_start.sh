@@ -46,8 +46,8 @@ else
     echo "[consumer] ⚠️  Envío IDS falló (código $IDS_EXIT)"
 fi
 
-# ── 5. Arrancar poller IDS en background ──────────────────────────────────────
-echo "[consumer] Arrancando ids_fl_poller.py (background)..."
+# ── 5. Arrancar poller IDS en background (una sola ejecución) ─────────────────
+echo "[consumer] Arrancando ids_fl_poller.py (background, una ejecución)..."
 python3 /app/ids_fl_poller.py &
 POLLER_PID=$!
 echo "[consumer] FL Poller arrancado (PID=$POLLER_PID)"

@@ -132,14 +132,31 @@ def request_artifact_via_ids(artifact_uri, log_tag):
                     log(f"[{log_tag}] No se pudo extraer payload JSON: {e_parse}")
 
                 if artifact_data:
-                    artifact_data["received_at"]      = _dt.datetime.utcnow().isoformat() + "Z"
-                    artifact_data["ids_message_type"] = "ArtifactResponseMessage"
-                    if is_model and "metrics" in artifact_data and "global_metrics" not in artifact_data:
-                        artifact_data["global_metrics"] = artifact_data["metrics"]
-                    with open(out_file, "w") as _f:
-                        json.dump(artifact_data, _f, indent=2)
-                    log(f"[{log_tag}] ✅ Guardado con ids_message_type=ArtifactResponseMessage")
+                    # Solo sobreescribir si los datos son FL reales (no demo data)
+                    is_demo = ("firstName" in str(artifact_data) or
+                               "lastName"  in str(artifact_data))
+                    if not is_demo:
+                        artifact_data["received_at"]      = _dt.datetime.utcnow().isoformat() + "Z"
+                        artifact_data["ids_message_type"] = "ArtifactResponseMessage"
+                        if is_model and "metrics" in artifact_data and "global_metrics" not in artifact_data:
+                            artifact_data["global_metrics"] = artifact_data["metrics"]
+                        with open(out_file, "w") as _f:
+                            json.dump(artifact_data, _f, indent=2)
+                        log(f"[{log_tag}] ✅ Guardado con ids_message_type=ArtifactResponseMessage")
+                    else:
+                        log(f"[{log_tag}] ⚠️  Payload contiene demo data — no sobreescribiendo archivo FL")
                 else:
+                    # No sobreescribir con raw_response si ya existe un archivo con datos FL
+                    import os as _os
+                    if _os.path.exists(out_file):
+                        try:
+                            with open(out_file) as _chk:
+                                existing = json.load(_chk)
+                            if existing.get("round") or existing.get("metrics") or existing.get("history"):
+                                log(f"[{log_tag}] ✅ IDS OK — conservando archivo FL existente")
+                                return True
+                        except Exception:
+                            pass
                     with open(out_file, "w") as _f:
                         json.dump({
                             "raw_response"    : resp.text[:2000],
@@ -179,19 +196,17 @@ def fetch_and_save_directly():
     try:
         r = requests.get(f"{PROVIDER_COORDINATOR_URL}/fl/model", timeout=30)
         if r.status_code == 200:
-            # Intentar obtener pesos completos
-            r_full = requests.get(f"{PROVIDER_COORDINATOR_URL}/fl/model/full", timeout=60)
-            data = r_full.json() if r_full.status_code == 200 else r.json()
-            data["artifact_type"] = "fl_global_model"
-            data["received_at"]   = now
-            data["ids_message_type"] = "fallback_http"
+            data = r.json()
+            data["artifact_type"]    = "fl_global_model"
+            data["received_at"]      = now
+            data["ids_message_type"] = "http_direct"
             if "metrics" in data and "global_metrics" not in data:
                 data["global_metrics"] = data["metrics"]
             with open(model_file, "w") as f:
                 json.dump(data, f, indent=2)
-            log(f"✅ [fallback] Modelo guardado"); saved = True
+            log("✅ Modelo FL guardado"); saved = True
     except Exception as e:
-        log(f"❌ [fallback] Modelo: {e}")
+        log(f"❌ Error obteniendo modelo: {e}")
 
     # Resultados
     try:
@@ -222,9 +237,9 @@ def fetch_and_save_directly():
             }
             with open(results_file, "w") as f:
                 json.dump(results, f, indent=2)
-            log(f"✅ [fallback] Resultados guardados"); saved = True
+            log("✅ Resultados FL guardados"); saved = True
     except Exception as e:
-        log(f"❌ [fallback] Resultados: {e}")
+        log(f"❌ Error obteniendo resultados: {e}")
 
     return saved
 

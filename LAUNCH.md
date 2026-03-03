@@ -62,6 +62,7 @@ docker system prune --volumes
 docker rm -f uc-dataapp-pip-provider uc-dataapp-pip-consumer ecc-provider ecc-consumer be-dataapp-consumer be-dataapp-provider uc-dataapp-provider uc-dataapp-consumer ia-dataapp-2 ia-dataapp-3
 ```
 
+
 ---
 
 ## 🔍 Verification & Health Checks

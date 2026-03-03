@@ -1,3 +1,30 @@
+1. Levantar todo
+bashdocker compose up -d
+2. Verificar que todos los contenedores están arriba
+bashdocker compose ps
+3. Ver que el Consumer arrancó y el poller está esperando
+bashdocker logs be-dataapp-consumer | grep -E "fl-poller|algoritmo|algorithm|poller"
+4. Verificar que los workers tienen el algoritmo cargado
+bashcurl http://localhost:5001/status
+curl http://localhost:5002/status
+curl http://localhost:5003/status
+Los tres deben tener "algorithm_loaded": true.
+5. Lanzar el FL
+bashcurl -X POST http://localhost:8600/fl/start \
+     -H "Content-Type: application/json" \
+     -d '{"rounds": 5}'
+6. Monitorear rondas en tiempo real
+bashdocker logs -f be-dataapp-provider | grep -E "RONDA|Ronda [0-9]+ OK|completado"
+7. Cuando termine, ver el poller actuar
+bashdocker logs be-dataapp-consumer | grep -E "fl-poller|IDS-MODEL|IDS-RESULTS|CICLO|fallback"
+8. Verificar resultado final en el Consumer
+bashcurl http://localhost:8501/status
+curl http://localhost:8501/fl/model
+curl http://localhost:8501/fl/results/summary
+Si en el paso 8 ves model_received: true y results_received: true, el flujo completo funciona.
+
+
+
 Fase 1 — Verificar que los contenedores están vivos
 bash# Ver que los 3 workers están arriba
 curl http://localhost:5001/health
