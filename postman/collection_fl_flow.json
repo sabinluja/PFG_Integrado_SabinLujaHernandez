@@ -1,0 +1,650 @@
+{
+  "info": {
+    "_postman_id": "fl-tfg-collection",
+    "name": "Algorithm Deployment Flow — FL TFG",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "2326106"
+  },
+  "item": [
+    {
+      "name": "Algorithm Deployment Flow",
+      "item": [
+        {
+          "name": "1 - IDS: Description Request (Self-Description del Worker-2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Self-description válida con resourceCatalog\", () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property(\"ids:resourceCatalog\");",
+                  "    const catalog = json[\"ids:resourceCatalog\"];",
+                  "    pm.expect(catalog).to.be.an(\"array\").with.length.above(0);",
+                  "    const resources = catalog[0][\"ids:offeredResource\"];",
+                  "    if (resources && resources.length > 0) {",
+                  "        const resource = resources[0];",
+                  "        pm.collectionVariables.set(\"offered_resource\", resource[\"@id\"]);",
+                  "        console.log(\"offered_resource:\", resource[\"@id\"]);",
+                  "",
+                  "        // Extraer datos del contrato para los pasos siguientes",
+                  "        const contracts = resource[\"ids:contractOffer\"];",
+                  "        if (contracts && contracts.length > 0) {",
+                  "            const c = contracts[0];",
+                  "            pm.collectionVariables.set(\"contract_id\", c[\"@id\"] || \"\");",
+                  "            pm.collectionVariables.set(\"contract_provider\", (c[\"ids:provider\"] || {\"@id\":\"\"} )[\"@id\"]);",
+                  "            const perms = c[\"ids:permission\"];",
+                  "            if (perms && perms.length > 0) {",
+                  "                pm.collectionVariables.set(\"contract_permission\", JSON.stringify(perms[0]));",
+                  "            }",
+                  "            console.log(\"contract_id:\", c[\"@id\"]);",
+                  "        }",
+                  "",
+                  "        // Extraer artifact ID de la representación",
+                  "        const reprs = resource[\"ids:representation\"];",
+                  "        if (reprs && reprs.length > 0) {",
+                  "            const inst = (reprs[0][\"ids:instance\"] || [])[0];",
+                  "            if (inst) {",
+                  "                pm.collectionVariables.set(\"contract_artifact\", inst[\"@id\"]);",
+                  "                console.log(\"contract_artifact:\", inst[\"@id\"]);",
+                  "            }",
+                  "        }",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {"key": "username", "value": "idsUser", "type": "string"},
+                {"key": "password", "value": "passwordIdsUser", "type": "string"}
+              ]
+            },
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"DescriptionRequestMessage\"\n}"
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": ["{{Proxy_Endpoint}}"]
+            },
+            "description": "Obtiene la Self-Description del worker destino (ecc-worker2). Extrae automáticamente offered_resource, contract_id, contract_provider, contract_permission, contract_artifact."
+          },
+          "response": []
+        },
+        {
+          "name": "2 - IDS: Description Request (con Offered Resource)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Detalle del recurso recibido\", () => {",
+                  "    pm.expect(pm.response.json()).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {"key": "username", "value": "idsUser", "type": "string"},
+                {"key": "password", "value": "passwordIdsUser", "type": "string"}
+              ]
+            },
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"DescriptionRequestMessage\",\n    \"requestedElement\": \"{{offered_resource}}\"\n}"
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": ["{{Proxy_Endpoint}}"]
+            },
+            "description": "Obtiene información detallada sobre el recurso específico (offered_resource). Opcional pero útil para confirmar el artifact ID y las condiciones del contrato."
+          },
+          "response": []
+        },
+        {
+          "name": "3 - IDS: Contract Request Message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"ContractAgreement recibido\", () => {",
+                  "    const body = pm.response.text();",
+                  "    pm.expect(body).to.satisfy(b => b.includes(\"ContractAgreement\") || b.includes(\"@id\"));",
+                  "});",
+                  "",
+                  "// Extraer el acuerdo completo y su @id para los pasos 4 y 5",
+                  "try {",
+                  "    const json = pm.response.json();",
+                  "    if (json[\"@id\"]) {",
+                  "        pm.collectionVariables.set(\"transfer_contract\", json[\"@id\"]);",
+                  "        pm.collectionVariables.set(\"contract_agreement\", JSON.stringify(json));",
+                  "        console.log(\"transfer_contract:\", json[\"@id\"]);",
+                  "    }",
+                  "} catch(e) {",
+                  "    console.log(\"No se pudo parsear como JSON — revisar respuesta raw\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {"key": "username", "value": "idsUser", "type": "string"},
+                {"key": "password", "value": "passwordIdsUser", "type": "string"}
+              ]
+            },
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ContractRequestMessage\",\n    \"requestedElement\": \"{{contract_artifact}}\",\n    \"payload\": {\n        \"@context\": {\n            \"ids\": \"https://w3id.org/idsa/core/\",\n            \"idsc\": \"https://w3id.org/idsa/code/\"\n        },\n        \"@type\": \"ids:ContractRequest\",\n        \"@id\": \"{{contract_id}}\",\n        \"ids:permission\": [{{contract_permission}}],\n        \"ids:provider\": {\n            \"@id\": \"{{contract_provider}}\"\n        },\n        \"ids:obligation\": [],\n        \"ids:prohibition\": [],\n        \"ids:consumer\": {\n            \"@id\": \"http://w3id.org/engrd/connector/worker1\"\n        }\n    }\n}",
+              "options": {
+                "raw": {"language": "json"}
+              }
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": ["{{Proxy_Endpoint}}"]
+            },
+            "description": "Negocia el contrato con el worker destino. El payload incluye el objeto ids:ContractRequest con los permisos extraídos del paso 1. La respuesta será el ContractAgreement — se guarda automáticamente en contract_agreement y transfer_contract."
+          },
+          "response": []
+        },
+        {
+          "name": "4 - IDS: Contract Agreement Message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Acuerdo procesado (MessageProcessedNotification)\", () => {",
+                  "    const body = pm.response.text();",
+                  "    pm.expect(body).to.satisfy(b =>",
+                  "        b.includes(\"MessageProcessedNotification\") || b.includes(\"processed\") || b.length > 0",
+                  "    );",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {"key": "username", "value": "idsUser", "type": "string"},
+                {"key": "password", "value": "passwordIdsUser", "type": "string"}
+              ]
+            },
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ContractAgreementMessage\",\n    \"requestedArtifact\": \"{{contract_artifact}}\",\n    \"payload\": {{contract_agreement}}\n}",
+              "options": {
+                "raw": {"language": "json"}
+              }
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": ["{{Proxy_Endpoint}}"]
+            },
+            "description": "Confirma la aceptación del contrato. Envía el ContractAgreement recibido en el paso 3. El worker responderá con MessageProcessedNotificationMessage."
+          },
+          "response": []
+        },
+        {
+          "name": "5 - IDS: Envío de algorithm.py al Worker (ArtifactRequest)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"algorithm.py recibido y FL arrancado\", () => {",
+                  "    const body = pm.response.text();",
+                  "    pm.expect(body).to.satisfy(b =>",
+                  "        b.includes(\"algorithm_received\") || b.includes(\"ArtifactResponse\")",
+                  "    );",
+                  "});",
+                  "try {",
+                  "    const json = pm.response.json();",
+                  "    if (json.status === \"algorithm_received\") {",
+                  "        console.log(\"✅ Coordinator:\", json.coordinator, \"— FL rounds:\", json.fl_rounds);",
+                  "    }",
+                  "} catch(e) {}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {"key": "username", "value": "idsUser", "type": "string"},
+                {"key": "password", "value": "passwordIdsUser", "type": "string"}
+              ]
+            },
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ArtifactRequestMessage\",\n    \"requestedArtifact\": \"{{contract_artifact}}\",\n    \"transferContract\": \"{{transfer_contract}}\",\n    \"payload\": {\n        \"type\": \"fl_algorithm\",\n        \"filename\": \"algorithm.py\",\n        \"content\": \"{{algorithm_b64}}\"\n    }\n}",
+              "options": {
+                "raw": {"language": "json"}
+              }
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": ["{{Proxy_Endpoint}}"]
+            },
+            "description": "PASO CRÍTICO: envía algorithm.py (en base64) al worker destino. El worker se convierte en coordinator, distribuye el algoritmo a los demás workers vía IDS, y arranca el entrenamiento FL automáticamente.\n\n⚠️ ANTES de ejecutar: rellena la variable algorithm_b64 en el environment con:\n[Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\algorithm.py'))"
+          },
+          "response": []
+        },
+        {
+          "name": "6 - Verify: Worker 1 tiene algorithm.py",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"algorithm_loaded = true\", () => {",
+                  "    pm.expect(pm.response.json().algorithm_loaded).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5001/status",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5001",
+              "path": ["status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7 - Verify: Worker 2 tiene algorithm.py",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"algorithm_loaded = true\", () => {",
+                  "    pm.expect(pm.response.json().algorithm_loaded).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5002/status",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5002",
+              "path": ["status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "8 - Verify: Worker 3 tiene algorithm.py",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"algorithm_loaded = true\", () => {",
+                  "    pm.expect(pm.response.json().algorithm_loaded).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5003/status",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5003",
+              "path": ["status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "9 - FL: Lanzar entrenamiento completo (5 rondas)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 202 Accepted\", () => pm.response.to.have.status(202));",
+                  "pm.test(\"FL iniciado\", () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.status).to.equal(\"started\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"rounds\": 5\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5001/fl/start",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5001",
+              "path": ["fl", "start"]
+            },
+            "description": "Lanza el ciclo FL completo desde el coordinator (worker-1). Los 3 workers entrenan localmente y el coordinator agrega los pesos (FedAvg) en cada ronda.\n\nNota: si el paso 5 ya lanzó el FL automáticamente, este paso iniciará un nuevo ciclo encima."
+          },
+          "response": []
+        },
+        {
+          "name": "10 - FL: Estado del entrenamiento (ejecutar hasta completed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"FL en curso o completado\", () => {",
+                  "    pm.expect([\"idle\",\"running\",\"completed\",\"failed\",",
+                  "               \"round_1\",\"round_2\",\"round_3\",\"round_4\",\"round_5\"]",
+                  "    ).to.include(json.status);",
+                  "});",
+                  "if (json.status === \"completed\") {",
+                  "    const last = json.history[json.history.length - 1];",
+                  "    console.log(\"✅ FL completado — \" + json.total_rounds + \" rondas\");",
+                  "    console.log(\"   acc=\" + last?.global_metrics?.accuracy + \" | auc=\" + last?.global_metrics?.auc);",
+                  "} else {",
+                  "    console.log(\"FL status:\", json.status, \"— ronda\", json.current_round, \"/\", json.total_rounds);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5001/fl/status",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5001",
+              "path": ["fl", "status"]
+            },
+            "description": "Ejecutar repetidamente hasta ver status=completed. Muestra la ronda actual y métricas al completarse."
+          },
+          "response": []
+        },
+        {
+          "name": "11 - FL: Lanzar 1 ronda individual",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 202 Accepted\", () => pm.response.to.have.status(202));",
+                  "pm.test(\"FL iniciado\", () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.status).to.equal(\"started\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"rounds\": 1\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5001/fl/start",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5001",
+              "path": ["fl", "start"]
+            },
+            "description": "Lanza un ciclo FL de una sola ronda. Útil para verificar que el flujo básico funciona correctamente antes de lanzar 5 rondas."
+          },
+          "response": []
+        },
+        {
+          "name": "12 - FL: Verificar que 1 ronda completó correctamente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.status === \"completed\") {",
+                  "    pm.test(\"1 ronda completada\", () => {",
+                  "        pm.expect(json.total_rounds).to.equal(1);",
+                  "        pm.expect(json.history.length).to.equal(1);",
+                  "    });",
+                  "    pm.test(\"Métricas presentes tras 1 ronda\", () => {",
+                  "        const m = json.history[0].global_metrics;",
+                  "        pm.expect(m.accuracy).to.be.above(0);",
+                  "        pm.expect(m.auc).to.be.above(0);",
+                  "        console.log(\"1 ronda — acc=\" + m.accuracy + \" | auc=\" + m.auc);",
+                  "    });",
+                  "} else {",
+                  "    console.log(\"FL todavía en curso:\", json.status);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5001/fl/status",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5001",
+              "path": ["fl", "status"]
+            },
+            "description": "Ejecutar tras lanzar 1 ronda. Debe mostrar status=completed con 1 ronda en el historial."
+          },
+          "response": []
+        },
+        {
+          "name": "13 - FL: Resultados del Coordinator (historial completo)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Historial disponible\", () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an(\"array\").with.length.above(0);",
+                  "    console.log(\"Rondas en historial:\", json.length);",
+                  "    json.forEach((r, i) => {",
+                  "        console.log(`  Ronda ${r.round}: acc=${r.global_metrics?.accuracy} | auc=${r.global_metrics?.auc} | samples=${r.total_samples}`);",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5001/fl/results",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5001",
+              "path": ["fl", "results"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "14 - Coordinator: Modelo global FL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Modelo disponible con métricas\", () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.metrics).to.exist;",
+                  "    pm.expect(json.weights_available).to.be.true;",
+                  "    console.log(\"Ronda:\", json.round);",
+                  "    console.log(\"acc=\", json.metrics?.accuracy, \"| auc=\", json.metrics?.auc);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5001/fl/model",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5001",
+              "path": ["fl", "model"]
+            },
+            "description": "Obtiene el modelo global final del coordinator (worker-1) tras completar el entrenamiento. Muestra las métricas de la última ronda y confirma que los pesos están disponibles."
+          },
+          "response": []
+        },
+        {
+          "name": "15 - Coordinator: Estado general",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Estado correcto\", () => {",
+                  "    const json = pm.response.json();",
+                  "    console.log(\"Worker:\", json.instance, \"| Role:\", json.role);",
+                  "    console.log(\"algorithm_loaded:\", json.algorithm_loaded);",
+                  "    console.log(\"FL status:\", json.fl_status, \"| Round:\", json.fl_round, \"/\", json.fl_total_rounds);",
+                  "    pm.expect(json.instance).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5001/status",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5001",
+              "path": ["status"]
+            },
+            "description": "Estado general del coordinator (worker-1): rol, algorithm cargado, estado FL y rondas completadas."
+          },
+          "response": []
+        },
+        {
+          "name": "16 - Health Check: Todos los workers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "console.log(\"Worker\", json.instance, \":\", json.status, \"| role:\", json.role);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5001/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5001",
+              "path": ["health"]
+            },
+            "description": "Health check del coordinator. Cambiar el puerto (5001/5002/5003) para verificar cada worker individualmente."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {"key": "offered_resource", "value": ""},
+    {"key": "contract_id", "value": ""},
+    {"key": "contract_permission", "value": "{}"},
+    {"key": "contract_provider", "value": ""},
+    {"key": "contract_agreement", "value": "{}"},
+    {"key": "transfer_contract", "value": ""},
+    {"key": "contract_artifact", "value": "http://w3id.org/engrd/connector/artifact/1"}
+  ]
+}

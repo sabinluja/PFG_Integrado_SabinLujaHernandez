@@ -28,12 +28,23 @@ Builds the Python images and starts the entire stack in detached mode.
 ```bash
 docker compose up -d --build
 
+docker compose build --no-cache
+
 docker build -t ia-dataapp:latest ./ia-dataapp
 docker-compose up -d
 
 docker-compose build ia-dataapp-1
 docker compose build be-dataapp-consumer
 docker-compose up -d
+
+docker compose build --no-cache ia-dataapp-1
+docker compose build --no-cache ia-dataapp-2
+docker compose build --no-cache ia-dataapp-3
+docker compose build --no-cache be-dataapp-consumer
+docker compose up -d
+
+docker compose build be-dataapp-worker1
+docker compose up -d
 
 ```
 > **Note:** The `byoa-dataapp-provider-1` service builds the base image used by instances 2 and 3.
@@ -61,7 +72,6 @@ docker system prune --volumes
 
 docker rm -f uc-dataapp-pip-provider uc-dataapp-pip-consumer ecc-provider ecc-consumer be-dataapp-consumer be-dataapp-provider uc-dataapp-provider uc-dataapp-consumer ia-dataapp-2 ia-dataapp-3
 ```
-
 
 ---
 

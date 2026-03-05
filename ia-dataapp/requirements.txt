@@ -5,3 +5,4 @@ tensorflow==2.15.1
 numpy>=1.23,<2.0
 pandas>=2.0
 requests==2.31.0
+requests-toolbelt==1.0.0

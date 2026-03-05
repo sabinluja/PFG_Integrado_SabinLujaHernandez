@@ -1,0 +1,86 @@
+{
+	"id": "91f0e0ee-22c2-48f4-8a89-0f507fb1593f",
+	"name": "FL IDS Workers — TFG",
+	"values": [
+		{
+			"key": "Proxy_Endpoint",
+			"value": "http://localhost:5001/proxy",
+			"description": "Proxy del coordinator (Worker 1). Todas las peticiones IDS salen desde aquí hacia los workers destino.",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "multipart_type",
+			"value": "form",
+			"description": "Tipo de multipart usado por TRUE Connector. Mantener como 'form'.",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "Forward-To",
+			"value": "https://ecc-worker2:8889/data",
+			"description": "ECC destino dentro de la red Docker. Cambia a https://ecc-worker3:8889/data para repetir el flujo con Worker 3.",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "offered_resource",
+			"value": "",
+			"description": "Auto-rellenado por el test script del paso 1 → ids:resourceCatalog[0].ids:offeredResource[0].@id",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "contract_id",
+			"value": "",
+			"description": "Auto-rellenado por el test script del paso 1 → ids:contractOffer[0].@id",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "contract_permission",
+			"value": "{}",
+			"description": "Auto-rellenado por el test script del paso 1 → ids:contractOffer[0].ids:permission[0] (objeto JSON completo)",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "contract_provider",
+			"value": "",
+			"description": "Auto-rellenado por el test script del paso 1 → ids:contractOffer[0].ids:provider.@id",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "contract_agreement",
+			"value": "{}",
+			"description": "Auto-rellenado por el test script del paso 3 → JSON completo del ContractAgreement recibido del worker",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "transfer_contract",
+			"value": "",
+			"description": "Auto-rellenado por el test script del paso 3 → @id del ContractAgreement",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "contract_artifact",
+			"value": "http://w3id.org/engrd/connector/artifact/1",
+			"description": "Auto-rellenado por el test script del paso 1 → ids:representation[0].ids:instance[0].@id. Valor por defecto: artifact/1",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "algorithm_b64",
+			"value": "",
+			"description": "⚠️ RELLENAR MANUALMENTE antes del paso 5. Base64 de algorithm.py. PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\algorithm.py'))",
+			"type": "default",
+			"enabled": true
+		}
+	],
+	"_postman_variable_scope": "environment",
+	"_postman_exported_at": "2026-03-05T16:45:00.000Z",
+	"_postman_exported_using": "Postman/10.16.9"
+}
