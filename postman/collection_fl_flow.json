@@ -1,7 +1,7 @@
 {
   "info": {
     "_postman_id": "fl-tfg-collection",
-    "name": "Algorithm Deployment Flow — FL TFG",
+    "name": "Algorithm Deployment Flow \u2014 FL TFG",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "2326106"
   },
@@ -17,7 +17,7 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Self-description válida con resourceCatalog\", () => {",
+                  "pm.test(\"Self-description v\u00e1lida con resourceCatalog\", () => {",
                   "    const json = pm.response.json();",
                   "    pm.expect(json).to.have.property(\"ids:resourceCatalog\");",
                   "    const catalog = json[\"ids:resourceCatalog\"];",
@@ -25,28 +25,28 @@
                   "    const resources = catalog[0][\"ids:offeredResource\"];",
                   "    if (resources && resources.length > 0) {",
                   "        const resource = resources[0];",
-                  "        pm.collectionVariables.set(\"offered_resource\", resource[\"@id\"]);",
+                  "        pm.environment.set(\"offered_resource\", resource[\"@id\"]);",
                   "        console.log(\"offered_resource:\", resource[\"@id\"]);",
                   "",
                   "        // Extraer datos del contrato para los pasos siguientes",
                   "        const contracts = resource[\"ids:contractOffer\"];",
                   "        if (contracts && contracts.length > 0) {",
                   "            const c = contracts[0];",
-                  "            pm.collectionVariables.set(\"contract_id\", c[\"@id\"] || \"\");",
-                  "            pm.collectionVariables.set(\"contract_provider\", (c[\"ids:provider\"] || {\"@id\":\"\"} )[\"@id\"]);",
+                  "            pm.environment.set(\"contract_id\", c[\"@id\"] || \"\");",
+                  "            pm.environment.set(\"contract_provider\", (c[\"ids:provider\"] || {\"@id\":\"\"} )[\"@id\"]);",
                   "            const perms = c[\"ids:permission\"];",
                   "            if (perms && perms.length > 0) {",
-                  "                pm.collectionVariables.set(\"contract_permission\", JSON.stringify(perms[0]));",
+                  "                pm.environment.set(\"contract_permission\", JSON.stringify(perms[0]));",
                   "            }",
                   "            console.log(\"contract_id:\", c[\"@id\"]);",
                   "        }",
                   "",
-                  "        // Extraer artifact ID de la representación",
+                  "        // Extraer artifact ID de la representaci\u00f3n",
                   "        const reprs = resource[\"ids:representation\"];",
                   "        if (reprs && reprs.length > 0) {",
                   "            const inst = (reprs[0][\"ids:instance\"] || [])[0];",
                   "            if (inst) {",
-                  "                pm.collectionVariables.set(\"contract_artifact\", inst[\"@id\"]);",
+                  "                pm.environment.set(\"contract_artifact\", inst[\"@id\"]);",
                   "                console.log(\"contract_artifact:\", inst[\"@id\"]);",
                   "            }",
                   "        }",
@@ -61,21 +61,36 @@
             "auth": {
               "type": "basic",
               "basic": [
-                {"key": "username", "value": "idsUser", "type": "string"},
-                {"key": "password", "value": "passwordIdsUser", "type": "string"}
+                {
+                  "key": "username",
+                  "value": "idsUser",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "passwordIdsUser",
+                  "type": "string"
+                }
               ]
             },
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"DescriptionRequestMessage\"\n}"
             },
             "url": {
               "raw": "{{Proxy_Endpoint}}",
-              "host": ["{{Proxy_Endpoint}}"]
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
             },
-            "description": "Obtiene la Self-Description del worker destino (ecc-worker2). Extrae automáticamente offered_resource, contract_id, contract_provider, contract_permission, contract_artifact."
+            "description": "Obtiene la Self-Description del worker destino (ecc-worker2). Extrae autom\u00e1ticamente offered_resource, contract_id, contract_provider, contract_permission, contract_artifact."
           },
           "response": []
         },
@@ -99,21 +114,36 @@
             "auth": {
               "type": "basic",
               "basic": [
-                {"key": "username", "value": "idsUser", "type": "string"},
-                {"key": "password", "value": "passwordIdsUser", "type": "string"}
+                {
+                  "key": "username",
+                  "value": "idsUser",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "passwordIdsUser",
+                  "type": "string"
+                }
               ]
             },
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"DescriptionRequestMessage\",\n    \"requestedElement\": \"{{offered_resource}}\"\n}"
             },
             "url": {
               "raw": "{{Proxy_Endpoint}}",
-              "host": ["{{Proxy_Endpoint}}"]
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
             },
-            "description": "Obtiene información detallada sobre el recurso específico (offered_resource). Opcional pero útil para confirmar el artifact ID y las condiciones del contrato."
+            "description": "Obtiene informaci\u00f3n detallada sobre el recurso espec\u00edfico (offered_resource). Opcional pero \u00fatil para confirmar el artifact ID y las condiciones del contrato."
           },
           "response": []
         },
@@ -134,12 +164,12 @@
                   "try {",
                   "    const json = pm.response.json();",
                   "    if (json[\"@id\"]) {",
-                  "        pm.collectionVariables.set(\"transfer_contract\", json[\"@id\"]);",
-                  "        pm.collectionVariables.set(\"contract_agreement\", JSON.stringify(json));",
+                  "        pm.environment.set(\"transfer_contract\", json[\"@id\"]);",
+                  "        pm.environment.set(\"contract_agreement\", JSON.stringify(json));",
                   "        console.log(\"transfer_contract:\", json[\"@id\"]);",
                   "    }",
                   "} catch(e) {",
-                  "    console.log(\"No se pudo parsear como JSON — revisar respuesta raw\");",
+                  "    console.log(\"No se pudo parsear como JSON \u2014 revisar respuesta raw\");",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -150,24 +180,41 @@
             "auth": {
               "type": "basic",
               "basic": [
-                {"key": "username", "value": "idsUser", "type": "string"},
-                {"key": "password", "value": "passwordIdsUser", "type": "string"}
+                {
+                  "key": "username",
+                  "value": "idsUser",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "passwordIdsUser",
+                  "type": "string"
+                }
               ]
             },
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ContractRequestMessage\",\n    \"requestedElement\": \"{{contract_artifact}}\",\n    \"payload\": {\n        \"@context\": {\n            \"ids\": \"https://w3id.org/idsa/core/\",\n            \"idsc\": \"https://w3id.org/idsa/code/\"\n        },\n        \"@type\": \"ids:ContractRequest\",\n        \"@id\": \"{{contract_id}}\",\n        \"ids:permission\": [{{contract_permission}}],\n        \"ids:provider\": {\n            \"@id\": \"{{contract_provider}}\"\n        },\n        \"ids:obligation\": [],\n        \"ids:prohibition\": [],\n        \"ids:consumer\": {\n            \"@id\": \"http://w3id.org/engrd/connector/worker1\"\n        }\n    }\n}",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ContractRequestMessage\",\n    \"requestedElement\": \"{{contract_artifact}}\",\n    \"contractId\": \"{{contract_id}}\",\n    \"contractProvider\": \"{{contract_provider}}\"\n}",
               "options": {
-                "raw": {"language": "json"}
+                "raw": {
+                  "language": "json"
+                }
               }
             },
             "url": {
               "raw": "{{Proxy_Endpoint}}",
-              "host": ["{{Proxy_Endpoint}}"]
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
             },
-            "description": "Negocia el contrato con el worker destino. El payload incluye el objeto ids:ContractRequest con los permisos extraídos del paso 1. La respuesta será el ContractAgreement — se guarda automáticamente en contract_agreement y transfer_contract."
+            "description": "Negocia el contrato con el worker destino. El payload incluye el objeto ids:ContractRequest con los permisos extra\u00eddos del paso 1. La respuesta ser\u00e1 el ContractAgreement \u2014 se guarda autom\u00e1ticamente en contract_agreement y transfer_contract."
           },
           "response": []
         },
@@ -194,29 +241,46 @@
             "auth": {
               "type": "basic",
               "basic": [
-                {"key": "username", "value": "idsUser", "type": "string"},
-                {"key": "password", "value": "passwordIdsUser", "type": "string"}
+                {
+                  "key": "username",
+                  "value": "idsUser",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "passwordIdsUser",
+                  "type": "string"
+                }
               ]
             },
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ContractAgreementMessage\",\n    \"requestedArtifact\": \"{{contract_artifact}}\",\n    \"payload\": {{contract_agreement}}\n}",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ContractAgreementMessage\",\n    \"requestedArtifact\": \"{{contract_artifact}}\",\n    \"transferContract\": \"{{transfer_contract}}\"\n}",
               "options": {
-                "raw": {"language": "json"}
+                "raw": {
+                  "language": "json"
+                }
               }
             },
             "url": {
               "raw": "{{Proxy_Endpoint}}",
-              "host": ["{{Proxy_Endpoint}}"]
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
             },
-            "description": "Confirma la aceptación del contrato. Envía el ContractAgreement recibido en el paso 3. El worker responderá con MessageProcessedNotificationMessage."
+            "description": "Confirma la aceptaci\u00f3n del contrato. Env\u00eda el ContractAgreement recibido en el paso 3. El worker responder\u00e1 con MessageProcessedNotificationMessage."
           },
           "response": []
         },
         {
-          "name": "5 - IDS: Envío de algorithm.py al Worker (ArtifactRequest)",
+          "name": "5 - IDS: Env\u00edo de algorithm.py al Worker (ArtifactRequest)",
           "event": [
             {
               "listen": "test",
@@ -232,7 +296,7 @@
                   "try {",
                   "    const json = pm.response.json();",
                   "    if (json.status === \"algorithm_received\") {",
-                  "        console.log(\"✅ Coordinator:\", json.coordinator, \"— FL rounds:\", json.fl_rounds);",
+                  "        console.log(\"\u2705 Coordinator:\", json.coordinator, \"\u2014 FL rounds:\", json.fl_rounds);",
                   "    }",
                   "} catch(e) {}"
                 ],
@@ -244,24 +308,41 @@
             "auth": {
               "type": "basic",
               "basic": [
-                {"key": "username", "value": "idsUser", "type": "string"},
-                {"key": "password", "value": "passwordIdsUser", "type": "string"}
+                {
+                  "key": "username",
+                  "value": "idsUser",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "passwordIdsUser",
+                  "type": "string"
+                }
               ]
             },
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ArtifactRequestMessage\",\n    \"requestedArtifact\": \"{{contract_artifact}}\",\n    \"transferContract\": \"{{transfer_contract}}\",\n    \"payload\": {\n        \"type\": \"fl_algorithm\",\n        \"filename\": \"algorithm.py\",\n        \"content\": \"{{algorithm_b64}}\"\n    }\n}",
               "options": {
-                "raw": {"language": "json"}
+                "raw": {
+                  "language": "json"
+                }
               }
             },
             "url": {
               "raw": "{{Proxy_Endpoint}}",
-              "host": ["{{Proxy_Endpoint}}"]
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
             },
-            "description": "PASO CRÍTICO: envía algorithm.py (en base64) al worker destino. El worker se convierte en coordinator, distribuye el algoritmo a los demás workers vía IDS, y arranca el entrenamiento FL automáticamente.\n\n⚠️ ANTES de ejecutar: rellena la variable algorithm_b64 en el environment con:\n[Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\algorithm.py'))"
+            "description": "PASO CR\u00cdTICO: env\u00eda algorithm.py (en base64) al worker destino. El worker se convierte en coordinator, distribuye el algoritmo a los dem\u00e1s workers v\u00eda IDS, y arranca el entrenamiento FL autom\u00e1ticamente.\n\n\u26a0\ufe0f ANTES de ejecutar: rellena la variable algorithm_b64 en el environment con:\n[Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\algorithm.py'))"
           },
           "response": []
         },
@@ -287,9 +368,13 @@
             "url": {
               "raw": "http://localhost:5001/status",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "5001",
-              "path": ["status"]
+              "path": [
+                "status"
+              ]
             }
           },
           "response": []
@@ -316,9 +401,13 @@
             "url": {
               "raw": "http://localhost:5002/status",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "5002",
-              "path": ["status"]
+              "path": [
+                "status"
+              ]
             }
           },
           "response": []
@@ -345,9 +434,13 @@
             "url": {
               "raw": "http://localhost:5003/status",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "5003",
-              "path": ["status"]
+              "path": [
+                "status"
+              ]
             }
           },
           "response": []
@@ -371,7 +464,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"rounds\": 5\n}"
@@ -379,11 +477,16 @@
             "url": {
               "raw": "http://localhost:5001/fl/start",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "5001",
-              "path": ["fl", "start"]
+              "path": [
+                "fl",
+                "start"
+              ]
             },
-            "description": "Lanza el ciclo FL completo desde el coordinator (worker-1). Los 3 workers entrenan localmente y el coordinator agrega los pesos (FedAvg) en cada ronda.\n\nNota: si el paso 5 ya lanzó el FL automáticamente, este paso iniciará un nuevo ciclo encima."
+            "description": "Lanza el ciclo FL completo desde el coordinator (worker-1). Los 3 workers entrenan localmente y el coordinator agrega los pesos (FedAvg) en cada ronda.\n\nNota: si el paso 5 ya lanz\u00f3 el FL autom\u00e1ticamente, este paso iniciar\u00e1 un nuevo ciclo encima."
           },
           "response": []
         },
@@ -403,10 +506,10 @@
                   "});",
                   "if (json.status === \"completed\") {",
                   "    const last = json.history[json.history.length - 1];",
-                  "    console.log(\"✅ FL completado — \" + json.total_rounds + \" rondas\");",
+                  "    console.log(\"\u2705 FL completado \u2014 \" + json.total_rounds + \" rondas\");",
                   "    console.log(\"   acc=\" + last?.global_metrics?.accuracy + \" | auc=\" + last?.global_metrics?.auc);",
                   "} else {",
-                  "    console.log(\"FL status:\", json.status, \"— ronda\", json.current_round, \"/\", json.total_rounds);",
+                  "    console.log(\"FL status:\", json.status, \"\u2014 ronda\", json.current_round, \"/\", json.total_rounds);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -419,11 +522,16 @@
             "url": {
               "raw": "http://localhost:5001/fl/status",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "5001",
-              "path": ["fl", "status"]
+              "path": [
+                "fl",
+                "status"
+              ]
             },
-            "description": "Ejecutar repetidamente hasta ver status=completed. Muestra la ronda actual y métricas al completarse."
+            "description": "Ejecutar repetidamente hasta ver status=completed. Muestra la ronda actual y m\u00e9tricas al completarse."
           },
           "response": []
         },
@@ -446,7 +554,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"rounds\": 1\n}"
@@ -454,16 +567,21 @@
             "url": {
               "raw": "http://localhost:5001/fl/start",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "5001",
-              "path": ["fl", "start"]
+              "path": [
+                "fl",
+                "start"
+              ]
             },
-            "description": "Lanza un ciclo FL de una sola ronda. Útil para verificar que el flujo básico funciona correctamente antes de lanzar 5 rondas."
+            "description": "Lanza un ciclo FL de una sola ronda. \u00datil para verificar que el flujo b\u00e1sico funciona correctamente antes de lanzar 5 rondas."
           },
           "response": []
         },
         {
-          "name": "12 - FL: Verificar que 1 ronda completó correctamente",
+          "name": "12 - FL: Verificar que 1 ronda complet\u00f3 correctamente",
           "event": [
             {
               "listen": "test",
@@ -476,14 +594,14 @@
                   "        pm.expect(json.total_rounds).to.equal(1);",
                   "        pm.expect(json.history.length).to.equal(1);",
                   "    });",
-                  "    pm.test(\"Métricas presentes tras 1 ronda\", () => {",
+                  "    pm.test(\"M\u00e9tricas presentes tras 1 ronda\", () => {",
                   "        const m = json.history[0].global_metrics;",
                   "        pm.expect(m.accuracy).to.be.above(0);",
                   "        pm.expect(m.auc).to.be.above(0);",
-                  "        console.log(\"1 ronda — acc=\" + m.accuracy + \" | auc=\" + m.auc);",
+                  "        console.log(\"1 ronda \u2014 acc=\" + m.accuracy + \" | auc=\" + m.auc);",
                   "    });",
                   "} else {",
-                  "    console.log(\"FL todavía en curso:\", json.status);",
+                  "    console.log(\"FL todav\u00eda en curso:\", json.status);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -496,9 +614,14 @@
             "url": {
               "raw": "http://localhost:5001/fl/status",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "5001",
-              "path": ["fl", "status"]
+              "path": [
+                "fl",
+                "status"
+              ]
             },
             "description": "Ejecutar tras lanzar 1 ronda. Debe mostrar status=completed con 1 ronda en el historial."
           },
@@ -531,9 +654,14 @@
             "url": {
               "raw": "http://localhost:5001/fl/results",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "5001",
-              "path": ["fl", "results"]
+              "path": [
+                "fl",
+                "results"
+              ]
             }
           },
           "response": []
@@ -546,7 +674,7 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Modelo disponible con métricas\", () => {",
+                  "pm.test(\"Modelo disponible con m\u00e9tricas\", () => {",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.metrics).to.exist;",
                   "    pm.expect(json.weights_available).to.be.true;",
@@ -564,11 +692,16 @@
             "url": {
               "raw": "http://localhost:5001/fl/model",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "5001",
-              "path": ["fl", "model"]
+              "path": [
+                "fl",
+                "model"
+              ]
             },
-            "description": "Obtiene el modelo global final del coordinator (worker-1) tras completar el entrenamiento. Muestra las métricas de la última ronda y confirma que los pesos están disponibles."
+            "description": "Obtiene el modelo global final del coordinator (worker-1) tras completar el entrenamiento. Muestra las m\u00e9tricas de la \u00faltima ronda y confirma que los pesos est\u00e1n disponibles."
           },
           "response": []
         },
@@ -598,9 +731,13 @@
             "url": {
               "raw": "http://localhost:5001/status",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "5001",
-              "path": ["status"]
+              "path": [
+                "status"
+              ]
             },
             "description": "Estado general del coordinator (worker-1): rol, algorithm cargado, estado FL y rondas completadas."
           },
@@ -627,9 +764,13 @@
             "url": {
               "raw": "http://localhost:5001/health",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "5001",
-              "path": ["health"]
+              "path": [
+                "health"
+              ]
             },
             "description": "Health check del coordinator. Cambiar el puerto (5001/5002/5003) para verificar cada worker individualmente."
           },
@@ -639,12 +780,33 @@
     }
   ],
   "variable": [
-    {"key": "offered_resource", "value": ""},
-    {"key": "contract_id", "value": ""},
-    {"key": "contract_permission", "value": "{}"},
-    {"key": "contract_provider", "value": ""},
-    {"key": "contract_agreement", "value": "{}"},
-    {"key": "transfer_contract", "value": ""},
-    {"key": "contract_artifact", "value": "http://w3id.org/engrd/connector/artifact/1"}
+    {
+      "key": "offered_resource",
+      "value": ""
+    },
+    {
+      "key": "contract_id",
+      "value": ""
+    },
+    {
+      "key": "contract_permission",
+      "value": "{}"
+    },
+    {
+      "key": "contract_provider",
+      "value": ""
+    },
+    {
+      "key": "contract_agreement",
+      "value": "{}"
+    },
+    {
+      "key": "transfer_contract",
+      "value": ""
+    },
+    {
+      "key": "contract_artifact",
+      "value": "http://w3id.org/engrd/connector/artifact/1"
+    }
   ]
 }

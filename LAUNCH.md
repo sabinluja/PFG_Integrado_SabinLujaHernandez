@@ -73,6 +73,15 @@ docker system prune --volumes
 docker rm -f uc-dataapp-pip-provider uc-dataapp-pip-consumer ecc-provider ecc-consumer be-dataapp-consumer be-dataapp-provider uc-dataapp-provider uc-dataapp-consumer ia-dataapp-2 ia-dataapp-3
 ```
 
+```bash
+docker exec be-dataapp-worker1 keytool -delete -keystore //cert/truststoreEcc.jks -storepass allpassword -alias "dataapp-worker1" -noprompt 2>$null
+docker exec be-dataapp-worker1 keytool -importcert -keystore //cert/truststoreEcc.jks -storepass allpassword -alias "dataapp-worker1" -file //cert/dataapp/cert.pem -noprompt
+docker exec be-dataapp-worker2 keytool -delete -keystore //cert/truststoreEcc.jks -storepass allpassword -alias "dataapp-worker2" -noprompt 2>$null
+docker exec be-dataapp-worker2 keytool -importcert -keystore //cert/truststoreEcc.jks -storepass allpassword -alias "dataapp-worker2" -file //cert/dataapp/cert.pem -noprompt
+docker exec be-dataapp-worker3 keytool -delete -keystore //cert/truststoreEcc.jks -storepass allpassword -alias "dataapp-worker3" -noprompt 2>$null
+docker exec be-dataapp-worker3 keytool -importcert -keystore //cert/truststoreEcc.jks -storepass allpassword -alias "dataapp-worker3" -file //cert/dataapp/cert.pem -noprompt
+```
+
 ---
 
 ## 🔍 Verification & Health Checks

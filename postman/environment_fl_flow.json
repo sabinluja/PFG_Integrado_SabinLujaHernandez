@@ -4,7 +4,7 @@
 	"values": [
 		{
 			"key": "Proxy_Endpoint",
-			"value": "http://localhost:5001/proxy",
+			"value": "https://localhost:5001/proxy",
 			"description": "Proxy del coordinator (Worker 1). Todas las peticiones IDS salen desde aquí hacia los workers destino.",
 			"type": "default",
 			"enabled": true

@@ -53,7 +53,6 @@ from fastapi import FastAPI, Form, Request, Response
 from fastapi.responses import JSONResponse
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 from requests_toolbelt.multipart.decoder import MultipartDecoder
-from requests.auth import HTTPBasicAuth
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -181,17 +180,46 @@ def _get_self_description() -> dict:
 
 
 def _multipart_response(header_dict: dict, payload_str: str = None) -> Response:
-    """Construye la respuesta multipart/form-data que espera el ECC."""
+    """
+    Construye respuesta multipart/form-data compatible con TRUE Connector.
+    Formato exacto según documentación oficial TRUE Connector:
+    - Content-Type: application/json; charset=UTF-8 en parte header
+    - Content-Length en cada parte (requerido por el parser)
+    """
+    import uuid as _uuid
+    boundary = _uuid.uuid4().hex
     str_header = json.dumps(header_dict)
-    # MultipartEncoder espera tuplas (filename, data, content_type) para fijar
-    # el Content-Type de cada parte. NO concatenar cabeceras como texto plano.
-    fields = {"header": (None, str_header, "application/ld+json")}
+    header_bytes = str_header.encode("utf-8")
+
+    header_part = (
+        f"--{boundary}\r\n"
+        f"Content-Disposition: form-data; name=\"header\"\r\n"
+        f"Content-Type: application/json; charset=UTF-8\r\n"
+        f"Content-Length: {len(header_bytes)}\r\n"
+        f"\r\n"
+        f"{str_header}\r\n"
+    )
+
+    body = header_part
 
     if payload_str is not None:
-        fields["payload"] = (None, payload_str, "application/ld+json")
+        payload_bytes = payload_str.encode("utf-8")
+        body += (
+            f"--{boundary}\r\n"
+            f"Content-Disposition: form-data; name=\"payload\"\r\n"
+            f"Content-Type: text/plain; charset=UTF-8\r\n"
+            f"Content-Length: {len(payload_bytes)}\r\n"
+            f"\r\n"
+            f"{payload_str}\r\n"
+        )
 
-    encoder = MultipartEncoder(fields=fields)
-    return Response(content=encoder.to_string(), media_type=encoder.content_type)
+    body += f"--{boundary}--\r\n"
+
+    from starlette.responses import Response as StarletteResponse
+    return StarletteResponse(
+        content=body.encode("utf-8"),
+        media_type=f"multipart/form-data; boundary={boundary}"
+    )
 
 
 def _base_response_header(mensaje: dict, msg_type: str,
@@ -246,6 +274,22 @@ async def proxy(request: Request):
     req_artifact      = body.get("requestedArtifact")
     req_element       = body.get("requestedElement")
     transfer_contract = body.get("transferContract")
+
+    # ContractRequestMessage — construir payload si llegan IDs planos desde Postman
+    contract_id_field  = body.get("contractId")
+    contract_prov_field = body.get("contractProvider")
+    if (message_type_raw.replace("ids:", "") == "ContractRequestMessage"
+            and contract_id_field and not payload_in):
+        payload_in = {
+            "@context": {"ids": "https://w3id.org/idsa/core/", "idsc": "https://w3id.org/idsa/code/"},
+            "@type"   : "ids:ContractRequest",
+            "@id"     : contract_id_field,
+            "ids:permission" : [],
+            "ids:provider"   : {"@id": contract_prov_field or ""},
+            "ids:obligation" : [],
+            "ids:prohibition": [],
+            "ids:consumer"   : {"@id": CONNECTOR_URI},
+        }
 
     # Normalizar messageType con prefijo ids:
     message_type = message_type_raw if message_type_raw.startswith("ids:") \
@@ -302,7 +346,7 @@ def _build_outgoing_header(message_type: str, dest_connector_uri: str,
             f"https://w3id.org/idsa/autogen/"
             f"{message_type.split(':')[-1]}/{uuid.uuid4()}"
         ),
-        "ids:modelVersion"      : "4.2.7",
+        "ids:modelVersion"      : "4.1.0",
         "ids:issued"            : {
             "@value": _now_iso(),
             "@type" : "http://www.w3.org/2001/XMLSchema#dateTimeStamp",
@@ -338,15 +382,15 @@ def _ids_send(
 
     header_dict = _build_outgoing_header(message_type, forward_to_connector, extra)
     str_header  = json.dumps(header_dict)
-
-    # MultipartEncoder: usar tupla (filename, data, content_type) para que el
-    # Content-Type de cada parte sea una cabecera MIME real, no texto en el body.
-    # El error MALFORMED_MESSAGE ocurre cuando se concatena como texto plano.
-    fields = {"header": (None, str_header, "application/ld+json")}
+    # Tuple (filename, data, content_type) — MultipartEncoder sets Content-Type
+    # as a part header, not injected into the body. TRUE Connector requires this.
+    fields = {
+        "header": ("header", str_header, "application/json")
+    }
 
     if payload is not None:
         payload_str = json.dumps(payload) if not isinstance(payload, str) else payload
-        fields["payload"] = (None, payload_str, "application/ld+json")
+        fields["payload"] = ("payload", payload_str, "application/json")
 
     encoder = MultipartEncoder(fields=fields)
     log.info(f"[IDS OUT] {message_type} → {forward_to_url}")
@@ -360,25 +404,28 @@ def _ids_send(
     )
     resp.raise_for_status()
 
-    # Parsear respuesta multipart IDS — 2 partes: header + payload
+    # Parsear respuesta multipart — extraer parte payload (no el header IDS)
     content_type = resp.headers.get("Content-Type", "")
     if "multipart" in content_type:
         try:
             decoder = MultipartDecoder(resp.content, content_type)
-            parts_json = []
+            parts_by_name = {}
             for part in decoder.parts:
+                disp = part.headers.get(b"Content-Disposition", b"").decode("utf-8", errors="ignore")
+                name = ""
+                for seg in disp.split(";"):
+                    seg = seg.strip()
+                    if seg.startswith("name="):
+                        name = seg.split("=", 1)[1].strip().strip('"')
                 text = part.content.decode("utf-8", errors="ignore").strip()
-                if "\n\n" in text:
-                    text = text.split("\n\n", 1)[-1].strip()
-                if text.startswith("{") or text.startswith("["):
-                    try:
-                        parts_json.append(json.loads(text))
-                    except Exception:
-                        pass
-            if len(parts_json) >= 2:
-                return parts_json[1]  # payload
-            elif len(parts_json) == 1:
-                return parts_json[0]  # solo header
+                parts_by_name[name] = text
+            # Preferir parte "payload" si existe, si no usar "header"
+            payload_text = parts_by_name.get("payload") or parts_by_name.get("header", "")
+            if payload_text:
+                try:
+                    return json.loads(payload_text)
+                except Exception:
+                    pass
         except Exception as e:
             log.warning(f"No se pudo parsear multipart de respuesta: {e}")
     try:
@@ -719,8 +766,54 @@ def _run_fl(n_rounds: int):
 # =============================================================================
 
 @app.post("/data")
-async def ids_data(header: str = Form(...), payload: str = Form(None)):
+async def ids_data(request: Request):
+    """
+    Recibe mensajes IDS del ECC. El ECC v1.14.8 puede enviar multipart/mixed
+    o multipart/form-data — se parsea manualmente para cubrir ambos casos.
+    """
     global is_coordinator, coordinator_ecc_url, coordinator_conn_uri
+
+    raw_body     = await request.body()
+    content_type = request.headers.get("content-type", "")
+    log.info(f"[/data] IN  Content-Type: {content_type}")
+
+    header_val  = None
+    payload_val = None
+
+    if "multipart" in content_type:
+        try:
+            decoder = MultipartDecoder(raw_body, content_type)
+            for part in decoder.parts:
+                disp = part.headers.get(b"Content-Disposition", b"").decode("utf-8", errors="ignore")
+                text = part.content.decode("utf-8", errors="ignore").strip()
+                # El ECC puede enviar las cabeceras MIME incrustadas en el texto
+                if "\n\n" in text:
+                    text = text.split("\n\n", 1)[-1].strip()
+                if 'name="header"' in disp:
+                    header_val = text
+                elif 'name="payload"' in disp:
+                    payload_val = text
+                elif not header_val and (text.startswith("{") or text.startswith("[")):
+                    # Primera parte JSON sin nombre explícito → es el header IDS
+                    header_val = text
+        except Exception as e:
+            log.error(f"[/data] Error parseando multipart: {e} | CT={content_type}")
+            return JSONResponse(status_code=400, content={"error": f"multipart parse error: {e}"})
+    else:
+        # Fallback form urlencoded
+        try:
+            form        = await request.form()
+            header_val  = form.get("header")
+            payload_val = form.get("payload")
+        except Exception as e:
+            log.error(f"[/data] Error leyendo form: {e}")
+
+    if not header_val:
+        log.error(f"[/data] Campo 'header' no encontrado. CT={content_type} | body[:300]={raw_body[:300]}")
+        return JSONResponse(status_code=400, content={"error": "missing IDS header field"})
+
+    header  = header_val
+    payload = payload_val
 
     mensaje = json.loads(header)
     tipo    = mensaje.get("@type", "")
@@ -920,51 +1013,6 @@ def status():
 def fl_status():
     with _fl_lock:
         return dict(fl_state)
-
-
-@app.post("/fl/start")
-async def fl_start(request: Request):
-    """
-    Lanza el entrenamiento FL manualmente desde Postman.
-    Body JSON (opcional): { "rounds": 5 }
-    Devuelve 202 Accepted si arranca, 409 si ya está corriendo.
-    """
-    global fl_state
-
-    # Verificar que el algoritmo está disponible
-    if not os.path.exists(_algo_path()):
-        return JSONResponse(
-            status_code=412,
-            content={"error": "algorithm.py no disponible — ejecuta primero el paso 5 (ArtifactRequestMessage)"}
-        )
-
-    with _fl_lock:
-        if fl_state["status"] in ("running",) or fl_state["status"].startswith("round_"):
-            return JSONResponse(
-                status_code=409,
-                content={"error": "FL ya en curso", "status": fl_state["status"]}
-            )
-
-    try:
-        body = await request.json()
-        n_rounds = int(body.get("rounds", FL_ROUNDS))
-    except Exception:
-        n_rounds = FL_ROUNDS
-
-    with _fl_lock:
-        fl_state["total_rounds"] = n_rounds
-
-    # Marcar como coordinator si aún no lo está (el usuario lo lanza manualmente)
-    global is_coordinator
-    is_coordinator = True
-
-    threading.Thread(target=_run_fl, args=(n_rounds,), daemon=True).start()
-    log.info(f"[/fl/start] Entrenamiento iniciado — {n_rounds} rondas")
-
-    return JSONResponse(
-        status_code=202,
-        content={"status": "started", "rounds": n_rounds, "coordinator": INSTANCE_ID}
-    )
 
 
 @app.get("/fl/results")

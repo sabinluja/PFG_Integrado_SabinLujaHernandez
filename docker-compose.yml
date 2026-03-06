@@ -50,6 +50,7 @@ services:
       - FIREWALL=${WORKER1_ECC_FIREWALL}
       - TZ=Europe/Rome
       - AES256-SECRET-KEY=${AES_SECRET_KEY}
+      - DATA_APP_HEALTH_ENDPOINT=http://be-dataapp-worker1:8500/health
     volumes:
       - ./worker1/ecc:/config
       - ./certs:/cert
@@ -88,6 +89,7 @@ services:
       - ./ia-dataapp/data/worker1:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
       - ./certs:/cert
+      - ./certs/dataapp/worker1:/cert/dataapp
     depends_on:
       - ecc-worker1
 
@@ -137,6 +139,7 @@ services:
       - FIREWALL=${WORKER2_ECC_FIREWALL}
       - TZ=Europe/Rome
       - AES256-SECRET-KEY=${AES_SECRET_KEY}
+      - DATA_APP_HEALTH_ENDPOINT=http://be-dataapp-worker2:8500/health
     volumes:
       - ./worker2/ecc:/config
       - ./certs:/cert
@@ -175,6 +178,7 @@ services:
       - ./ia-dataapp/data/worker2:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
       - ./certs:/cert
+      - ./certs/dataapp/worker2:/cert/dataapp
     depends_on:
       - ecc-worker2
 
@@ -224,6 +228,7 @@ services:
       - FIREWALL=${WORKER3_ECC_FIREWALL}
       - TZ=Europe/Rome
       - AES256-SECRET-KEY=${AES_SECRET_KEY}
+      - DATA_APP_HEALTH_ENDPOINT=http://be-dataapp-worker3:8500/health
     volumes:
       - ./worker3/ecc:/config
       - ./certs:/cert
@@ -262,6 +267,7 @@ services:
       - ./ia-dataapp/data/worker3:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
       - ./certs:/cert
+      - ./certs/dataapp/worker3:/cert/dataapp
     depends_on:
       - ecc-worker3
 
