@@ -300,6 +300,10 @@ async def proxy(request: Request):
     log.info(f"[/proxy] {message_type} → {forward_to}")
 
     try:
+        # ContractAgreementMessage requiere ids:correlationMessage obligatorio
+        # Lo tomamos del transfer_contract (es el @id del acuerdo) si no viene explícito
+        corr_msg = body.get("correlationMessage") or transfer_contract or None
+
         result = _ids_send(
             forward_to_url       = forward_to,
             forward_to_connector = dest_conn_uri,
@@ -308,6 +312,7 @@ async def proxy(request: Request):
             requested_element    = req_element,
             transfer_contract    = transfer_contract,
             payload              = payload_in,
+            correlation_message  = corr_msg,
         )
         return JSONResponse(content=result)
     except Exception as exc:
@@ -369,6 +374,7 @@ def _ids_send(
     requested_element   : str  = None,
     transfer_contract   : str  = None,
     payload             : dict = None,
+    correlation_message : str  = None,
 ) -> dict:
     """
     Envía un mensaje IDS directamente al ECC remoto (:8889/data).
@@ -376,9 +382,10 @@ def _ids_send(
     La respuesta llega como multipart — se extrae la parte payload.
     """
     extra = {}
-    if requested_artifact: extra["ids:requestedArtifact"] = {"@id": requested_artifact}
-    if requested_element:  extra["ids:requestedElement"]  = {"@id": requested_element}
-    if transfer_contract:  extra["ids:transferContract"]  = {"@id": transfer_contract}
+    if requested_artifact:  extra["ids:requestedArtifact"]  = {"@id": requested_artifact}
+    if requested_element:   extra["ids:requestedElement"]   = {"@id": requested_element}
+    if transfer_contract:   extra["ids:transferContract"]   = {"@id": transfer_contract}
+    if correlation_message: extra["ids:correlationMessage"] = {"@id": correlation_message}
 
     header_dict = _build_outgoing_header(message_type, forward_to_connector, extra)
     str_header  = json.dumps(header_dict)
@@ -853,13 +860,41 @@ async def ids_data(request: Request):
 
     # ── ContractRequestMessage ────────────────────────────────────────────────
     elif tipo == "ids:ContractRequestMessage":
-        payload_dict = json.loads(payload) if payload else {}
-        url          = f"https://{ECC_HOSTNAME}:8449/api/contractOffer/"
-        hdrs         = {"contractOffer": payload_dict.get("@id", "")}
-        contrato     = requests.get(
+        payload_dict      = json.loads(payload) if payload else {}
+        contract_offer_id = payload_dict.get("@id", "")
+
+        # ── FALLBACK: si el ID llega vacío, inferirlo desde la self-description
+        if not contract_offer_id:
+            log.warning("[ContractRequest] contract_id vacío — infiriendo desde self-description")
+            try:
+                sd        = _get_self_description()
+                catalogs  = sd.get("ids:resourceCatalog", [{}])
+                resource  = (catalogs[0].get("ids:offeredResource", [{}]) or [{}])[0]
+                contract  = (resource.get("ids:contractOffer", [{}]) or [{}])[0]
+                contract_offer_id = contract.get("@id", "")
+                log.info(f"[ContractRequest] contract_id inferido: {contract_offer_id}")
+            except Exception as e:
+                log.error(f"[ContractRequest] No se pudo inferir contract_id: {e}")
+
+        url      = f"https://{ECC_HOSTNAME}:8449/api/contractOffer/"
+        hdrs     = {"contractOffer": contract_offer_id}
+        contrato = requests.get(
             url, headers=hdrs, verify=False, auth=basic_api, timeout=10
         ).json()
-        contrato["ids:consumer"] = mensaje["ids:issuerConnector"]
+
+        # ── Convertir ContractOffer → ContractAgreement ───────────────────────
+        # TRUE Connector devuelve la oferta original; hay que promoverla a acuerdo
+        # para que el consumer (Postman) pueda extraer el @id como transfer_contract
+        contrato["@type"]            = "ids:ContractAgreement"
+        contrato["ids:consumer"]     = mensaje["ids:issuerConnector"]
+        # Asignar nuevo @id de acuerdo si el que viene es de tipo contractOffer
+        orig_id = contrato.get("@id", "")
+        if "contractOffer" in orig_id or not orig_id:
+            import uuid as _uuid
+            contrato["@id"] = (
+                f"https://w3id.org/idsa/autogen/contractAgreement/{_uuid.uuid4()}"
+            )
+        log.info(f"[ContractRequest] ContractAgreement generado: {contrato['@id']}")
 
         return _multipart_response(
             _resp("ids:ContractAgreementMessage", "contractAgreementMessage"),
