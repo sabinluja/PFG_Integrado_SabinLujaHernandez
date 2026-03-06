@@ -707,6 +707,158 @@ def _send_local_weights(weights_b64: str, n_samples: int,
         log.error(f"Error enviando pesos locales: {exc}")
 
 
+def _publish_fl_model_as_ids_resource(global_weights_b64: str, global_metrics: dict, n_rounds: int):
+    """
+    Al terminar el FL, el coordinator publica el modelo global como un nuevo
+    recurso IDS en su propio ECC con acceso restringido a los peers participantes.
+
+    Flujo:
+      1. GET  /api/selfDescription/         → obtener catalog @id
+      2. POST /api/offeredResource/         → crear recurso fl_model_final
+      3. POST /api/contractOffer/           → contrato restringido a los peers
+      4. POST /api/representation/          → representación con los pesos
+
+    Todo apunta al ECC del coordinator (ECC_HOSTNAME e INSTANCE_ID dinámicos).
+    """
+    from requests.auth import HTTPBasicAuth
+    basic_api = HTTPBasicAuth(API_USER, API_PASS)
+    ecc_base  = f"https://{ECC_HOSTNAME}:8449"
+
+    resource_id = (
+        f"https://w3id.org/idsa/autogen/textResource/fl_model_"
+        f"coordinator{INSTANCE_ID}_{uuid.uuid4().hex[:8]}"
+    )
+    artifact_id = (
+        f"http://w3id.org/engrd/connector/artifact/fl_model_final_{INSTANCE_ID}"
+    )
+    contract_id = (
+        f"https://w3id.org/idsa/autogen/contractOffer/fl_model_"
+        f"coordinator{INSTANCE_ID}_{uuid.uuid4().hex[:8]}"
+    )
+    repr_id = (
+        f"https://w3id.org/idsa/autogen/representation/fl_model_"
+        f"coordinator{INSTANCE_ID}_{uuid.uuid4().hex[:8]}"
+    )
+
+    try:
+        # ── 1. Obtener catalog @id desde la self-description ──────────────────
+        log.info("[publish] Obteniendo catalog ID del ECC...")
+        sd       = requests.get(f"{ecc_base}/api/selfDescription/",
+                                verify=False, auth=basic_api, timeout=10).json()
+        catalogs = sd.get("ids:resourceCatalog", [])
+        if not catalogs:
+            log.error("[publish] No se encontró ningún catalog en la self-description")
+            return
+        catalog_id = catalogs[0].get("@id", "")
+        if not catalog_id:
+            log.error("[publish] catalog @id vacío")
+            return
+        log.info(f"[publish] Catalog ID: {catalog_id}")
+
+        # ── 2. Crear recurso fl_model_final ───────────────────────────────────
+        log.info("[publish] Creando recurso IDS fl_model_final...")
+        resource_body = {
+            "@id"             : resource_id,
+            "@type"           : "ids:Resource",
+            "ids:title"       : [{"@value": f"FL Global Model — Coordinator {INSTANCE_ID}", "@language": "en"}],
+            "ids:description" : [{"@value":
+                f"Modelo federado final tras {n_rounds} rondas. "
+                f"acc={global_metrics.get('accuracy','?')}  "
+                f"auc={global_metrics.get('auc','?')}",
+                "@language": "en"
+            }],
+            "ids:keyword"     : [{"@value": "federated-learning", "@language": "en"},
+                                 {"@value": "fl-model",           "@language": "en"}],
+            "ids:version"     : f"round_{n_rounds}",
+        }
+        resp = requests.post(
+            f"{ecc_base}/api/offeredResource/",
+            headers={"catalog": catalog_id, "Content-Type": "application/json"},
+            json=resource_body,
+            verify=False, auth=basic_api, timeout=10
+        )
+        if not resp.ok:
+            log.error(f"[publish] Error creando recurso: {resp.status_code} {resp.text[:200]}")
+            return
+        log.info(f"[publish] ✅ Recurso creado: {resource_id}")
+
+        # ── 3. Añadir contrato restringido a los peers participantes ──────────
+        log.info("[publish] Añadiendo contrato IDS restringido a peers...")
+        permissions = []
+        for peer_uri in PEER_CONNECTOR_URIS:
+            permissions.append({
+                "@type"       : "ids:Permission",
+                "@id"         : f"https://w3id.org/idsa/autogen/permission/{uuid.uuid4()}",
+                "ids:action"  : [{"@id": "https://w3id.org/idsa/code/USE"}],
+                "ids:assignee": [{"@id": peer_uri}],
+                "ids:assigner": [{"@id": CONNECTOR_URI}],
+                "ids:target"  : {"@id": artifact_id},
+            })
+
+        contract_body = {
+            "@id"           : contract_id,
+            "@type"         : "ids:ContractOffer",
+            "ids:provider"  : {"@id": CONNECTOR_URI},
+            "ids:permission": permissions,
+            "ids:obligation": [],
+            "ids:prohibition": [],
+        }
+        resp = requests.post(
+            f"{ecc_base}/api/contractOffer/",
+            headers={"resource": resource_id, "Content-Type": "application/json"},
+            json=contract_body,
+            verify=False, auth=basic_api, timeout=10
+        )
+        if not resp.ok:
+            log.error(f"[publish] Error creando contrato: {resp.status_code} {resp.text[:200]}")
+            return
+        log.info(f"[publish] ✅ Contrato creado: {contract_id}")
+
+        # ── 4. Añadir representación con el artifact (pesos finales) ──────────
+        log.info("[publish] Añadiendo representación con pesos finales...")
+        repr_body = {
+            "@id"          : repr_id,
+            "@type"        : "ids:Representation",
+            "ids:mediaType": {
+                "@type"                : "ids:IANAMediaType",
+                "@id"                  : f"https://w3id.org/idsa/autogen/mediaType/{uuid.uuid4().hex[:8]}",
+                "ids:filenameExtension": "json",
+            },
+            "ids:instance" : [{
+                "@type"           : "ids:Artifact",
+                "@id"             : artifact_id,
+                "ids:fileName"    : f"fl_global_model_coordinator{INSTANCE_ID}.json",
+                "ids:byteSize"    : len(global_weights_b64),
+                "ids:creationDate": {
+                    "@value": _now_iso(),
+                    "@type" : "http://www.w3.org/2001/XMLSchema#dateTimeStamp",
+                },
+                "ids:checkSum"    : str(hash(global_weights_b64))[:16],
+            }],
+        }
+        resp = requests.post(
+            f"{ecc_base}/api/representation/",
+            headers={"resource": resource_id, "Content-Type": "application/json"},
+            json=repr_body,
+            verify=False, auth=basic_api, timeout=10
+        )
+        if not resp.ok:
+            log.error(f"[publish] Error creando representación: {resp.status_code} {resp.text[:200]}")
+            return
+        log.info(f"[publish] ✅ Representación creada: {repr_id}")
+
+        log.info(
+            f"🎉 Modelo FL publicado como recurso IDS en coordinator-{INSTANCE_ID}\n"
+            f"   Resource  : {resource_id}\n"
+            f"   Artifact  : {artifact_id}\n"
+            f"   Contrato  : {contract_id} (restringido a {len(PEER_CONNECTOR_URIS)} peers)\n"
+            f"   Peers     : {PEER_CONNECTOR_URIS}"
+        )
+
+    except Exception as exc:
+        log.error(f"[publish] Error publicando modelo IDS: {exc}", exc_info=True)
+
+
 def _run_fl(n_rounds: int):
     """
     Bucle FL — ejecutado en hilo separado por el coordinator.
@@ -826,6 +978,13 @@ def _run_fl(n_rounds: int):
         json.dump(fl_state["history"], f, indent=2)
 
     log.info(f"✅ FL completado — {n_rounds} rondas")
+
+    # Publicar modelo final como recurso IDS restringido a los peers participantes
+    try:
+        last_metrics = fl_state["history"][-1]["global_metrics"] if fl_state["history"] else {}
+        _publish_fl_model_as_ids_resource(global_weights_b64, last_metrics, n_rounds)
+    except Exception as exc:
+        log.error(f"Error publicando modelo IDS (no crítico): {exc}")
 
 
 # =============================================================================
