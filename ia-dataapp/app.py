@@ -304,6 +304,13 @@ async def proxy(request: Request):
         # Lo tomamos del transfer_contract (es el @id del acuerdo) si no viene explícito
         corr_msg = body.get("correlationMessage") or transfer_contract or None
 
+        # Si es fl_algorithm, el contenido b64 viaja en el header IDS (ids:contentVersion)
+        # para que el ECC receptor no lo descarte al reenviar al DataApp
+        header_content_out = None
+        if isinstance(payload_in, dict) and payload_in.get("type") == "fl_algorithm":
+            header_content_out = payload_in.pop("content", None)
+            log.info(f"[/proxy] fl_algorithm detectado — content ({len(header_content_out or '')} chars) → ids:tokenValue")
+
         result = _ids_send(
             forward_to_url       = forward_to,
             forward_to_connector = dest_conn_uri,
@@ -313,6 +320,7 @@ async def proxy(request: Request):
             transfer_contract    = transfer_contract,
             payload              = payload_in,
             correlation_message  = corr_msg,
+            header_content       = header_content_out,
         )
         return JSONResponse(content=result)
     except Exception as exc:
@@ -375,17 +383,32 @@ def _ids_send(
     transfer_contract   : str  = None,
     payload             : dict = None,
     correlation_message : str  = None,
+    header_content      : str  = None,
+    header_content_type : str  = "fl_algorithm",
+    peer_algorithm      : bool = False,
 ) -> dict:
     """
     Envía un mensaje IDS directamente al ECC remoto (:8889/data).
     Construye el multipart (header IDS + payload) y lo posta directo.
     La respuesta llega como multipart — se extrae la parte payload.
+
+    header_content: base64 del algoritmo transportado en ids:contentVersion.
+    El ECC nunca modifica este campo, por lo que llega intacto al DataApp receptor.
     """
     extra = {}
     if requested_artifact:  extra["ids:requestedArtifact"]  = {"@id": requested_artifact}
     if requested_element:   extra["ids:requestedElement"]   = {"@id": requested_element}
     if transfer_contract:   extra["ids:transferContract"]   = {"@id": transfer_contract}
     if correlation_message: extra["ids:correlationMessage"] = {"@id": correlation_message}
+    if header_content:
+        # El algoritmo viaja en ids:tokenValue del securityToken — campo string libre
+        # que el ECC no valida ni modifica al reenviar
+        extra["ids:securityToken"] = {
+            "@type"          : "ids:DynamicAttributeToken",
+            "@id"            : "https://w3id.org/idsa/autogen/dynamicAttributeToken/fl",
+            "ids:tokenValue" : (f"{header_content_type}::from_coordinator::{header_content}" if peer_algorithm else f"{header_content_type}::{header_content}"),
+            "ids:tokenFormat": {"@id": "https://w3id.org/idsa/code/JWT"},
+        }
 
     header_dict = _build_outgoing_header(message_type, forward_to_connector, extra)
     str_header  = json.dumps(header_dict)
@@ -495,15 +518,20 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
         log.info(f"[coordinator] 3/4 Acuerdo confirmado")
 
         # 4. ArtifactRequestMessage — algorithm.py en base64
+        algo_b64 = base64.b64encode(artifact_bytes).decode("utf-8")
         _ids_send(
             peer_ecc_url, peer_conn_uri, "ids:ArtifactRequestMessage",
             requested_artifact=contract_artifact,
             transfer_contract=transfer_contract,
+            header_content=algo_b64,
+            header_content_type="fl_algorithm",
+            peer_algorithm=True,
             payload={
-                "type"    : "fl_algorithm",
-                "filename": "algorithm.py",
-                "content" : base64.b64encode(artifact_bytes).decode("utf-8"),
-                "sender"  : f"coordinator-{INSTANCE_ID}",
+                "type"            : "fl_algorithm",
+                "filename"        : "algorithm.py",
+                "content"         : algo_b64,
+                "sender"          : f"coordinator-{INSTANCE_ID}",
+                "from_coordinator": True,
             },
         )
         log.info(f"[coordinator] 4/4 algorithm.py → {peer_ecc_url} ✅")
@@ -576,6 +604,37 @@ def _fedavg(results: list) -> list:
     return agg
 
 
+def _save_local_metrics(result: dict, round_num: int):
+    """
+    Guarda las métricas locales de este worker tras cada ronda en:
+      /home/nobody/data/output/local_metrics.json
+    Acumula todas las rondas en el mismo fichero.
+    """
+    metrics_path = os.path.join(OUTPUT_DIR, "local_metrics.json")
+    try:
+        if os.path.exists(metrics_path):
+            with open(metrics_path) as f:
+                history = json.load(f)
+        else:
+            history = []
+
+        history.append({
+            "round"       : round_num,
+            "worker"      : INSTANCE_ID,
+            "n_samples"   : result.get("n_samples"),
+            "metrics"     : result.get("metrics"),
+            "input_dim"   : result.get("input_dim"),
+            "feature_cols": result.get("feature_cols"),
+        })
+
+        with open(metrics_path, "w") as f:
+            json.dump(history, f, indent=2)
+
+        log.info(f"Métricas ronda {round_num} guardadas en {metrics_path}")
+    except Exception as e:
+        log.error(f"Error guardando métricas locales: {e}")
+
+
 def _train_local(global_weights_b64: str, round_num: int) -> dict:
     result = _load_algorithm().run(_csv_path(), global_weights_b64=global_weights_b64)
     log.info(
@@ -583,6 +642,7 @@ def _train_local(global_weights_b64: str, round_num: int) -> dict:
         f"acc={result['metrics']['accuracy']:.4f}  "
         f"auc={result['metrics']['auc']:.4f}"
     )
+    _save_local_metrics(result, round_num)
     return result
 
 
@@ -590,20 +650,24 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                           weights_b64: str, round_num: int):
     """Coordinator → Worker: envía pesos globales de la ronda."""
     try:
+        import base64 as _b64
+        fl_payload = {
+            "type"              : "fl_global_weights",
+            "round"             : round_num,
+            "global_weights_b64": weights_b64,
+            "from_coordinator"  : INSTANCE_ID,
+            "coordinator_ecc"   : f"https://{ECC_HOSTNAME}:8889/data",
+            "coordinator_uri"   : CONNECTOR_URI,
+        }
+        payload_b64 = _b64.b64encode(json.dumps(fl_payload).encode()).decode()
         _ids_send(
             peer_ecc_url, peer_conn_uri, "ids:ArtifactRequestMessage",
             requested_artifact=(
                 f"http://w3id.org/engrd/connector/artifact/fl_global_round{round_num}"
             ),
-            payload={
-                "type"              : "fl_global_weights",
-                "round"             : round_num,
-                "global_weights_b64": weights_b64,
-                "from_coordinator"  : INSTANCE_ID,
-                # Incluidos para que el worker sepa dónde devolver sus pesos
-                "coordinator_ecc"   : f"https://{ECC_HOSTNAME}:8889/data",
-                "coordinator_uri"   : CONNECTOR_URI,
-            },
+            header_content=payload_b64,
+            header_content_type="fl_global_weights",
+            payload=fl_payload,
         )
         log.info(f"Pesos globales ronda {round_num} → {peer_ecc_url} ✅")
     except Exception as exc:
@@ -617,6 +681,16 @@ def _send_local_weights(weights_b64: str, n_samples: int,
         log.error("coordinator_ecc_url no definido")
         return
     try:
+        import base64 as _b64
+        fl_payload = {
+            "type"       : "fl_weights",
+            "instance_id": INSTANCE_ID,
+            "round"      : round_num,
+            "weights_b64": weights_b64,
+            "n_samples"  : n_samples,
+            "metrics"    : metrics,
+        }
+        payload_b64 = _b64.b64encode(json.dumps(fl_payload).encode()).decode()
         _ids_send(
             coordinator_ecc_url,
             coordinator_conn_uri or CONNECTOR_URI,
@@ -624,14 +698,9 @@ def _send_local_weights(weights_b64: str, n_samples: int,
             requested_artifact=(
                 f"http://w3id.org/engrd/connector/artifact/fl_weights_worker{INSTANCE_ID}"
             ),
-            payload={
-                "type"       : "fl_weights",
-                "instance_id": INSTANCE_ID,
-                "round"      : round_num,
-                "weights_b64": weights_b64,
-                "n_samples"  : n_samples,
-                "metrics"    : metrics,
-            },
+            header_content=payload_b64,
+            header_content_type="fl_weights",
+            payload=fl_payload,
         )
         log.info(f"Pesos ronda {round_num} enviados al coordinator ✅")
     except Exception as exc:
@@ -910,8 +979,38 @@ async def ids_data(request: Request):
 
     # ── ArtifactRequestMessage ────────────────────────────────────────────────
     elif tipo == "ids:ArtifactRequestMessage":
-        payload_dict  = json.loads(payload) if payload else {}
+        try:
+            payload_dict = json.loads(payload) if payload else {}
+        except Exception:
+            payload_dict = {}
+
+        # Recuperar algoritmo desde ids:contentVersion del header IDS si payload llegó vacío
+        # (el ECC descarta el payload multipart pero preserva todos los campos del header)
+        # ids:securityToken.ids:tokenValue transporta el algoritmo b64
+        # cuando el ECC descarta el payload multipart
+        if not payload_dict.get("type"):
+            token = mensaje.get("ids:securityToken", {})
+            token_val = token.get("ids:tokenValue", "") if isinstance(token, dict) else ""
+            import base64 as _b64
+            for prefix in ("fl_algorithm", "fl_global_weights", "fl_weights"):
+                if token_val.startswith(f"{prefix}::"):
+                    rest = token_val[len(f"{prefix}::"):]
+                    from_coord = rest.startswith("from_coordinator::")
+                    payload_b64 = rest[len("from_coordinator::"):] if from_coord else rest
+                    if prefix == "fl_algorithm":
+                        payload_dict = {"type": "fl_algorithm", "content": payload_b64, "from_coordinator": from_coord}
+                        log.info(f"[ArtifactRequest] fl_algorithm recuperado desde tokenValue ({len(payload_b64)} chars) | from_coordinator={from_coord}")
+                    else:
+                        try:
+                            payload_dict = json.loads(_b64.b64decode(payload_b64).decode())
+                            log.info(f"[ArtifactRequest] {prefix} recuperado desde tokenValue | keys={list(payload_dict.keys())}")
+                        except Exception as e:
+                            log.error(f"[ArtifactRequest] Error decodificando tokenValue {prefix}: {e}")
+                    break
+
         artifact_type = payload_dict.get("type", "")
+        log.info(f"[ArtifactRequest] artifact_type={artifact_type!r} | payload keys={list(payload_dict.keys())}")
+        log.info(f"[ArtifactRequest] header keys IDS: {[k for k in mensaje.keys() if 'ids:' in k]}")
         resp_h = _resp(
             "ids:ArtifactResponseMessage", "artifactResponseMessage",
             {"ids:transferContract": mensaje.get("ids:transferContract", {})}
@@ -970,28 +1069,19 @@ async def ids_data(request: Request):
                 algo_bytes = content_b64.encode() if isinstance(content_b64, str) else b""
 
             _save_algorithm(algo_bytes)
-            is_coordinator = True
-            log.info(f"★ algorithm.py recibido — worker-{INSTANCE_ID} = COORDINATOR")
-
-            def _launch():
-                log.info(f"Distribuyendo algorithm.py a {len(PEER_ECC_URLS)} peers…")
-                with concurrent.futures.ThreadPoolExecutor(
-                        max_workers=len(PEER_ECC_URLS)) as ex:
-                    futures = {
-                        ex.submit(_negotiate_and_send_algorithm, p, u, algo_bytes): p
-                        for p, u in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS)
-                    }
-                    for fut in concurrent.futures.as_completed(futures):
-                        log.info(f"  → {futures[fut]}: {'✅' if fut.result() else '❌'}")
-                _run_fl(FL_ROUNDS)
-
-            threading.Thread(target=_launch, daemon=True).start()
+            if payload_dict.get("from_coordinator"):
+                log.info(f"✔ algorithm.py recibido del coordinator — worker-{INSTANCE_ID} mantiene rol WORKER")
+            else:
+                is_coordinator = True
+                log.info(f"★ algorithm.py recibido desde Postman — worker-{INSTANCE_ID} = COORDINATOR")
+            log.info(f"  FL listo para arrancar — llama a POST /fl/start")
             return _multipart_response(
                 resp_h,
                 json.dumps({
                     "status"     : "algorithm_received",
                     "coordinator": INSTANCE_ID,
                     "fl_rounds"  : FL_ROUNDS,
+                    "next_step"  : "POST /fl/start to begin training"
                 }),
             )
 
@@ -1013,6 +1103,72 @@ async def ids_data_get():
 # =============================================================================
 # Monitorización
 # =============================================================================
+
+
+@app.post("/fl/start")
+async def fl_start(request: Request):
+    """
+    Arranca el ciclo FL completo desde el coordinator.
+    Distribuye algorithm.py a los peers vía IDS y lanza FedAvg.
+
+    Body opcional:
+        { "rounds": 5 }   ← si no se indica, usa FL_ROUNDS del entorno
+    """
+    global is_coordinator
+
+    if not is_coordinator:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Este worker no es coordinator. Envía el algoritmo primero (paso 5)."}
+        )
+
+    algo_path = ALGO_IDS_PATH if os.path.exists(ALGO_IDS_PATH) else ALGO_BAKED_PATH
+    if not os.path.exists(algo_path):
+        return JSONResponse(
+            status_code=400,
+            content={"error": "algorithm.py no encontrado. Envía el algoritmo primero (paso 5)."}
+        )
+
+    with open(algo_path, "rb") as f:
+        algo_bytes = f.read()
+
+    try:
+        body = await request.json()
+        rounds = int(body.get("rounds", FL_ROUNDS))
+    except Exception:
+        rounds = FL_ROUNDS
+
+    rounds = max(1, rounds)
+    log.info(f"[/fl/start] Arrancando FL — {rounds} rondas — coordinator-{INSTANCE_ID}")
+
+    def _launch():
+        log.info(f"Distribuyendo algorithm.py a {len(PEER_ECC_URLS)} peers…")
+        with concurrent.futures.ThreadPoolExecutor(
+                max_workers=max(len(PEER_ECC_URLS), 1)) as ex:
+            futures = {
+                ex.submit(_negotiate_and_send_algorithm, p, u, algo_bytes): p
+                for p, u in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS)
+            }
+            for fut in concurrent.futures.as_completed(futures):
+                peer = futures[fut]
+                try:
+                    ok = fut.result()
+                    log.info(f"  → {peer}: {'✅' if ok else '❌'}")
+                except Exception as exc:
+                    log.error(f"  → {peer}: ❌ {exc}")
+        _run_fl(rounds)
+
+    threading.Thread(target=_launch, daemon=True).start()
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            "status"     : "started",
+            "coordinator": INSTANCE_ID,
+            "fl_rounds"  : rounds,
+        }
+    )
+
 
 @app.get("/health")
 def health():

@@ -413,15 +413,20 @@
           "response": []
         },
         {
-          "name": "6 - Verify: Worker 1 tiene algorithm.py",
+          "name": "6 - Verify: Coordinator activo con algorithm.py",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"algorithm_loaded = true\", () => {",
-                  "    pm.expect(pm.response.json().algorithm_loaded).to.be.true;",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Es coordinator y tiene algorithm.py\", () => {",
+                  "    pm.expect(json.role).to.equal(\"coordinator\");",
+                  "    pm.expect(json.algorithm_loaded).to.be.true;",
+                  "    console.log(\"✅ Worker\", json.instance, \"| role:\", json.role, \"| algorithm_loaded:\", json.algorithm_loaded);",
+                  "    console.log(\"   FL status:\", json.fl_status, \"| CSV:\", json.csv_selected);",
+                  "    console.log(\"   Peers:\", json.peer_eccs);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -432,96 +437,32 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "http://localhost:5001/status",
-              "protocol": "http",
+              "raw": "https://localhost:{{Coordinator_Port}}/status",
+              "protocol": "https",
               "host": [
                 "localhost"
               ],
-              "port": "5001",
+              "port": "{{Coordinator_Port}}",
               "path": [
                 "status"
               ]
             }
           },
+          "description": "Verifica en un solo paso que el coordinator (worker-2) está activo, tiene el rol correcto y algorithm.py cargado y listo para arrancar el FL.",
           "response": []
         },
         {
-          "name": "7 - Verify: Worker 2 tiene algorithm.py",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"algorithm_loaded = true\", () => {",
-                  "    pm.expect(pm.response.json().algorithm_loaded).to.be.true;",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:5002/status",
-              "protocol": "http",
-              "host": [
-                "localhost"
-              ],
-              "port": "5002",
-              "path": [
-                "status"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "8 - Verify: Worker 3 tiene algorithm.py",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"algorithm_loaded = true\", () => {",
-                  "    pm.expect(pm.response.json().algorithm_loaded).to.be.true;",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:5003/status",
-              "protocol": "http",
-              "host": [
-                "localhost"
-              ],
-              "port": "5003",
-              "path": [
-                "status"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "9 - FL: Lanzar entrenamiento completo (5 rondas)",
+          "name": "7 - FL: Arrancar entrenamiento",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test(\"Status 202 Accepted\", () => pm.response.to.have.status(202));",
-                  "pm.test(\"FL iniciado\", () => {",
+                  "pm.test(\"FL arrancado correctamente\", () => {",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.status).to.equal(\"started\");",
+                  "    console.log(\"✅ FL arrancado — coordinator:\", json.coordinator, \"| rondas:\", json.fl_rounds);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -538,26 +479,78 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"rounds\": 5\n}"
+              "raw": "{\n    \"rounds\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
-              "raw": "http://localhost:5001/fl/start",
-              "protocol": "http",
+              "raw": "https://localhost:{{Coordinator_Port}}/fl/start",
+              "protocol": "https",
               "host": [
                 "localhost"
               ],
-              "port": "5001",
+              "port": "{{Coordinator_Port}}",
               "path": [
                 "fl",
                 "start"
               ]
-            },
-            "description": "Lanza el ciclo FL completo desde el coordinator (worker-1). Los 3 workers entrenan localmente y el coordinator agrega los pesos (FedAvg) en cada ronda.\n\nNota: si el paso 5 ya lanzó el FL automáticamente, este paso iniciará un nuevo ciclo encima."
+            }
           },
+          "description": "Arranca el ciclo FL. El coordinator distribuye algorithm.py a los peers vía IDS y lanza FedAvg.\n\nCambia {{Coordinator_Port}} en el environment para apuntar al worker correcto.",
           "response": []
         },
         {
-          "name": "10 - FL: Estado del entrenamiento (ejecutar hasta completed)",
+          "name": "8 - Verify: Peers recibieron algorithm.py (workers 1, 2 y 3)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Este paso consulta /status del propio coordinator para ver si los peers",
+                  "// están listados. Para verificar los otros workers individualmente,",
+                  "// ejecuta este mismo paso cambiando el puerto en Coordinator_Port.",
+                  "//",
+                  "// Worker-1: 5001 | Worker-2: 5002 | Worker-3: 5003",
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"algorithm.py cargado en este worker\", () => {",
+                  "    pm.expect(json.algorithm_loaded).to.be.true;",
+                  "    console.log(\"✅ Worker\", json.instance, \"| role:\", json.role, \"| algorithm_loaded:\", json.algorithm_loaded);",
+                  "    console.log(\"   Peers configurados:\", JSON.stringify(json.peer_eccs));",
+                  "    if (json.fl_status !== 'idle') {",
+                  "        console.log(\"✅ FL ya en marcha — status:\", json.fl_status);",
+                  "    } else {",
+                  "        console.log(\"⚠️  FL todavía idle en este worker — puede que la distribución aún esté en curso\");",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "https://localhost:{{Coordinator_Port}}/status",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "{{Coordinator_Port}}",
+              "path": [
+                "status"
+              ]
+            }
+          },
+          "description": "Verifica que algorithm.py llegó correctamente a cada worker. Ejecutar una vez con cada puerto:\n  5001 → Worker-1\n  5002 → Worker-2 (coordinator)\n  5003 → Worker-3\n\nBusca algorithm_loaded: true en los 3 antes de seguir con el polling de /fl/status.",
+          "response": []
+        },
+        {
+          "name": "9 - Verify: FL arrancó y en curso (repetir hasta completed)",
           "event": [
             {
               "listen": "test",
@@ -565,15 +558,19 @@
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
                   "const json = pm.response.json();",
+                  "pm.test(\"FL no está idle (arrancó correctamente)\", () => {",
+                  "    pm.expect(json.status).to.not.equal(\"idle\");",
+                  "    console.log(\"FL status:\", json.status, \"| ronda:\", json.current_round, \"/\", json.total_rounds);",
+                  "});",
                   "pm.test(\"FL en curso o completado\", () => {",
-                  "    pm.expect([\"idle\",\"running\",\"completed\",\"failed\",",
+                  "    pm.expect([\"running\",\"completed\",\"failed\",",
                   "               \"round_1\",\"round_2\",\"round_3\",\"round_4\",\"round_5\"]",
                   "    ).to.include(json.status);",
                   "});",
                   "if (json.status === \"completed\") {",
                   "    const last = json.history[json.history.length - 1];",
-                  "    console.log(\"✅ FL completado — \" + json.total_rounds + \" rondas\");",
-                  "    console.log(\"   acc=\" + last?.global_metrics?.accuracy + \" | auc=\" + last?.global_metrics?.auc);",
+                  "    console.log(\"✅ FL completado —\", json.total_rounds, \"rondas\");",
+                  "    console.log(\"   acc=\", last?.global_metrics?.accuracy, \"| auc=\", last?.global_metrics?.auc);",
                   "} else {",
                   "    console.log(\"FL status:\", json.status, \"— ronda\", json.current_round, \"/\", json.total_rounds);",
                   "}"
@@ -586,115 +583,23 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "http://localhost:5001/fl/status",
-              "protocol": "http",
+              "raw": "https://localhost:{{Coordinator_Port}}/fl/status",
+              "protocol": "https",
               "host": [
                 "localhost"
               ],
-              "port": "5001",
+              "port": "{{Coordinator_Port}}",
               "path": [
                 "fl",
                 "status"
               ]
-            },
-            "description": "Ejecutar repetidamente hasta ver status=completed. Muestra la ronda actual y métricas al completarse."
-          },
-          "response": []
-        },
-        {
-          "name": "11 - FL: Lanzar 1 ronda individual",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status 202 Accepted\", () => pm.response.to.have.status(202));",
-                  "pm.test(\"FL iniciado\", () => {",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json.status).to.equal(\"started\");",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
             }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n    \"rounds\": 1\n}"
-            },
-            "url": {
-              "raw": "http://localhost:5001/fl/start",
-              "protocol": "http",
-              "host": [
-                "localhost"
-              ],
-              "port": "5001",
-              "path": [
-                "fl",
-                "start"
-              ]
-            },
-            "description": "Lanza un ciclo FL de una sola ronda. Útil para verificar que el flujo básico funciona correctamente antes de lanzar 5 rondas."
           },
+          "description": "Ejecutar justo tras arrancar FL para confirmar que no está idle, y repetir periódicamente hasta ver status=completed. Muestra ronda actual y métricas finales al completarse.",
           "response": []
         },
         {
-          "name": "12 - FL: Verificar que 1 ronda completó correctamente",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
-                  "if (json.status === \"completed\") {",
-                  "    pm.test(\"1 ronda completada\", () => {",
-                  "        pm.expect(json.total_rounds).to.equal(1);",
-                  "        pm.expect(json.history.length).to.equal(1);",
-                  "    });",
-                  "    pm.test(\"Métricas presentes tras 1 ronda\", () => {",
-                  "        const m = json.history[0].global_metrics;",
-                  "        pm.expect(m.accuracy).to.be.above(0);",
-                  "        pm.expect(m.auc).to.be.above(0);",
-                  "        console.log(\"1 ronda — acc=\" + m.accuracy + \" | auc=\" + m.auc);",
-                  "    });",
-                  "} else {",
-                  "    console.log(\"FL todavía en curso:\", json.status);",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:5001/fl/status",
-              "protocol": "http",
-              "host": [
-                "localhost"
-              ],
-              "port": "5001",
-              "path": [
-                "fl",
-                "status"
-              ]
-            },
-            "description": "Ejecutar tras lanzar 1 ronda. Debe mostrar status=completed con 1 ronda en el historial."
-          },
-          "response": []
-        },
-        {
-          "name": "13 - FL: Resultados del Coordinator (historial completo)",
+          "name": "10 - FL: Resultados del Coordinator (historial completo)",
           "event": [
             {
               "listen": "test",
@@ -705,7 +610,7 @@
                   "    const json = pm.response.json();",
                   "    pm.expect(json).to.be.an(\"array\").with.length.above(0);",
                   "    console.log(\"Rondas en historial:\", json.length);",
-                  "    json.forEach((r, i) => {",
+                  "    json.forEach((r) => {",
                   "        console.log(`  Ronda ${r.round}: acc=${r.global_metrics?.accuracy} | auc=${r.global_metrics?.auc} | samples=${r.total_samples}`);",
                   "    });",
                   "});"
@@ -718,12 +623,12 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "http://localhost:5001/fl/results",
-              "protocol": "http",
+              "raw": "https://localhost:{{Coordinator_Port}}/fl/results",
+              "protocol": "https",
               "host": [
                 "localhost"
               ],
-              "port": "5001",
+              "port": "{{Coordinator_Port}}",
               "path": [
                 "fl",
                 "results"
@@ -733,7 +638,7 @@
           "response": []
         },
         {
-          "name": "14 - Coordinator: Modelo global FL",
+          "name": "11 - FL: Modelo global del Coordinator",
           "event": [
             {
               "listen": "test",
@@ -744,7 +649,7 @@
                   "    const json = pm.response.json();",
                   "    pm.expect(json.metrics).to.exist;",
                   "    pm.expect(json.weights_available).to.be.true;",
-                  "    console.log(\"Ronda:\", json.round);",
+                  "    console.log(\"Ronda final:\", json.round);",
                   "    console.log(\"acc=\", json.metrics?.accuracy, \"| auc=\", json.metrics?.auc);",
                   "});"
                 ],
@@ -756,61 +661,22 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "http://localhost:5001/fl/model",
-              "protocol": "http",
+              "raw": "https://localhost:{{Coordinator_Port}}/fl/model",
+              "protocol": "https",
               "host": [
                 "localhost"
               ],
-              "port": "5001",
+              "port": "{{Coordinator_Port}}",
               "path": [
                 "fl",
                 "model"
               ]
-            },
-            "description": "Obtiene el modelo global final del coordinator (worker-1) tras completar el entrenamiento. Muestra las métricas de la última ronda y confirma que los pesos están disponibles."
-          },
-          "response": []
-        },
-        {
-          "name": "15 - Coordinator: Estado general",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Estado correcto\", () => {",
-                  "    const json = pm.response.json();",
-                  "    console.log(\"Worker:\", json.instance, \"| Role:\", json.role);",
-                  "    console.log(\"algorithm_loaded:\", json.algorithm_loaded);",
-                  "    console.log(\"FL status:\", json.fl_status, \"| Round:\", json.fl_round, \"/\", json.fl_total_rounds);",
-                  "    pm.expect(json.instance).to.exist;",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
             }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "http://localhost:5001/status",
-              "protocol": "http",
-              "host": [
-                "localhost"
-              ],
-              "port": "5001",
-              "path": [
-                "status"
-              ]
-            },
-            "description": "Estado general del coordinator (worker-1): rol, algorithm cargado, estado FL y rondas completadas."
           },
           "response": []
         },
         {
-          "name": "16 - Health Check: Todos los workers",
+          "name": "12 - Health Check: Todos los workers",
           "event": [
             {
               "listen": "test",
@@ -828,18 +694,18 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "http://localhost:5001/health",
-              "protocol": "http",
+              "raw": "https://localhost:{{Coordinator_Port}}/health",
+              "protocol": "https",
               "host": [
                 "localhost"
               ],
-              "port": "5001",
+              "port": "{{Coordinator_Port}}",
               "path": [
                 "health"
               ]
-            },
-            "description": "Health check del coordinator. Cambiar el puerto (5001/5002/5003) para verificar cada worker individualmente."
+            }
           },
+          "description": "Health check de cada worker. Cambia {{Coordinator_Port}} en el environment: 5001=worker-1, 5002=worker-2, 5003=worker-3.",
           "response": []
         }
       ]

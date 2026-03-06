@@ -1,0 +1,67 @@
+[
+  {
+    "round": 1,
+    "workers_ok": 3,
+    "total_samples": 65866,
+    "elapsed_seconds": 10.93,
+    "global_metrics": {
+      "loss": 0.235062,
+      "accuracy": 0.894929,
+      "auc": 0.966896,
+      "precision": 0.903269,
+      "recall": 0.89755
+    }
+  },
+  {
+    "round": 2,
+    "workers_ok": 3,
+    "total_samples": 65866,
+    "elapsed_seconds": 6.08,
+    "global_metrics": {
+      "loss": 0.21478,
+      "accuracy": 0.910295,
+      "auc": 0.972849,
+      "precision": 0.915421,
+      "recall": 0.91575
+    }
+  },
+  {
+    "round": 3,
+    "workers_ok": 3,
+    "total_samples": 65866,
+    "elapsed_seconds": 5.84,
+    "global_metrics": {
+      "loss": 0.184319,
+      "accuracy": 0.923778,
+      "auc": 0.978759,
+      "precision": 0.920169,
+      "recall": 0.937782
+    }
+  },
+  {
+    "round": 4,
+    "workers_ok": 3,
+    "total_samples": 65866,
+    "elapsed_seconds": 5.67,
+    "global_metrics": {
+      "loss": 0.164623,
+      "accuracy": 0.933677,
+      "auc": 0.983079,
+      "precision": 0.929495,
+      "recall": 0.945492
+    }
+  },
+  {
+    "round": 5,
+    "workers_ok": 3,
+    "total_samples": 65866,
+    "elapsed_seconds": 8.17,
+    "global_metrics": {
+      "loss": 0.157983,
+      "accuracy": 0.937443,
+      "auc": 0.984102,
+      "precision": 0.935841,
+      "recall": 0.946678
+    }
+  }
+]
