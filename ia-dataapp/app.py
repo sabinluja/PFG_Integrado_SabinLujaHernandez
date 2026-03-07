@@ -724,20 +724,24 @@ def _publish_fl_model_as_ids_resource(global_weights_b64: str, global_metrics: d
     basic_api = HTTPBasicAuth(API_USER, API_PASS)
     ecc_base  = f"https://{ECC_HOSTNAME}:8449"
 
+    ts          = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    ts_readable = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
     resource_id = (
-        f"https://w3id.org/idsa/autogen/textResource/fl_model_"
-        f"coordinator{INSTANCE_ID}_{uuid.uuid4().hex[:8]}"
+        f"https://w3id.org/idsa/autogen/textResource/"
+        f"fl_model_coordinator{INSTANCE_ID}_{ts}"
     )
     artifact_id = (
-        f"http://w3id.org/engrd/connector/artifact/fl_model_final_{INSTANCE_ID}"
+        f"http://w3id.org/engrd/connector/artifact/"
+        f"fl_model_final_coordinator{INSTANCE_ID}_{ts}"
     )
     contract_id = (
-        f"https://w3id.org/idsa/autogen/contractOffer/fl_model_"
-        f"coordinator{INSTANCE_ID}_{uuid.uuid4().hex[:8]}"
+        f"https://w3id.org/idsa/autogen/contractOffer/"
+        f"fl_model_coordinator{INSTANCE_ID}_{ts}"
     )
     repr_id = (
-        f"https://w3id.org/idsa/autogen/representation/fl_model_"
-        f"coordinator{INSTANCE_ID}_{uuid.uuid4().hex[:8]}"
+        f"https://w3id.org/idsa/autogen/representation/"
+        f"fl_model_coordinator{INSTANCE_ID}_{ts}"
     )
 
     try:
@@ -759,17 +763,22 @@ def _publish_fl_model_as_ids_resource(global_weights_b64: str, global_metrics: d
         log.info("[publish] Creando recurso IDS fl_model_final...")
         resource_body = {
             "@id"             : resource_id,
-            "@type"           : "ids:Resource",
-            "ids:title"       : [{"@value": f"FL Global Model — Coordinator {INSTANCE_ID}", "@language": "en"}],
+            "@type"           : "ids:TextResource",
+            "ids:title"       : [{"@value": f"FL Global Model — Coordinator {INSTANCE_ID} — {ts_readable}",
+                                  "@type": "http://www.w3.org/2001/XMLSchema#string"}],
             "ids:description" : [{"@value":
                 f"Modelo federado final tras {n_rounds} rondas. "
                 f"acc={global_metrics.get('accuracy','?')}  "
                 f"auc={global_metrics.get('auc','?')}",
-                "@language": "en"
+                "@type": "http://www.w3.org/2001/XMLSchema#string"
             }],
-            "ids:keyword"     : [{"@value": "federated-learning", "@language": "en"},
-                                 {"@value": "fl-model",           "@language": "en"}],
+            "ids:keyword"     : [{"@value": "federated-learning",
+                                  "@type": "http://www.w3.org/2001/XMLSchema#string"},
+                                 {"@value": "fl-model",
+                                  "@type": "http://www.w3.org/2001/XMLSchema#string"}],
             "ids:version"     : f"round_{n_rounds}",
+            "ids:language"    : [{"@id": "https://w3id.org/idsa/code/EN"}],
+            "ids:contentType" : {"@id": "https://w3id.org/idsa/code/SCHEMA_DEFINITION"},
         }
         resp = requests.post(
             f"{ecc_base}/api/offeredResource/",
@@ -818,12 +827,8 @@ def _publish_fl_model_as_ids_resource(global_weights_b64: str, global_metrics: d
         log.info("[publish] Añadiendo representación con pesos finales...")
         repr_body = {
             "@id"          : repr_id,
-            "@type"        : "ids:Representation",
-            "ids:mediaType": {
-                "@type"                : "ids:IANAMediaType",
-                "@id"                  : f"https://w3id.org/idsa/autogen/mediaType/{uuid.uuid4().hex[:8]}",
-                "ids:filenameExtension": "json",
-            },
+            "@type"        : "ids:TextRepresentation",
+            "ids:language" : {"@id": "https://w3id.org/idsa/code/EN"},
             "ids:instance" : [{
                 "@type"           : "ids:Artifact",
                 "@id"             : artifact_id,
@@ -833,7 +838,7 @@ def _publish_fl_model_as_ids_resource(global_weights_b64: str, global_metrics: d
                     "@value": _now_iso(),
                     "@type" : "http://www.w3.org/2001/XMLSchema#dateTimeStamp",
                 },
-                "ids:checkSum"    : str(hash(global_weights_b64))[:16],
+                "ids:checkSum"    : str(abs(hash(global_weights_b64)))[:16],
             }],
         }
         resp = requests.post(
@@ -1329,6 +1334,26 @@ async def fl_start(request: Request):
     )
 
 
+@app.get("/ids/self-description")
+def ids_self_description():
+    """
+    Devuelve la self-description del ECC local tal como la vería cualquier
+    conector IDS externo — sin pasar por /proxy (evita bucle coordinator→sí mismo).
+
+    Útil para verificar desde Postman que el modelo FL se publicó correctamente
+    como recurso IDS en el catálogo del coordinator.
+    """
+    try:
+        sd = _get_self_description()
+        return JSONResponse(content=sd)
+    except Exception as exc:
+        log.error(f"[/ids/self-description] Error: {exc}")
+        return JSONResponse(
+            status_code=502,
+            content={"error": f"No se pudo obtener self-description del ECC: {exc}"}
+        )
+
+
 @app.get("/health")
 def health():
     return {
@@ -1393,4 +1418,4 @@ def fl_model():
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8500, access_log=False)
+    uvicorn.run(app, host="0.0.0.0", port=8500, access_log=False)   

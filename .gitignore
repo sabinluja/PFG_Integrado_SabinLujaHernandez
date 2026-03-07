@@ -1,0 +1,48 @@
+# =============================================================================
+# .gitignore — Proyecto FL IDS Workers (TFG)
+# =============================================================================
+
+# ── Variables de entorno y secretos ──────────────────────────────────────────
+.env
+_env
+*.env
+.env.*
+
+# ── Certificados y keystores (generados en runtime o sensibles) ──────────────
+certs/dataapp/
+certs/cert.pem
+certs/key.pem
+certs/run.py
+certs/server.p12
+certs/ssl-server.jks
+certs/truststoreEcc.jks
+
+# ── algorithm.py en workers (generado en runtime via IDS) ────────────────────
+ia-dataapp/data/worker1/algorithm.py
+ia-dataapp/data/worker2/algorithm.py
+ia-dataapp/data/worker3/algorithm.py
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+ia-dataapp/log/
+*.log
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# ── IDEs ─────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.sw?
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Postman exports temporales ───────────────────────────────────────────────
+*_backup*.json

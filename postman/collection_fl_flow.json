@@ -707,6 +707,89 @@
           },
           "description": "Health check de cada worker. Cambia {{Coordinator_Port}} en el environment: 5001=worker-1, 5002=worker-2, 5003=worker-3.",
           "response": []
+        },
+        {
+          "name": "13 - Verify: Modelo FL publicado como recurso IDS",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Self-description contiene recurso FL publicado', () => {",
+                  "    const sd = pm.response.json();",
+                  "    pm.expect(sd).to.exist;",
+                  "",
+                  "    const resources = (sd['ids:resourceCatalog'] || [{}])[0]['ids:offeredResource'] || [];",
+                  "    console.log('Total recursos en catálogo:', resources.length);",
+                  "    resources.forEach((r, i) => {",
+                  "        const title = ((r['ids:title'] || [{}])[0]['@value'] || '(sin título)');",
+                  "        console.log('  Recurso', i+1, ':', title, '|', r['@id']);",
+                  "    });",
+                  "",
+                  "    // Buscar el recurso FL publicado al terminar el FL",
+                  "    const flResource = resources.find(r => {",
+                  "        const title = ((r['ids:title'] || [{}])[0]['@value'] || '');",
+                  "        const id    = r['@id'] || '';",
+                  "        return title.includes('FL Global Model') || id.includes('fl_model_coordinator');",
+                  "    });",
+                  "",
+                  "    pm.expect(flResource).to.exist;",
+                  "    console.log('✅ Recurso FL encontrado:', flResource['@id']);",
+                  "    console.log('   Título   :', (flResource['ids:title'] || [{}])[0]['@value']);",
+                  "    console.log('   Versión  :', flResource['ids:version']);",
+                  "",
+                  "    // Verificar contrato restringido a peers (ids:assignee)",
+                  "    const contract  = (flResource['ids:contractOffer'] || [{}])[0];",
+                  "    const perms     = contract['ids:permission'] || [];",
+                  "    pm.expect(perms.length).to.be.above(0, 'El contrato no tiene permisos');",
+                  "    const assignees = perms.flatMap(p => (p['ids:assignee'] || []).map(a => a['@id'] || a));",
+                  "    pm.expect(assignees.length).to.be.above(0, 'Sin assignees — el contrato no está restringido a peers');",
+                  "    console.log('   Contrato :', contract['@id']);",
+                  "    console.log('   Peers autorizados:', assignees.join(', '));",
+                  "",
+                  "    // Verificar representación con artifact (pesos finales)",
+                  "    const repr     = (flResource['ids:representation'] || [{}])[0];",
+                  "    const artifact = (repr['ids:instance'] || [{}])[0];",
+                  "    pm.expect(artifact['@id']).to.exist;",
+                  "    console.log('   Artifact :', artifact['@id']);",
+                  "",
+                  "    // Guardar en environment para pasos posteriores",
+                  "    pm.environment.set('fl_model_resource_id', flResource['@id']);",
+                  "    pm.environment.set('fl_model_artifact_id', artifact['@id']);",
+                  "    pm.environment.set('fl_model_contract_id', contract['@id']);",
+                  "    console.log('✅ IDs guardados en environment');",
+                  "});",
+                  "",
+                  "pm.test('Catálogo tiene al menos 4 recursos (3 originales + 1 FL)', () => {",
+                  "    const sd = pm.response.json();",
+                  "    const resources = (sd['ids:resourceCatalog'] || [{}])[0]['ids:offeredResource'] || [];",
+                  "    pm.expect(resources.length).to.be.at.least(4);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "https://localhost:{{Coordinator_Port}}/ids/self-description",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "{{Coordinator_Port}}",
+              "path": [
+                "ids",
+                "self-description"
+              ]
+            }
+          },
+          "description": "Verifica que el modelo FL se publicó correctamente como recurso IDS en el ECC del coordinator.\n\nLlama a GET /ids/self-description del DataApp del coordinator — un endpoint que consulta internamente la self-description del ECC local (puerto 8449) y la devuelve directamente.\n\nEsto evita el timeout que ocurría cuando /proxy intentaba que el coordinator se preguntara a sí mismo vía IDS, creando un bucle interno.\n\nComprueba:\n- Existe un recurso 'FL Global Model' en el catálogo IDS\n- El contrato tiene ids:assignee (acceso restringido a los peers participantes)\n- Tiene representación con artifact (los pesos finales)\n- El catálogo tiene al menos 4 recursos (3 originales + 1 FL)\n\nGuarda en environment: fl_model_resource_id, fl_model_artifact_id, fl_model_contract_id",
+          "response": []
         }
       ]
     }
