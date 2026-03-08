@@ -1,16 +1,25 @@
-name: Mirroring repository
+name: CI — FL IDS Workers
 
 on: push
 
 jobs:
-  build:
+  verificar:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Clonar repositorio
+        uses: actions/checkout@v4
 
-      - name: Pull enteee/git-sync-mirror
-        run: sudo docker pull enteee/git-sync-mirror
-        
-      - name: Run enteee/git-sync-mirror
-        run: docker run --rm --env SRC_REPO=https://github.com/Engineering-Research-and-Development/true-connector --env DST_REPO=https://github.com/International-Data-Spaces-Association/true-connector --env DST_REPO_TOKEN=${{secrets.IDSA_MIRRORING}} --env ONCE=true enteee/git-sync-mirror
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias de app.py
+        run: pip install fastapi uvicorn requests requests-toolbelt
+
+      - name: Verificar sintaxis de app.py
+        run: python -m py_compile ia-dataapp/app.py && echo "✅ app.py sin errores de sintaxis"
+
+      - name: Verificar que docker-compose.yml es válido
+        run: docker compose config --quiet && echo "✅ docker-compose.yml válido"

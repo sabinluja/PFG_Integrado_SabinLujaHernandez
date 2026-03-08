@@ -118,6 +118,7 @@ log = logging.getLogger(__name__)
 # =============================================================================
 
 is_coordinator       = False
+_published_fl_contract: dict = {}  # contrato FL publicado — guardado en memoria para /ids/contract
 coordinator_ecc_url  = None   # aprendido al recibir fl_global_weights
 coordinator_conn_uri = None
 
@@ -172,8 +173,14 @@ def _security_token() -> dict:
 
 
 def _get_self_description() -> dict:
+    # Usamos /api/selfDescription/ en lugar de / porque el endpoint raíz
+    # solo devuelve recursos que pasan validación completa (representación +
+    # artifact + contrato). /api/selfDescription/ devuelve todo sin validar,
+    # incluyendo recursos creados dinámicamente tras el FL.
     resp = requests.get(
-        f"https://{ECC_HOSTNAME}:8449/", verify=False, timeout=10
+        f"https://{ECC_HOSTNAME}:8449/api/selfDescription/",
+        verify=False, timeout=10,
+        auth=("apiUser", "passwordApiUser")
     )
     resp.raise_for_status()
     return resp.json()
@@ -727,6 +734,8 @@ def _publish_fl_model_as_ids_resource(global_weights_b64: str, global_metrics: d
     ts          = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     ts_readable = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
+    # Recurso y artifact usan timestamp para identificación legible
+    # Contrato y representación usan UUID estándar para compatibilidad con la API del ECC
     resource_id = (
         f"https://w3id.org/idsa/autogen/textResource/"
         f"fl_model_coordinator{INSTANCE_ID}_{ts}"
@@ -736,12 +745,10 @@ def _publish_fl_model_as_ids_resource(global_weights_b64: str, global_metrics: d
         f"fl_model_final_coordinator{INSTANCE_ID}_{ts}"
     )
     contract_id = (
-        f"https://w3id.org/idsa/autogen/contractOffer/"
-        f"fl_model_coordinator{INSTANCE_ID}_{ts}"
+        f"https://w3id.org/idsa/autogen/contractOffer/{uuid.uuid4()}"
     )
     repr_id = (
-        f"https://w3id.org/idsa/autogen/representation/"
-        f"fl_model_coordinator{INSTANCE_ID}_{ts}"
+        f"https://w3id.org/idsa/autogen/representation/{uuid.uuid4()}"
     )
 
     try:
@@ -822,6 +829,10 @@ def _publish_fl_model_as_ids_resource(global_weights_b64: str, global_metrics: d
             log.error(f"[publish] Error creando contrato: {resp.status_code} {resp.text[:200]}")
             return
         log.info(f"[publish] ✅ Contrato creado: {contract_id}")
+
+        # Guardar contrato completo en memoria para que /ids/contract lo devuelva
+        global _published_fl_contract
+        _published_fl_contract = contract_body
 
         # ── 4. Añadir representación con el artifact (pesos finales) ──────────
         log.info("[publish] Añadiendo representación con pesos finales...")
@@ -1354,6 +1365,32 @@ def ids_self_description():
         )
 
 
+@app.get("/ids/contract")
+def ids_contract(contractOffer: str = None, request: Request = None):
+    """
+    Devuelve el contrato completo desde el ECC local incluyendo permisos y assignees.
+    Acepta el ID del contrato via query param o header contractOffer.
+    """
+    try:
+        contract_id = contractOffer
+        if not contract_id and request:
+            contract_id = request.headers.get("contractOffer")
+        if not contract_id:
+            return JSONResponse(status_code=400, content={"error": "contractOffer requerido"})
+
+        if not _published_fl_contract:
+            return JSONResponse(status_code=404, content={"error": "No hay contrato FL publicado en memoria — ¿se completó el FL?"})
+
+        # Devolver el contrato completo guardado en memoria tras la publicación
+        return JSONResponse(content=_published_fl_contract)
+    except Exception as exc:
+        log.error(f"[/ids/contract] Error: {exc}")
+        return JSONResponse(
+            status_code=502,
+            content={"error": f"No se pudo obtener contrato FL: {exc}"}
+        )
+
+
 @app.get("/health")
 def health():
     return {
@@ -1376,7 +1413,7 @@ def status():
         "algorithm_loaded": os.path.exists(ALGO_IDS_PATH),
         "csv_available"   : csv_files,
         "csv_selected"    : csv_sel,
-        "coordinator_ecc" : coordinator_ecc_url,
+        "coordinator_ecc" : f"https://{ECC_HOSTNAME}:8889/data" if is_coordinator else coordinator_ecc_url,
         "peer_eccs"       : PEER_ECC_URLS,
         "fl_status"       : fl_state["status"],
         "fl_round"        : fl_state["current_round"],
@@ -1418,4 +1455,4 @@ def fl_model():
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8500, access_log=False)   
+    uvicorn.run(app, host="0.0.0.0", port=8500, access_log=False)

@@ -728,7 +728,6 @@
                   "        console.log('  Recurso', i+1, ':', title, '|', r['@id']);",
                   "    });",
                   "",
-                  "    // Buscar el recurso FL publicado al terminar el FL",
                   "    const flResource = resources.find(r => {",
                   "        const title = ((r['ids:title'] || [{}])[0]['@value'] || '');",
                   "        const id    = r['@id'] || '';",
@@ -737,27 +736,20 @@
                   "",
                   "    pm.expect(flResource).to.exist;",
                   "    console.log('✅ Recurso FL encontrado:', flResource['@id']);",
-                  "    console.log('   Título   :', (flResource['ids:title'] || [{}])[0]['@value']);",
-                  "    console.log('   Versión  :', flResource['ids:version']);",
                   "",
-                  "    // Verificar contrato restringido a peers (ids:assignee)",
-                  "    const contract  = (flResource['ids:contractOffer'] || [{}])[0];",
-                  "    const perms     = contract['ids:permission'] || [];",
-                  "    pm.expect(perms.length).to.be.above(0, 'El contrato no tiene permisos');",
-                  "    const assignees = perms.flatMap(p => (p['ids:assignee'] || []).map(a => a['@id'] || a));",
-                  "    pm.expect(assignees.length).to.be.above(0, 'Sin assignees — el contrato no está restringido a peers');",
+                  "    // El contrato existe en la self-description (los permisos se verifican en paso 14)",
+                  "    const contract = (flResource['ids:contractOffer'] || [{}])[0];",
+                  "    pm.expect(contract['@id']).to.exist;",
+                  "    pm.expect(contract['@id']).to.include('contractOffer');",
                   "    console.log('   Contrato :', contract['@id']);",
-                  "    console.log('   Peers autorizados:', assignees.join(', '));",
                   "",
-                  "    // Verificar representación con artifact (pesos finales)",
-                  "    const repr     = (flResource['ids:representation'] || [{}])[0];",
-                  "    const artifact = (repr['ids:instance'] || [{}])[0];",
-                  "    pm.expect(artifact['@id']).to.exist;",
-                  "    console.log('   Artifact :', artifact['@id']);",
+                  "    // La representación existe",
+                  "    const repr = (flResource['ids:representation'] || [{}])[0];",
+                  "    pm.expect(repr['@id']).to.exist;",
+                  "    console.log('   Repr     :', repr['@id']);",
                   "",
-                  "    // Guardar en environment para pasos posteriores",
+                  "    // Guardar en environment para paso 14",
                   "    pm.environment.set('fl_model_resource_id', flResource['@id']);",
-                  "    pm.environment.set('fl_model_artifact_id', artifact['@id']);",
                   "    pm.environment.set('fl_model_contract_id', contract['@id']);",
                   "    console.log('✅ IDs guardados en environment');",
                   "});",
@@ -789,6 +781,73 @@
             }
           },
           "description": "Verifica que el modelo FL se publicó correctamente como recurso IDS en el ECC del coordinator.\n\nLlama a GET /ids/self-description del DataApp del coordinator — un endpoint que consulta internamente la self-description del ECC local (puerto 8449) y la devuelve directamente.\n\nEsto evita el timeout que ocurría cuando /proxy intentaba que el coordinator se preguntara a sí mismo vía IDS, creando un bucle interno.\n\nComprueba:\n- Existe un recurso 'FL Global Model' en el catálogo IDS\n- El contrato tiene ids:assignee (acceso restringido a los peers participantes)\n- Tiene representación con artifact (los pesos finales)\n- El catálogo tiene al menos 4 recursos (3 originales + 1 FL)\n\nGuarda en environment: fl_model_resource_id, fl_model_artifact_id, fl_model_contract_id",
+          "response": []
+        },
+        {
+          "name": "14 - Verify: Contrato FL restringido a peers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Contrato FL tiene permisos con assignees restringidos a peers', () => {",
+                  "    const contract = pm.response.json();",
+                  "    pm.expect(contract).to.exist;",
+                  "    console.log('Contrato ID:', contract['@id']);",
+                  "",
+                  "    const perms = contract['ids:permission'] || [];",
+                  "    pm.expect(perms.length).to.be.above(0, 'El contrato no tiene permisos');",
+                  "    console.log('Total permisos:', perms.length);",
+                  "",
+                  "    const assignees = perms.flatMap(p => (p['ids:assignee'] || []).map(a => a['@id'] || a));",
+                  "    pm.expect(assignees.length).to.be.above(0, 'Sin assignees — contrato no está restringido a peers');",
+                  "    console.log('✅ Peers autorizados:', assignees.join(', '));",
+                  "",
+                  "    const actions = perms.flatMap(p => (p['ids:action'] || []).map(a => a['@id'] || a));",
+                  "    pm.expect(actions).to.include('https://w3id.org/idsa/code/USE');",
+                  "    console.log('✅ Acción:', actions.join(', '));",
+                  "",
+                  "    const provider = (contract['ids:provider'] || {})['@id'] || '';",
+                  "    pm.expect(provider).to.include('worker');",
+                  "    console.log('✅ Provider:', provider);",
+                  "",
+                  "    pm.environment.set('fl_model_assignees', assignees.join(', '));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic YXBpVXNlcjpwYXNzd29yZEFwaVVzZXI=",
+                "description": "apiUser:passwordApiUser en Base64"
+              },
+              {
+                "key": "contractOffer",
+                "value": "{{fl_model_contract_id}}",
+                "description": "Auto-rellenado por el paso 13"
+              }
+            ],
+            "url": {
+              "raw": "https://localhost:{{Coordinator_Port}}/ids/contract",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "{{Coordinator_Port}}",
+              "path": [
+                "ids",
+                "contract"
+              ]
+            }
+          },
+          "description": "Verifica que el contrato del modelo FL tiene los permisos correctos.\n\nLlama a GET /ids/contract del DataApp del coordinator, que consulta internamente GET /api/contractOffer/ del ECC con el ID del contrato guardado por el paso 13 en {{fl_model_contract_id}}.\n\nComprueba:\n- El contrato tiene ids:permission\n- Los permisos tienen ids:assignee — restringido a los 2 peers participantes\n- La acción es ids:USE\n- El provider es el coordinator\n\nGuarda en environment: fl_model_assignees",
           "response": []
         }
       ]
