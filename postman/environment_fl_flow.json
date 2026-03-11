@@ -80,6 +80,11 @@
       "enabled": true
     },
     {
+      "key": "Worker4_Proxy_Endpoint",
+      "value": "https://localhost:5004/proxy",
+      "enabled": true
+    },
+    {
       "key": "algorithm_b64",
       "value": "",
       "description": "⚠️ RELLENAR MANUALMENTE antes del paso 5. Base64 de algorithm.py. PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\algorithm.py'))",

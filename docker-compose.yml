@@ -82,6 +82,8 @@ services:
       - ISSUER_CONNECTOR_URI=${WORKER1_ISSUER_CONNECTOR_URI}
       - PEER_ECC_URLS=https://ecc-worker2:8889/data,https://ecc-worker3:8889/data
       - PEER_CONNECTOR_URIS=${WORKER2_ISSUER_CONNECTOR_URI},${WORKER3_ISSUER_CONNECTOR_URI}
+      - FL_ROUNDS=${FL_ROUNDS}
+      - ROUND_TIMEOUT=${ROUND_TIMEOUT}
       - TZ=Europe/Rome
     volumes:
       - ./ia-dataapp/data/worker1:/home/nobody/data/
@@ -111,7 +113,7 @@ services:
     ports:
       - "${WORKER2_PORT}:8449"
       - "8893:8889"
-      - "8088:8086"
+      - "8085:8086"
     environment:
       - "JDK_JAVA_OPTIONS=-Xmx1024m"
       - "SPRING_PROFILES_ACTIVE=docker"
@@ -169,6 +171,8 @@ services:
       - ISSUER_CONNECTOR_URI=${WORKER2_ISSUER_CONNECTOR_URI}
       - PEER_ECC_URLS=https://ecc-worker1:8889/data,https://ecc-worker3:8889/data
       - PEER_CONNECTOR_URIS=${WORKER1_ISSUER_CONNECTOR_URI},${WORKER3_ISSUER_CONNECTOR_URI}
+      - FL_ROUNDS=${FL_ROUNDS}
+      - ROUND_TIMEOUT=${ROUND_TIMEOUT}
       - TZ=Europe/Rome
     volumes:
       - ./ia-dataapp/data/worker2:/home/nobody/data/
@@ -256,6 +260,8 @@ services:
       - ISSUER_CONNECTOR_URI=${WORKER3_ISSUER_CONNECTOR_URI}
       - PEER_ECC_URLS=https://ecc-worker1:8889/data,https://ecc-worker2:8889/data
       - PEER_CONNECTOR_URIS=${WORKER1_ISSUER_CONNECTOR_URI},${WORKER2_ISSUER_CONNECTOR_URI}
+      - FL_ROUNDS=${FL_ROUNDS}
+      - ROUND_TIMEOUT=${ROUND_TIMEOUT}
       - TZ=Europe/Rome
     volumes:
       - ./ia-dataapp/data/worker3:/home/nobody/data/
@@ -265,6 +271,95 @@ services:
     depends_on:
       - ecc-worker3
 
+
+  # ===========================================================================
+  # WORKER 4 — Sin acceso al modelo FL (solo intenta acceder, es rechazado)
+  # ===========================================================================
+
+  ecc-worker4:
+    image: rdlabengpa/ids_execution_core_container:v1.14.8
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1024M
+    logging:
+      options:
+        max-size: "200M"
+    networks:
+      - idsa
+    container_name: ecc-worker4
+    ports:
+      - "${WORKER4_PORT}:8449"
+      - "8895:8889"
+      - "8087:8086"
+    environment:
+      - "JDK_JAVA_OPTIONS=-Xmx1024m"
+      - "SPRING_PROFILES_ACTIVE=docker"
+      - DATA_APP_ENDPOINT=${WORKER4_DATA_APP_ENDPOINT}
+      - MULTIPART_EDGE=${WORKER4_MULTIPART_EDGE}
+      - MULTIPART_ECC=${MULTIPART_ECC}
+      - CONNECTOR_ID=${WORKER4_ISSUER_CONNECTOR_URI}
+      - IDSCP2=${IDSCP2}
+      - WS_EDGE=${WORKER4_WS_EDGE}
+      - WS_ECC=${WS_ECC}
+      - BROKER_URL=${BROKER_URL}
+      - CACHE_TOKEN=${CACHE_TOKEN}
+      - FETCH_TOKEN_ON_STARTUP=${FETCH_TOKEN_ON_STARTUP}
+      - KEYSTORE_NAME=${KEYSTORE_NAME}
+      - KEY_PASSWORD=${KEY_PASSWORD}
+      - KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}
+      - ALIAS=${ALIAS}
+      - DAPS_KEYSTORE_NAME=${WORKER4_DAPS_KEYSTORE_NAME}
+      - DAPS_KEYSTORE_PASSWORD=${WORKER4_DAPS_KEYSTORE_PASSWORD}
+      - DAPS_KEYSTORE_ALIAS=${WORKER4_DAPS_KEYSTORE_ALIAS}
+      - TRUSTORE_NAME=${TRUSTORE_NAME}
+      - TRUSTORE_PASSWORD=${TRUSTORE_PASSWORD}
+      - FIREWALL=${WORKER4_ECC_FIREWALL}
+      - TZ=Europe/Rome
+      - AES256-SECRET-KEY=${AES_SECRET_KEY}
+      - DATA_APP_HEALTH_ENDPOINT=http://be-dataapp-worker4:8500/health
+    volumes:
+      - ./worker4/ecc:/config
+      - ./certs:/cert
+      - ecc_worker4_data:/home/nobody/data/
+    extra_hosts:
+      - "ecc-worker4:172.17.0.1"
+
+  be-dataapp-worker4:
+    build:
+      context: ./ia-dataapp
+      dockerfile: Dockerfile
+    image: ia-dataapp:latest
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1024M
+    logging:
+      options:
+        max-size: "100M"
+    networks:
+      - idsa
+    container_name: be-dataapp-worker4
+    ports:
+      - "5004:8500"
+    environment:
+      - INSTANCE_ID=4
+      - ECC_HOSTNAME=ecc-worker4
+      - ISSUER_CONNECTOR_URI=${WORKER4_ISSUER_CONNECTOR_URI}
+      - PEER_ECC_URLS=
+      - PEER_CONNECTOR_URIS=
+      - FL_ROUNDS=${FL_ROUNDS}
+      - ROUND_TIMEOUT=${ROUND_TIMEOUT}
+      - TZ=Europe/Rome
+    volumes:
+      - ./ia-dataapp/data/worker4:/home/nobody/data/
+      - ./ia-dataapp/log:/home/nobody/log
+      - ./certs:/cert
+      - ./certs/dataapp/worker4:/cert/dataapp
+    depends_on:
+      - ecc-worker4
 networks:
   idsa: {}   # red única — todos los contenedores se ven entre sí
 
@@ -272,3 +367,4 @@ volumes:
   ecc_worker1_data: {}
   ecc_worker2_data: {}
   ecc_worker3_data: {}
+  ecc_worker4_data: {}

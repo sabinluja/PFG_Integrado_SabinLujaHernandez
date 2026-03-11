@@ -728,22 +728,30 @@ def _publish_fl_model_as_ids_resource(global_weights_b64: str, global_metrics: d
             log.error(f"[publish] Error creando recurso: {resp.status_code}")
             return
 
-        log.info("[publish] Añadiendo contrato restringido a peers...")
-        permissions = []
-        for peer_uri in PEER_CONNECTOR_URIS:
-            permissions.append({
-                "@type"       : "ids:Permission",
-                "@id"         : f"https://w3id.org/idsa/autogen/permission/{uuid.uuid4()}",
-                "ids:action"  : [{"@id": "https://w3id.org/idsa/code/USE"}],
-                "ids:assignee": [{"@id": peer_uri}],
-                "ids:assigner": [{"@id": CONNECTOR_URI}],
-                "ids:target"  : {"@id": artifact_id},
-            })
+        log.info("[publish] Añadiendo contrato restringido a peers (connector-restricted-policy)...")
+        allowed_uris = [{"@value": u, "@type": "http://www.w3.org/2001/XMLSchema#anyURI"}
+                        for u in PEER_CONNECTOR_URIS]
         contract_body = {
             "@id"           : contract_id,
             "@type"         : "ids:ContractOffer",
             "ids:provider"  : {"@id": CONNECTOR_URI},
-            "ids:permission": permissions,
+            "ids:permission": [{
+                "@type"      : "ids:Permission",
+                "@id"        : f"https://w3id.org/idsa/autogen/permission/{uuid.uuid4()}",
+                "ids:action" : [{"@id": "https://w3id.org/idsa/code/USE"}],
+                "ids:title"  : [{"@value": "FL Participants Only",
+                                 "@type": "http://www.w3.org/2001/XMLSchema#string"}],
+                "ids:description": [{"@value": "connector-restricted-policy",
+                                     "@type": "http://www.w3.org/2001/XMLSchema#string"}],
+                "ids:target" : {"@id": artifact_id},
+                "ids:constraint": [{
+                    "@type"             : "ids:Constraint",
+                    "@id"               : f"https://w3id.org/idsa/autogen/constraint/{uuid.uuid4()}",
+                    "ids:leftOperand"   : {"@id": "https://w3id.org/idsa/code/SYSTEM"},
+                    "ids:operator"      : {"@id": "https://w3id.org/idsa/code/IN"},
+                    "ids:rightOperand"  : allowed_uris,
+                }],
+            }],
             "ids:obligation": [], "ids:prohibition": [],
         }
         resp = requests.post(
@@ -1005,6 +1013,29 @@ async def ids_data(request: Request):
     elif tipo == "ids:ContractRequestMessage":
         payload_dict      = json.loads(payload_val) if payload_val else {}
         contract_offer_id = payload_dict.get("@id", "")
+
+        # ── Comprobación de acceso: solo peers autorizados pueden negociar ──
+        consumer_uri = mensaje.get("ids:issuerConnector", {}).get("@id", "")
+        if PEER_CONNECTOR_URIS and consumer_uri not in PEER_CONNECTOR_URIS:
+            log.warning(
+                f"[ContractRequest] ACCESO DENEGADO — connector no autorizado: {consumer_uri!r}\n"
+                f"  Peers autorizados: {PEER_CONNECTOR_URIS}"
+            )
+            # ids:RejectionMessage es el tipo base que el ECC de TRUE Connector
+            # reenvía correctamente. ids:ContractRejectionMessage causa un 500.
+            rejection_header = _resp(
+                "ids:RejectionMessage", "rejectionMessage",
+                {"ids:rejectionReason": {"@id": "https://w3id.org/idsa/code/NOT_AUTHORIZED"}}
+            )
+            return _multipart_response(rejection_header, json.dumps({
+                "status"  : "rejected",
+                "reason"  : "unauthorized_consumer",
+                "consumer": consumer_uri,
+                "message" : (
+                    f"Connector {consumer_uri!r} is not authorised to access "
+                    "this federated learning resource."
+                )
+            }))
 
         if not contract_offer_id:
             try:
