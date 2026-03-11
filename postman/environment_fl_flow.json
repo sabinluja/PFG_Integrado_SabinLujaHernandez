@@ -85,6 +85,13 @@
       "description": "⚠️ RELLENAR MANUALMENTE antes del paso 5. Base64 de algorithm.py. PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\algorithm.py'))",
       "type": "default",
       "enabled": true
+    },
+    {
+      "key": "config_b64",
+      "value": "",
+      "description": "⚠️ RELLENAR MANUALMENTE antes del paso 5. Base64 de fl_config.json. PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\fl_config.json'))",
+      "type": "default",
+      "enabled": true
     }
   ],
   "_postman_variable_scope": "environment",

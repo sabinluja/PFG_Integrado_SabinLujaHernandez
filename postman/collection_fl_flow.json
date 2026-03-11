@@ -353,7 +353,7 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"algorithm.py recibido y FL arrancado\", () => {",
+                  "pm.test(\"algorithm.py + fl_config.json recibidos\", () => {",
                   "    const body = pm.response.text();",
                   "    pm.expect(body).to.satisfy(b =>",
                   "        b.includes(\"algorithm_received\") || b.includes(\"ArtifactResponse\")",
@@ -362,7 +362,7 @@
                   "try {",
                   "    const json = pm.response.json();",
                   "    if (json.status === \"algorithm_received\") {",
-                  "        console.log(\"✅ Coordinator:\", json.coordinator, \"— FL rounds:\", json.fl_rounds);",
+                  "        console.log(\"✅ Coordinator:\", json.coordinator, \"— FL config:\", JSON.stringify(json.fl_config));",
                   "    }",
                   "} catch(e) {}"
                 ],
@@ -395,7 +395,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ArtifactRequestMessage\",\n    \"requestedArtifact\": \"{{contract_artifact}}\",\n    \"transferContract\": \"{{transfer_contract}}\",\n    \"payload\": {\n        \"type\": \"fl_algorithm\",\n        \"filename\": \"algorithm.py\",\n        \"content\": \"{{algorithm_b64}}\"\n    }\n}",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ArtifactRequestMessage\",\n    \"requestedArtifact\": \"{{contract_artifact}}\",\n    \"transferContract\": \"{{transfer_contract}}\",\n    \"payload\": {\n        \"type\": \"fl_algorithm\",\n        \"filename\": \"algorithm.py\",\n        \"content\": \"{{algorithm_b64}}\",\n        \"config\": \"{{config_b64}}\"\n    }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -408,7 +408,7 @@
                 "{{Proxy_Endpoint}}"
               ]
             },
-            "description": "PASO CRÍTICO: envía algorithm.py (en base64) al worker destino. El worker se convierte en coordinator, distribuye el algoritmo a los demás workers vía IDS, y arranca el entrenamiento FL automáticamente.\n\n⚠️ ANTES de ejecutar: rellena la variable algorithm_b64 en el environment con:\n[Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\algorithm.py'))"
+            "description": "PASO CRÍTICO: envía algorithm.py + fl_config.json (ambos en base64) al worker destino.\nEl worker se convierte en coordinator, guarda la configuración, la distribuye a los peers y arranca el FL.\n\n⚠️ ANTES de ejecutar:\n1. Rellena algorithm_b64:\n   PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\algorithm.py'))\n\n2. Rellena config_b64:\n   PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\fl_config.json'))\n\nEstructura de fl_config.json:\n{\n  \"rounds\": 5,\n  \"round_timeout\": 180,\n  \"min_workers\": 2,\n  \"epochs\": 3,\n  \"batch_size\": 32,\n  \"learning_rate\": 0.001,\n  \"test_split\": 0.2\n}"
           },
           "response": []
         },
@@ -479,7 +479,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"rounds\": 5\n}",
+              "raw": "{}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -497,7 +497,8 @@
                 "fl",
                 "start"
               ]
-            }
+            },
+            "description": "Arranca el ciclo FL completo en el coordinator.\nLos parámetros (rounds, round_timeout, etc.) se leen automáticamente de fl_config.json\nrecibido en el paso 5. No es necesario pasar ningún parámetro en el body."
           },
           "description": "Arranca el ciclo FL. El coordinator distribuye algorithm.py a los peers vía IDS y lanza FedAvg.\n\nCambia {{Coordinator_Port}} en el environment para apuntar al worker correcto.",
           "response": []

@@ -82,8 +82,6 @@ services:
       - ISSUER_CONNECTOR_URI=${WORKER1_ISSUER_CONNECTOR_URI}
       - PEER_ECC_URLS=https://ecc-worker2:8889/data,https://ecc-worker3:8889/data
       - PEER_CONNECTOR_URIS=${WORKER2_ISSUER_CONNECTOR_URI},${WORKER3_ISSUER_CONNECTOR_URI}
-      - FL_ROUNDS=${FL_ROUNDS}
-      - ROUND_TIMEOUT=${ROUND_TIMEOUT}
       - TZ=Europe/Rome
     volumes:
       - ./ia-dataapp/data/worker1:/home/nobody/data/
@@ -171,8 +169,6 @@ services:
       - ISSUER_CONNECTOR_URI=${WORKER2_ISSUER_CONNECTOR_URI}
       - PEER_ECC_URLS=https://ecc-worker1:8889/data,https://ecc-worker3:8889/data
       - PEER_CONNECTOR_URIS=${WORKER1_ISSUER_CONNECTOR_URI},${WORKER3_ISSUER_CONNECTOR_URI}
-      - FL_ROUNDS=${FL_ROUNDS}
-      - ROUND_TIMEOUT=${ROUND_TIMEOUT}
       - TZ=Europe/Rome
     volumes:
       - ./ia-dataapp/data/worker2:/home/nobody/data/
@@ -260,8 +256,6 @@ services:
       - ISSUER_CONNECTOR_URI=${WORKER3_ISSUER_CONNECTOR_URI}
       - PEER_ECC_URLS=https://ecc-worker1:8889/data,https://ecc-worker2:8889/data
       - PEER_CONNECTOR_URIS=${WORKER1_ISSUER_CONNECTOR_URI},${WORKER2_ISSUER_CONNECTOR_URI}
-      - FL_ROUNDS=${FL_ROUNDS}
-      - ROUND_TIMEOUT=${ROUND_TIMEOUT}
       - TZ=Europe/Rome
     volumes:
       - ./ia-dataapp/data/worker3:/home/nobody/data/

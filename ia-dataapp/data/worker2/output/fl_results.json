@@ -3,65 +3,65 @@
     "round": 1,
     "workers_ok": 3,
     "total_samples": 65866,
-    "elapsed_seconds": 7.99,
+    "elapsed_seconds": 7.97,
     "global_metrics": {
-      "loss": 0.226266,
-      "accuracy": 0.901975,
-      "auc": 0.969091,
-      "precision": 0.902713,
-      "recall": 0.911348
+      "loss": 0.239508,
+      "accuracy": 0.892318,
+      "auc": 0.96594,
+      "precision": 0.874448,
+      "recall": 0.932325
     }
   },
   {
     "round": 2,
     "workers_ok": 3,
     "total_samples": 65866,
-    "elapsed_seconds": 5.94,
+    "elapsed_seconds": 6.24,
     "global_metrics": {
-      "loss": 0.201218,
-      "accuracy": 0.92062,
-      "auc": 0.976164,
-      "precision": 0.924824,
-      "recall": 0.926778
+      "loss": 0.20495,
+      "accuracy": 0.913028,
+      "auc": 0.974628,
+      "precision": 0.905149,
+      "recall": 0.934394
     }
   },
   {
     "round": 3,
     "workers_ok": 3,
     "total_samples": 65866,
-    "elapsed_seconds": 5.9,
+    "elapsed_seconds": 6.82,
     "global_metrics": {
-      "loss": 0.173794,
-      "accuracy": 0.92639,
-      "auc": 0.982764,
-      "precision": 0.904767,
-      "recall": 0.961661
+      "loss": 0.177756,
+      "accuracy": 0.929002,
+      "auc": 0.979729,
+      "precision": 0.926546,
+      "recall": 0.936992
     }
   },
   {
     "round": 4,
     "workers_ok": 3,
     "total_samples": 65866,
-    "elapsed_seconds": 5.74,
+    "elapsed_seconds": 5.93,
     "global_metrics": {
-      "loss": 0.150221,
-      "accuracy": 0.940298,
-      "auc": 0.985691,
-      "precision": 0.931845,
-      "recall": 0.95896
+      "loss": 0.156059,
+      "accuracy": 0.938962,
+      "auc": 0.984725,
+      "precision": 0.929571,
+      "recall": 0.957538
     }
   },
   {
     "round": 5,
     "workers_ok": 3,
     "total_samples": 65866,
-    "elapsed_seconds": 8.52,
+    "elapsed_seconds": 7.05,
     "global_metrics": {
-      "loss": 0.142187,
-      "accuracy": 0.943213,
-      "auc": 0.987073,
-      "precision": 0.944273,
-      "recall": 0.947973
+      "loss": 0.145213,
+      "accuracy": 0.94048,
+      "auc": 0.98707,
+      "precision": 0.931493,
+      "recall": 0.959337
     }
   }
 ]

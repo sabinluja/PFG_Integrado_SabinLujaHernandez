@@ -17,10 +17,14 @@ certs/server.p12
 certs/ssl-server.jks
 certs/truststoreEcc.jks
 
-# ── algorithm.py en workers (generado en runtime via IDS) ────────────────────
+# ── algorithm.py - fl_config.json en workers (generado en runtime via IDS) ────────────────────
 ia-dataapp/data/worker1/algorithm.py
 ia-dataapp/data/worker2/algorithm.py
 ia-dataapp/data/worker3/algorithm.py
+
+ia-dataapp/data/worker1/fl_config.json
+ia-dataapp/data/worker2/fl_config.json
+ia-dataapp/data/worker3/fl_config.json
 
 # ── Logs ─────────────────────────────────────────────────────────────────────
 ia-dataapp/log/
