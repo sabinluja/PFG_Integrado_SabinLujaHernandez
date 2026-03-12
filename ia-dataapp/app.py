@@ -1188,7 +1188,7 @@ async def ids_data(request: Request):
             return _multipart_response(
                 resp_h,
                 json.dumps({
-                    "status"      : "algorithm_received",
+                    "status"      : "everything_received",
                     "coordinator" : INSTANCE_ID,
                     "fl_config"   : {
                         "rounds"       : cfg["rounds"],
@@ -1324,7 +1324,7 @@ def status():
         "role"            : "coordinator" if is_coordinator else "worker",
         "algorithm_loaded": os.path.exists(ALGO_IDS_PATH),
         "config_loaded"   : os.path.exists(CONFIG_PATH),
-        "fl_config"       : cfg,
+        "fl_config"       : cfg if os.path.exists(CONFIG_PATH) else None,
         "csv_available"   : csv_files,
         "csv_selected"    : csv_sel,
         "coordinator_ecc" : f"https://{ECC_HOSTNAME}:8889/data" if is_coordinator else coordinator_ecc_url,
