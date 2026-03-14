@@ -1,0 +1,95 @@
+- client_id: EB:D2:46:C7:7A:B8:DC:48:9D:AB:1D:31:2A:08:41:48:D7:5F:12:55:keyid:C4:76:D0:AA:CD:93:79:35:0F:EB:A7:64:60:90:A4:6B:B4:38:4D:33
+  client_name: broker
+  grant_types: client_credentials
+  token_endpoint_auth_method: private_key_jwt
+  scope: idsc:IDS_CONNECTOR_ATTRIBUTES_ALL
+  attributes:
+  - key: idsc
+    value: IDS_CONNECTOR_ATTRIBUTES_ALL
+  - key: securityProfile
+    value: idsc:BASE_SECURITY_PROFILE
+  - key: referringConnector
+    value: http://broker.demo
+  - key: "@type"
+    value: ids:DatPayload
+  - key: "@context"
+    value: https://w3id.org/idsa/contexts/context.jsonld
+  - key: transportCertsSha256
+    value: edd4bf74e9850f8a55b82f410db228e1a46d884ea533d721e18405e2769edcb9
+  import_certfile: keys/broker.cert
+- client_id: DB:56:8A:EF:4A:6A:8B:47:7C:58:94:91:4C:DB:5D:E5:90:48:7F:40:keyid:
+  client_name: worker1
+  grant_types: client_credentials
+  token_endpoint_auth_method: private_key_jwt
+  scope: idsc:IDS_CONNECTOR_ATTRIBUTES_ALL
+  attributes:
+  - key: idsc
+    value: IDS_CONNECTOR_ATTRIBUTES_ALL
+  - key: securityProfile
+    value: idsc:BASE_SECURITY_PROFILE
+  - key: referringConnector
+    value: http://worker1.demo
+  - key: "@type"
+    value: ids:DatPayload
+  - key: "@context"
+    value: https://w3id.org/idsa/contexts/context.jsonld
+  - key: transportCertsSha256
+    value: 38fd6eec60fd2d2e2a635d332c8bbd16d716f1e2db5810adfd15b2ddbb1ff6bb
+  import_certfile: keys/worker1.cert
+- client_id: 84:77:55:00:51:9C:B7:F8:61:6C:C1:8D:00:A2:14:DA:57:F0:E7:82:keyid:
+  client_name: worker2
+  grant_types: client_credentials
+  token_endpoint_auth_method: private_key_jwt
+  scope: idsc:IDS_CONNECTOR_ATTRIBUTES_ALL
+  attributes:
+  - key: idsc
+    value: IDS_CONNECTOR_ATTRIBUTES_ALL
+  - key: securityProfile
+    value: idsc:BASE_SECURITY_PROFILE
+  - key: referringConnector
+    value: http://worker2.demo
+  - key: "@type"
+    value: ids:DatPayload
+  - key: "@context"
+    value: https://w3id.org/idsa/contexts/context.jsonld
+  - key: transportCertsSha256
+    value: 33c866d2e9e9a78e83db201cc9e2bc1955ab84ecd246ea2802303d9ad3771dc3
+  import_certfile: keys/worker2.cert
+- client_id: 89:A0:86:CB:48:01:F0:44:76:2D:C7:59:9B:6E:65:BE:8C:CB:C6:5D:keyid:
+  client_name: worker3
+  grant_types: client_credentials
+  token_endpoint_auth_method: private_key_jwt
+  scope: idsc:IDS_CONNECTOR_ATTRIBUTES_ALL
+  attributes:
+  - key: idsc
+    value: IDS_CONNECTOR_ATTRIBUTES_ALL
+  - key: securityProfile
+    value: idsc:BASE_SECURITY_PROFILE
+  - key: referringConnector
+    value: http://worker3.demo
+  - key: "@type"
+    value: ids:DatPayload
+  - key: "@context"
+    value: https://w3id.org/idsa/contexts/context.jsonld
+  - key: transportCertsSha256
+    value: ba3ed2dc96a1896405d8f8cc5a207b3f1fbc4306eefb6c82cc0d31f952c7aeb4
+  import_certfile: keys/worker3.cert
+- client_id: D9:BD:DE:4A:6C:E0:BE:72:87:3F:48:A2:82:31:47:AF:42:C2:3B:BE:keyid:
+  client_name: worker4
+  grant_types: client_credentials
+  token_endpoint_auth_method: private_key_jwt
+  scope: idsc:IDS_CONNECTOR_ATTRIBUTES_ALL
+  attributes:
+  - key: idsc
+    value: IDS_CONNECTOR_ATTRIBUTES_ALL
+  - key: securityProfile
+    value: idsc:BASE_SECURITY_PROFILE
+  - key: referringConnector
+    value: http://worker4.demo
+  - key: "@type"
+    value: ids:DatPayload
+  - key: "@context"
+    value: https://w3id.org/idsa/contexts/context.jsonld
+  - key: transportCertsSha256
+    value: ab0347bd12bc7d877b5373623e96f316c3c5daf6b870a780eca2e5713927196d
+  import_certfile: keys/worker4.cert

@@ -1,0 +1,51 @@
+# omejdn/config/omejdn.yml
+# ===========================================================================
+# Configuración Omejdn DAPS
+# Copiada del IDS Testbed (Fraunhofer AISEC) y adaptada para red Docker local.
+#
+# Cambios respecto al testbed original:
+#   issuer:    https://omejdn/auth  →  https://omejdn/auth   (igual, nginx lo resuelve)
+#   front_url: https://omejdn/auth  →  https://omejdn/auth   (igual)
+#   bind_to:   0.0.0.0:4567        →  0.0.0.0:4567          (igual)
+#   environment: production        →  production             (igual)
+#
+# Los ECCs apuntan a Omejdn a través de nginx (puerto 443 del contenedor omejdn-nginx):
+#   application.dapsUrl     = https://omejdn/auth/token
+#   application.dapsJWKSUrl = https://omejdn/auth/jwks.json
+#
+# NOTA: El fichero original del testbed tiene 3 documentos YAML separados
+# por "---" (scope_description, plugins, configuración principal).
+# Aquí solo va la configuración principal. Los otros van en sus propios ficheros.
+# ===========================================================================
+
+plugins:
+  user_db:
+    yaml:
+      location: config/users.yml
+  claim_mapper:
+    attribute:
+      skip_access_token: false
+      skip_id_token: true
+  api:
+    admin_v1:
+    user_selfservice_v1:
+      allow_deletion: false
+      allow_password_change: true
+      editable_attributes: []
+
+user_backend_default: yaml
+environment: production
+issuer: https://omejdn/auth
+front_url: https://omejdn/auth
+bind_to: 0.0.0.0:4567
+openid: true
+default_audience: idsc:IDS_CONNECTORS_ALL
+accept_audience: idsc:IDS_CONNECTORS_ALL
+
+access_token:
+  expiration: 3600
+  algorithm: RS256
+
+id_token:
+  expiration: 3600
+  algorithm: RS256

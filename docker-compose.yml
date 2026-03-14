@@ -1,12 +1,113 @@
 services:
 
   # ===========================================================================
-  # WORKER 1 — ecc-worker1 + be-dataapp-worker1
+  # DAPS — Omejdn + nginx (imágenes exactas del IDS Testbed)
   #
-  # Cualquiera de los 3 workers puede ser coordinator.
-  # TÚ decides desde Postman a cuál envías el algorithm.py.
-  # Postman llama a:  POST http://localhost:500N/proxy
+  # Arquitectura idéntica al testbed:
+  #   omejdn-server  → idstestbed/omejdn-server:1.6.0  (solo interno)
+  #   omejdn-nginx   → nginx:1.25.3 con TLS (hostname "omejdn" en red Docker)
+  #
+  # Los ECC apuntan a Omejdn a través de nginx:
+  #   application.dapsUrl     = https://omejdn/auth/token
+  #   application.dapsJWKSUrl = https://omejdn/auth/jwks.json
+  #
+  # Los 4 workers obtienen token DAT válido.
+  # La denegación del Worker 4 ocurre en app.py (capa FL), no aquí.
   # ===========================================================================
+
+  omejdn-server:
+    image: idstestbed/omejdn-server:1.6.0
+    container_name: omejdn-server
+    networks:
+      - idsa
+    environment:
+      - OMEJDN_ISSUER=https://omejdn/auth
+      - OMEJDN_FRONT_URL=https://omejdn/auth
+      - OMEJDN_OPENID=true
+      - OMEJDN_ENVIRONMENT=production
+      - OMEJDN_ACCEPT_AUDIENCE=idsc:IDS_CONNECTORS_ALL
+      - OMEJDN_DEFAULT_AUDIENCE=idsc:IDS_CONNECTORS_ALL
+      - OMEJDN_ADMIN=admin:admin
+    volumes:
+      - ./omejdn/config:/opt/config
+      - ./omejdn/keys:/opt/keys
+
+  omejdn-nginx:
+    image: nginx:1.25.3
+    container_name: omejdn
+    networks:
+      - idsa
+    ports:
+      - "4567:443"
+    environment:
+      - OMEJDN_DOMAIN=omejdn
+      - OMEJDN_PATH=/auth
+      - UI_PATH=auth/ui
+    volumes:
+      - ./omejdn/nginx.conf:/etc/nginx/templates/default.conf.template
+      - ./omejdn/keys/TLS/daps.cert:/etc/nginx/daps.cert
+      - ./omejdn/keys/TLS/daps.key:/etc/nginx/daps.key
+    depends_on:
+      - omejdn-server
+
+  # ===========================================================================
+  # BROKER — IDS Metadata Broker (imágenes exactas del IDS Testbed)
+  #
+  # Arquitectura idéntica al testbed: reverseproxy + core + fuseki
+  #   broker-reverseproxy → idstestbed/mdb-reverseproxy:5.0.3
+  #   broker-core         → idstestbed/metadatabroker-core:5.0.3
+  #   broker-fuseki       → idstestbed/mdb-fuseki:5.0.3
+  #
+  # Puerto host 444 → 443  (HTTPS igual que testbed)
+  # Puerto host 81  → 80   (HTTP)
+  #
+  # Todos los ECC (workers 1-4) se auto-registran al arrancar.
+  # Worker 4 aparece en el catálogo — es un conector IDS legítimo.
+  # La denegación FL ocurre en app.py, no aquí.
+  # ===========================================================================
+
+  broker-reverseproxy:
+    image: idstestbed/mdb-reverseproxy:5.0.3
+    container_name: broker-reverseproxy
+    networks:
+      - idsa
+    ports:
+      - "444:443"
+      - "81:80"
+    volumes:
+      - ./broker/server.crt:/etc/cert/server.crt
+      - ./broker/server.key:/etc/cert/server.key
+    depends_on:
+      - broker-core
+
+  broker-core:
+    image: idstestbed/metadatabroker-core:5.0.3
+    container_name: broker-core
+    networks:
+      - idsa
+    expose:
+      - "8080"
+    environment:
+      - SPARQL_ENDPOINT=http://broker-fuseki:3030/connectorData
+      - DAPS_VALIDATE_INCOMING=true
+      - DAPS_URL=https://omejdn/auth/token
+      - COMPONENT_URI=https://broker-reverseproxy/
+      - COMPONENT_CATALOGURI=https://broker-reverseproxy/connectors/
+    volumes:
+      - ./broker/isstbroker-keystore.jks:/etc/cert/isstbroker-keystore.jks
+    depends_on:
+      - broker-fuseki
+      - omejdn-nginx
+
+  broker-fuseki:
+    image: idstestbed/mdb-fuseki:5.0.3
+    container_name: broker-fuseki
+    networks:
+      - idsa
+    expose:
+      - "3030"
+    volumes:
+      - broker_fuseki_data:/fuseki
 
   ecc-worker1:
     image: rdlabengpa/ids_execution_core_container:v1.14.8
@@ -57,6 +158,9 @@ services:
       - ecc_worker1_data:/home/nobody/data/
     extra_hosts:
       - "ecc-worker1:172.17.0.1"
+    depends_on:
+      - omejdn-nginx
+      - broker-reverseproxy
 
   be-dataapp-worker1:
     build:
@@ -146,6 +250,9 @@ services:
       - ecc_worker2_data:/home/nobody/data/
     extra_hosts:
       - "ecc-worker2:172.17.0.1"
+    depends_on:
+      - omejdn-nginx
+      - broker-reverseproxy
 
   be-dataapp-worker2:
     build:
@@ -235,6 +342,9 @@ services:
       - ecc_worker3_data:/home/nobody/data/
     extra_hosts:
       - "ecc-worker3:172.17.0.1"
+    depends_on:
+      - omejdn-nginx
+      - broker-reverseproxy
 
   be-dataapp-worker3:
     build:
@@ -274,6 +384,12 @@ services:
 
   # ===========================================================================
   # WORKER 4 — Sin acceso al modelo FL (solo intenta acceder, es rechazado)
+  #
+  # Worker 4 es un conector IDS legítimo:
+  #   ✔ Obtiene token DAT del DAPS (Omejdn) — está registrado como cliente
+  #   ✔ Se registra en el Broker — aparece en el catálogo de conectores
+  #   ✘ El coordinador (app.py) lo rechaza al intentar unirse al FL
+  #     porque su URI no está en PEER_CONNECTOR_URIS de los workers 1-3
   # ===========================================================================
 
   ecc-worker4:
@@ -325,6 +441,9 @@ services:
       - ecc_worker4_data:/home/nobody/data/
     extra_hosts:
       - "ecc-worker4:172.17.0.1"
+    depends_on:
+      - omejdn-nginx
+      - broker-reverseproxy
 
   be-dataapp-worker4:
     build:
@@ -360,6 +479,7 @@ services:
       - ./certs/dataapp/worker4:/cert/dataapp
     depends_on:
       - ecc-worker4
+
 networks:
   idsa: {}   # red única — todos los contenedores se ven entre sí
 
@@ -368,3 +488,4 @@ volumes:
   ecc_worker2_data: {}
   ecc_worker3_data: {}
   ecc_worker4_data: {}
+  broker_fuseki_data: {}
