@@ -1,3 +1,4 @@
+---
 - client_id: EB:D2:46:C7:7A:B8:DC:48:9D:AB:1D:31:2A:08:41:48:D7:5F:12:55:keyid:C4:76:D0:AA:CD:93:79:35:0F:EB:A7:64:60:90:A4:6B:B4:38:4D:33
   client_name: broker
   grant_types: client_credentials
@@ -16,8 +17,7 @@
     value: https://w3id.org/idsa/contexts/context.jsonld
   - key: transportCertsSha256
     value: edd4bf74e9850f8a55b82f410db228e1a46d884ea533d721e18405e2769edcb9
-  import_certfile: keys/broker.cert
-- client_id: DB:56:8A:EF:4A:6A:8B:47:7C:58:94:91:4C:DB:5D:E5:90:48:7F:40:keyid:
+- client_id: 9D:C5:9B:DB:06:DA:FC:E1:0D:07:A7:FF:65:CB:2C:84:9F:2F:78:87:keyid:C4:76:D0:AA:CD:93:79:35:0F:EB:A7:64:60:90:A4:6B:B4:38:4D:33
   client_name: worker1
   grant_types: client_credentials
   token_endpoint_auth_method: private_key_jwt
@@ -34,9 +34,8 @@
   - key: "@context"
     value: https://w3id.org/idsa/contexts/context.jsonld
   - key: transportCertsSha256
-    value: 38fd6eec60fd2d2e2a635d332c8bbd16d716f1e2db5810adfd15b2ddbb1ff6bb
-  import_certfile: keys/worker1.cert
-- client_id: 84:77:55:00:51:9C:B7:F8:61:6C:C1:8D:00:A2:14:DA:57:F0:E7:82:keyid:
+    value: 5dcbb761aee7fc3303ba21583af983ff68c860936ef042a2ca657baecdc55991
+- client_id: CE:40:92:FB:F6:2A:72:C9:5D:C4:14:FD:DE:DA:12:1C:D3:DB:10:EF:keyid:C4:76:D0:AA:CD:93:79:35:0F:EB:A7:64:60:90:A4:6B:B4:38:4D:33
   client_name: worker2
   grant_types: client_credentials
   token_endpoint_auth_method: private_key_jwt
@@ -53,9 +52,8 @@
   - key: "@context"
     value: https://w3id.org/idsa/contexts/context.jsonld
   - key: transportCertsSha256
-    value: 33c866d2e9e9a78e83db201cc9e2bc1955ab84ecd246ea2802303d9ad3771dc3
-  import_certfile: keys/worker2.cert
-- client_id: 89:A0:86:CB:48:01:F0:44:76:2D:C7:59:9B:6E:65:BE:8C:CB:C6:5D:keyid:
+    value: 4eff91be5c034a7ab7a0c9a6156b886d0577c98e8285843fb2162ee36e6c2ad2
+- client_id: 0A:1F:A2:A9:FD:9D:90:B6:44:F9:C3:CB:B6:68:C8:44:91:63:49:11:keyid:C4:76:D0:AA:CD:93:79:35:0F:EB:A7:64:60:90:A4:6B:B4:38:4D:33
   client_name: worker3
   grant_types: client_credentials
   token_endpoint_auth_method: private_key_jwt
@@ -72,9 +70,8 @@
   - key: "@context"
     value: https://w3id.org/idsa/contexts/context.jsonld
   - key: transportCertsSha256
-    value: ba3ed2dc96a1896405d8f8cc5a207b3f1fbc4306eefb6c82cc0d31f952c7aeb4
-  import_certfile: keys/worker3.cert
-- client_id: D9:BD:DE:4A:6C:E0:BE:72:87:3F:48:A2:82:31:47:AF:42:C2:3B:BE:keyid:
+    value: 2011cdf2b5c5beab4eb34d964a7ec37010e55fbe08effaf211d0025164b91e02
+- client_id: 8F:09:55:12:29:2C:C5:88:82:6B:15:DC:2D:65:3C:1D:B7:56:08:D5:keyid:C4:76:D0:AA:CD:93:79:35:0F:EB:A7:64:60:90:A4:6B:B4:38:4D:33
   client_name: worker4
   grant_types: client_credentials
   token_endpoint_auth_method: private_key_jwt
@@ -91,5 +88,4 @@
   - key: "@context"
     value: https://w3id.org/idsa/contexts/context.jsonld
   - key: transportCertsSha256
-    value: ab0347bd12bc7d877b5373623e96f316c3c5daf6b870a780eca2e5713927196d
-  import_certfile: keys/worker4.cert
+    value: 12bd4c407721c70488319d4f55ec72ec085d24063d0fa01f23aa01aee7616ccb
