@@ -28,7 +28,7 @@
   - key: securityProfile
     value: idsc:BASE_SECURITY_PROFILE
   - key: referringConnector
-    value: http://worker1.demo
+    value: http://w3id.org/engrd/connector/worker1
   - key: "@type"
     value: ids:DatPayload
   - key: "@context"
@@ -46,7 +46,7 @@
   - key: securityProfile
     value: idsc:BASE_SECURITY_PROFILE
   - key: referringConnector
-    value: http://worker2.demo
+    value: http://w3id.org/engrd/connector/worker2
   - key: "@type"
     value: ids:DatPayload
   - key: "@context"
@@ -64,7 +64,7 @@
   - key: securityProfile
     value: idsc:BASE_SECURITY_PROFILE
   - key: referringConnector
-    value: http://worker3.demo
+    value: http://w3id.org/engrd/connector/worker3
   - key: "@type"
     value: ids:DatPayload
   - key: "@context"
@@ -82,7 +82,7 @@
   - key: securityProfile
     value: idsc:BASE_SECURITY_PROFILE
   - key: referringConnector
-    value: http://worker4.demo
+    value: http://w3id.org/engrd/connector/worker4
   - key: "@type"
     value: ids:DatPayload
   - key: "@context"

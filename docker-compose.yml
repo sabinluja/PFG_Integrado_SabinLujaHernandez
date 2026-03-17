@@ -92,7 +92,7 @@ services:
       - DAPS_VALIDATE_INCOMING=true
       - DAPS_URL=https://omejdn/auth/token
       - COMPONENT_URI=https://broker-reverseproxy/
-      - COMPONENT_CATALOGURI=https://broker-reverseproxy/connectors/
+      - COMPONENT_CATALOG_URI=https://broker-reverseproxy/connectors/
     volumes:
       - ./broker/isstbroker-keystore.jks:/etc/cert/isstbroker-keystore.jks
     depends_on:
@@ -152,6 +152,8 @@ services:
       - TZ=Europe/Rome
       - AES256-SECRET-KEY=${AES_SECRET_KEY}
       - DATA_APP_HEALTH_ENDPOINT=http://be-dataapp-worker1:8500/health
+      - CONNECTOR_UUID=${WORKER1_CONNECTOR_UUID}
+      - DEFAULT_ENDPOINT=${WORKER1_DEFAULT_ENDPOINT}
     volumes:
       - ./worker1/ecc:/config
       - ./certs:/cert
@@ -244,6 +246,8 @@ services:
       - TZ=Europe/Rome
       - AES256-SECRET-KEY=${AES_SECRET_KEY}
       - DATA_APP_HEALTH_ENDPOINT=http://be-dataapp-worker2:8500/health
+      - CONNECTOR_UUID=${WORKER2_CONNECTOR_UUID}
+      - DEFAULT_ENDPOINT=${WORKER2_DEFAULT_ENDPOINT}
     volumes:
       - ./worker2/ecc:/config
       - ./certs:/cert
@@ -336,6 +340,8 @@ services:
       - TZ=Europe/Rome
       - AES256-SECRET-KEY=${AES_SECRET_KEY}
       - DATA_APP_HEALTH_ENDPOINT=http://be-dataapp-worker3:8500/health
+      - CONNECTOR_UUID=${WORKER3_CONNECTOR_UUID}
+      - DEFAULT_ENDPOINT=${WORKER3_DEFAULT_ENDPOINT}
     volumes:
       - ./worker3/ecc:/config
       - ./certs:/cert
@@ -435,6 +441,8 @@ services:
       - TZ=Europe/Rome
       - AES256-SECRET-KEY=${AES_SECRET_KEY}
       - DATA_APP_HEALTH_ENDPOINT=http://be-dataapp-worker4:8500/health
+      - CONNECTOR_UUID=${WORKER4_CONNECTOR_UUID}
+      - DEFAULT_ENDPOINT=${WORKER4_DEFAULT_ENDPOINT}
     volumes:
       - ./worker4/ecc:/config
       - ./certs:/cert
