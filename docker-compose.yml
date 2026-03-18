@@ -49,6 +49,12 @@ services:
       - ./omejdn/keys/TLS/daps.key:/etc/nginx/daps.key
     depends_on:
       - omejdn-server
+    healthcheck:
+      test: ["CMD", "curl", "-sk", "https://localhost/auth/jwks.json"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   # ===========================================================================
   # BROKER — IDS Metadata Broker (imágenes exactas del IDS Testbed)
@@ -96,8 +102,10 @@ services:
     volumes:
       - ./broker/isstbroker-keystore.jks:/etc/cert/isstbroker-keystore.jks
     depends_on:
-      - broker-fuseki
-      - omejdn-nginx
+      broker-fuseki:
+        condition: service_started
+      omejdn-nginx:
+        condition: service_healthy
 
   broker-fuseki:
     image: idstestbed/mdb-fuseki:5.0.3
@@ -188,6 +196,8 @@ services:
       - ISSUER_CONNECTOR_URI=${WORKER1_ISSUER_CONNECTOR_URI}
       - PEER_ECC_URLS=https://ecc-worker2:8889/data,https://ecc-worker3:8889/data
       - PEER_CONNECTOR_URIS=${WORKER2_ISSUER_CONNECTOR_URI},${WORKER3_ISSUER_CONNECTOR_URI}
+      - FL_AUTHORIZED_URIS=${WORKER2_ISSUER_CONNECTOR_URI},${WORKER3_ISSUER_CONNECTOR_URI}
+      - BROKER_URL=${BROKER_URL}
       - FL_ROUNDS=${FL_ROUNDS}
       - ROUND_TIMEOUT=${ROUND_TIMEOUT}
       - TZ=Europe/Rome
@@ -196,6 +206,8 @@ services:
       - ./ia-dataapp/log:/home/nobody/log
       - ./certs:/cert
       - ./certs/dataapp/worker1:/cert/dataapp
+      - ./omejdn/keys/worker1.cert:/cert/daps/worker.cert
+      - ./omejdn/keys/worker1.key:/cert/daps/worker.key
     depends_on:
       - ecc-worker1
 
@@ -282,6 +294,8 @@ services:
       - ISSUER_CONNECTOR_URI=${WORKER2_ISSUER_CONNECTOR_URI}
       - PEER_ECC_URLS=https://ecc-worker1:8889/data,https://ecc-worker3:8889/data
       - PEER_CONNECTOR_URIS=${WORKER1_ISSUER_CONNECTOR_URI},${WORKER3_ISSUER_CONNECTOR_URI}
+      - FL_AUTHORIZED_URIS=${WORKER1_ISSUER_CONNECTOR_URI},${WORKER3_ISSUER_CONNECTOR_URI}
+      - BROKER_URL=${BROKER_URL}
       - FL_ROUNDS=${FL_ROUNDS}
       - ROUND_TIMEOUT=${ROUND_TIMEOUT}
       - TZ=Europe/Rome
@@ -290,6 +304,8 @@ services:
       - ./ia-dataapp/log:/home/nobody/log
       - ./certs:/cert
       - ./certs/dataapp/worker2:/cert/dataapp
+      - ./omejdn/keys/worker2.cert:/cert/daps/worker.cert
+      - ./omejdn/keys/worker2.key:/cert/daps/worker.key
     depends_on:
       - ecc-worker2
 
@@ -376,6 +392,8 @@ services:
       - ISSUER_CONNECTOR_URI=${WORKER3_ISSUER_CONNECTOR_URI}
       - PEER_ECC_URLS=https://ecc-worker1:8889/data,https://ecc-worker2:8889/data
       - PEER_CONNECTOR_URIS=${WORKER1_ISSUER_CONNECTOR_URI},${WORKER2_ISSUER_CONNECTOR_URI}
+      - FL_AUTHORIZED_URIS=${WORKER1_ISSUER_CONNECTOR_URI},${WORKER2_ISSUER_CONNECTOR_URI}
+      - BROKER_URL=${BROKER_URL}
       - FL_ROUNDS=${FL_ROUNDS}
       - ROUND_TIMEOUT=${ROUND_TIMEOUT}
       - TZ=Europe/Rome
@@ -384,6 +402,8 @@ services:
       - ./ia-dataapp/log:/home/nobody/log
       - ./certs:/cert
       - ./certs/dataapp/worker3:/cert/dataapp
+      - ./omejdn/keys/worker3.cert:/cert/daps/worker.cert
+      - ./omejdn/keys/worker3.key:/cert/daps/worker.key
     depends_on:
       - ecc-worker3
 
@@ -477,6 +497,8 @@ services:
       - ISSUER_CONNECTOR_URI=${WORKER4_ISSUER_CONNECTOR_URI}
       - PEER_ECC_URLS=
       - PEER_CONNECTOR_URIS=
+      - FL_AUTHORIZED_URIS=
+      - BROKER_URL=${BROKER_URL}
       - FL_ROUNDS=${FL_ROUNDS}
       - ROUND_TIMEOUT=${ROUND_TIMEOUT}
       - TZ=Europe/Rome
@@ -485,6 +507,8 @@ services:
       - ./ia-dataapp/log:/home/nobody/log
       - ./certs:/cert
       - ./certs/dataapp/worker4:/cert/dataapp
+      - ./omejdn/keys/worker4.cert:/cert/daps/worker.cert
+      - ./omejdn/keys/worker4.key:/cert/daps/worker.key
     depends_on:
       - ecc-worker4
 

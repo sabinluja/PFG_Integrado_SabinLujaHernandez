@@ -1,0 +1,15 @@
+Flujo rediseñado:
+
+Los 4 workers arrancan y se registran en el broker ✅
+Tú lanzas desde Postman POST envio config + algoritmo al worker2 (coordinador)
+Worker2 consulta el broker — obtiene los 4 conectores registrados
+Worker2 consulta la self-description de cada uno para ver sus columnas
+Worker2 filtra los que tienen columnas compatibles → workers 1, 3, 4 coinciden
+Worker2 inicia negociación de contrato IDS con cada uno:
+
+Worker1 → acepta el contrato → participa en FL
+Worker3 → acepta el contrato → participa en FL
+Worker4 → rechaza el contrato → no participa (pero sigue en el broker)
+
+
+Worker2 envía algoritmo + fl_config solo a workers 1 y 3 + lanza el algoritmo

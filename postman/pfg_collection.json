@@ -413,6 +413,133 @@
           "response": []
         },
         {
+          "name": "5b - Broker: Descubrir workers compatibles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Workers compatibles encontrados', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.compatible_workers).to.be.an('array');",
+                  "    pm.expect(json.compatible_workers.length).to.be.above(0);",
+                  "    console.log('Coordinator:', json.coordinator);",
+                  "    console.log('Mis columnas:', json.my_columns_count);",
+                  "    console.log('Workers compatibles:', json.count);",
+                  "    json.compatible_workers.forEach(w => {",
+                  "        console.log('  ', w.connector_uri, '| match:', Math.round(w.match_ratio*100)+'%', '| cols comunes:', w.common_cols.length);",
+                  "    });",
+                  "    // Guardar para el siguiente paso",
+                  "    pm.environment.set('compatible_workers', JSON.stringify(json.compatible_workers));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://localhost:{{Coordinator_Port}}/broker/discover",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "{{Coordinator_Port}}",
+              "path": [
+                "broker",
+                "discover"
+              ]
+            },
+            "description": "El coordinator consulta el broker IDS (Fuseki) y obtiene los conectores registrados. Para cada uno consulta su self-description para obtener sus columnas y filtra los que tienen >= 80% de columnas en comun con el coordinator."
+          },
+          "response": []
+        },
+        {
+          "name": "5c - FL: Negociar contratos IDS con workers compatibles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Negociacion completada', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.accepted).to.be.an('array');",
+                  "    pm.expect(json.rejected).to.be.an('array');",
+                  "    pm.expect(json.accepted_count).to.be.above(0, 'Ningun worker acepto el contrato');",
+                  "",
+                  "    console.log('=== Resultado negociacion IDS ===');",
+                  "    console.log('Aceptados (' + json.accepted_count + '):', json.accepted.map(w => w.connector_uri).join(', '));",
+                  "    console.log('Rechazados (' + json.rejected_count + '):', json.rejected.map(w => w.connector_uri + ' (' + w.reason + ')').join(', '));",
+                  "",
+                  "    // Verificar que worker4 rechazo (FL_AUTHORIZED_URIS vacio)",
+                  "    const w4rejected = json.rejected.some(w => w.connector_uri.includes('worker4'));",
+                  "    if (w4rejected) {",
+                  "        console.log('OK Worker4 rechazo la participacion en FL (soberania del dato)');",
+                  "    } else {",
+                  "        console.log('WARN Worker4 no fue encontrado como rechazado');",
+                  "    }",
+                  "    pm.environment.set('accepted_workers', JSON.stringify(json.accepted));",
+                  "    pm.environment.set('rejected_workers', JSON.stringify(json.rejected));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://localhost:{{Coordinator_Port}}/fl/negotiate",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "{{Coordinator_Port}}",
+              "path": [
+                "fl",
+                "negotiate"
+              ]
+            },
+            "description": "El coordinator negocia contratos IDS con los workers compatibles descubiertos en el paso 5b. Worker1 y Worker3 aceptan. Worker4 rechaza porque FL_AUTHORIZED_URIS esta vacio — soberania del dato IDS."
+          },
+          "response": []
+        },
+        {
           "name": "6 - Verify: Coordinator activo con algorithm.py",
           "event": [
             {
@@ -452,17 +579,19 @@
           "response": []
         },
         {
-          "name": "7 - FL: Arrancar entrenamiento",
+          "name": "7 - FL: Arrancar entrenamiento (con workers aceptados)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status 202 Accepted\", () => pm.response.to.have.status(202));",
-                  "pm.test(\"FL arrancado correctamente\", () => {",
+                  "pm.test('Status 202 Accepted', () => pm.response.to.have.status(202));",
+                  "pm.test('FL arrancado con workers aceptados', () => {",
                   "    const json = pm.response.json();",
-                  "    pm.expect(json.status).to.equal(\"started\");",
-                  "    console.log(\"✅ FL arrancado — coordinator:\", json.coordinator, \"| rondas:\", json.fl_rounds);",
+                  "    pm.expect(json.status).to.equal('started');",
+                  "    console.log('FL arrancado — coordinator:', json.coordinator);",
+                  "    console.log('Peers seleccionados:', JSON.stringify(json.peers));",
+                  "    console.log('Rondas:', json.fl_config?.rounds);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -500,7 +629,7 @@
             },
             "description": "Arranca el ciclo FL completo en el coordinator.\nLos parámetros (rounds, round_timeout, etc.) se leen automáticamente de fl_config.json\nrecibido en el paso 5. No es necesario pasar ningún parámetro en el body."
           },
-          "description": "Arranca el ciclo FL. El coordinator distribuye algorithm.py a los peers vía IDS y lanza FedAvg.\n\nCambia {{Coordinator_Port}} en el environment para apuntar al worker correcto.",
+          "description": "Arranca el ciclo FL. Usa los workers aceptados en el paso 5c (/fl/negotiate). Envia algorithm.py + fl_config.json a los workers aceptados (worker1, worker3) y arranca FedAvg. Worker4 ya fue excluido en el paso anterior.",
           "response": []
         },
         {

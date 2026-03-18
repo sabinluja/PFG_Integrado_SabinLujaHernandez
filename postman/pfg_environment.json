@@ -97,6 +97,48 @@
       "description": "⚠️ RELLENAR MANUALMENTE antes del paso 5. Base64 de fl_config.json. PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\fl_config.json'))",
       "type": "default",
       "enabled": true
+    },
+    {
+      "key": "compatible_workers",
+      "value": "[]",
+      "description": "Auto-rellenado por el paso 5b → lista de workers con dataset compatible (JSON)",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "accepted_workers",
+      "value": "[]",
+      "description": "Auto-rellenado por el paso 5c → workers que aceptaron el contrato IDS (JSON)",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "rejected_workers",
+      "value": "[]",
+      "description": "Auto-rellenado por el paso 5c → workers que rechazaron el contrato (ej. worker4)",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "Coordinator_Discover_Endpoint",
+      "value": "https://localhost:5002/broker/discover",
+      "description": "Endpoint de descubrimiento del coordinator. Cambia el puerto segun el coordinator elegido.",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "Coordinator_Negotiate_Endpoint",
+      "value": "https://localhost:5002/fl/negotiate",
+      "description": "Endpoint de negociacion IDS del coordinator.",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "Coordinator_Start_Endpoint",
+      "value": "https://localhost:5002/fl/start",
+      "description": "Endpoint de arranque FL del coordinator.",
+      "type": "default",
+      "enabled": true
     }
   ],
   "_postman_variable_scope": "environment",

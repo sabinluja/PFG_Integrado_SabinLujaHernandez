@@ -66,6 +66,17 @@ PEER_CONNECTOR_URIS = [
     if u.strip()
 ]
 
+# Broker IDS — para descubrimiento dinámico de workers
+BROKER_URL = os.getenv("BROKER_URL", "https://broker-reverseproxy/infrastructure")
+BROKER_SPARQL_URL = "http://broker-fuseki:3030/connectorData/sparql"
+
+# URIs autorizadas para FL (vacío = este worker no participa)
+FL_AUTHORIZED_URIS = [
+    u.strip()
+    for u in os.getenv("FL_AUTHORIZED_URIS", "").split(",")
+    if u.strip()
+]
+
 # Credenciales para la API interna del ECC
 API_USER = "apiUser"
 API_PASS = "passwordApiUser"
@@ -133,10 +144,14 @@ _published_fl_contract: dict = {}
 coordinator_ecc_url  = None
 coordinator_conn_uri = None
 
+# Workers aceptados tras /fl/negotiate — usados por /fl/start
+_accepted_workers: list = []  # [{ connector_uri, ecc_url, match_ratio }, ...]
+_negotiate_lock = threading.Lock()
+
 fl_state = {
     "status"       : "idle",
     "current_round": 0,
-    "total_rounds" : 0,   # se rellena al arrancar desde fl_config.json
+    "total_rounds" : 0,
     "history"      : [],
 }
 _fl_lock = threading.Lock()
@@ -174,11 +189,100 @@ def _ids_context() -> dict:
     }
 
 
+# =============================================================================
+# Token DAT real — obtenido del DAPS usando los certificados DAPS del worker
+# Montados en /cert/daps/worker.cert y /cert/daps/worker.key
+# (omejdn/keys/workerX.cert y omejdn/keys/workerX.key)
+# =============================================================================
+
+CERT_PATH      = "/cert/daps/worker.cert"
+KEY_PATH       = "/cert/daps/worker.key"
+DAPS_TOKEN_URL = "https://omejdn/auth/token"
+
+_dat_cache: dict = {"token": None, "exp": 0}
+
+
+def _get_dat_token() -> str:
+    """
+    Obtiene el token DAT real del DAPS (Omejdn) usando el certificado
+    DAPS del worker montado en /cert/daps/.
+
+    El token se cachea hasta 30s antes de su expiración.
+    Si falla, devuelve None y _security_token() usará DummyTokenValue.
+    """
+    import time
+    import jwt as pyjwt
+    from cryptography.hazmat.primitives.serialization import load_pem_private_key
+    from cryptography import x509 as _x509
+    from cryptography.hazmat.backends import default_backend
+
+    now = int(time.time())
+
+    # Devolver cacheado si aún es válido
+    if _dat_cache["token"] and _dat_cache["exp"] > now + 30:
+        return _dat_cache["token"]
+
+    with open(CERT_PATH, "rb") as f:
+        cert_pem = f.read()
+    with open(KEY_PATH, "rb") as f:
+        private_key = load_pem_private_key(f.read(), password=None)
+
+    # Construir client_id desde SKI y AKI del certificado
+    cert = _x509.load_pem_x509_certificate(cert_pem, default_backend())
+    ski_ext = cert.extensions.get_extension_for_class(_x509.SubjectKeyIdentifier)
+    aki_ext = cert.extensions.get_extension_for_class(_x509.AuthorityKeyIdentifier)
+    ski_fmt = ":".join(f"{b:02X}" for b in ski_ext.value.digest)
+    aki_fmt = ":".join(f"{b:02X}" for b in aki_ext.value.key_identifier)
+    client_id = f"{ski_fmt}:keyid:{aki_fmt}"
+
+    # Construir client_assertion JWT firmado con la clave privada
+    assertion = pyjwt.encode(
+        {
+            "iss": client_id,
+            "sub": client_id,
+            "aud": "idsc:IDS_CONNECTORS_ALL",
+            "iat": now,
+            "exp": now + 60,
+            "nbf": now,
+            "jti": str(uuid.uuid4()),
+        },
+        private_key,
+        algorithm="RS256",
+    )
+
+    resp = requests.post(
+        DAPS_TOKEN_URL,
+        data={
+            "grant_type"           : "client_credentials",
+            "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+            "client_assertion"     : assertion,
+            "scope"                : "idsc:IDS_CONNECTOR_ATTRIBUTES_ALL",
+        },
+        verify=False,
+        timeout=10,
+    )
+    resp.raise_for_status()
+    token = resp.json()["access_token"]
+
+    # Cachear hasta expiración
+    decoded = pyjwt.decode(token, options={"verify_signature": False})
+    _dat_cache["token"] = token
+    _dat_cache["exp"]   = decoded.get("exp", now + 3600)
+
+    log.info(f"[DAPS] Token DAT obtenido para worker-{INSTANCE_ID} — expira en {_dat_cache['exp'] - now}s")
+    return token
+
+
 def _security_token() -> dict:
+    try:
+        token_val = _get_dat_token()
+    except Exception as e:
+        log.warning(f"[DAPS] No se pudo obtener token real: {e} — usando DummyTokenValue")
+        token_val = "DummyTokenValue"
     return {
         "@type"          : "ids:DynamicAttributeToken",
-        "@id"            : "https://w3id.org/idsa/autogen/dynamicAttributeToken/d599a43f",
-        "ids:tokenValue" : "DummyTokenValue",
+        "@id"            : f"https://w3id.org/idsa/autogen/dynamicAttributeToken/{uuid.uuid4()}",
+        "ids:tokenValue" : token_val,
         "ids:tokenFormat": {"@id": "https://w3id.org/idsa/code/JWT"},
     }
 
@@ -799,6 +903,161 @@ def _publish_fl_model_as_ids_resource(global_weights_b64: str, global_metrics: d
         log.error(f"[publish] Error: {exc}", exc_info=True)
 
 
+# =============================================================================
+# Descubrimiento de workers via Broker IDS
+# =============================================================================
+
+def _get_my_columns() -> list:
+    """
+    Devuelve las columnas del CSV local del coordinator.
+    """
+    try:
+        import pandas as pd
+        csv = _csv_path()
+        df = pd.read_csv(csv, nrows=0, low_memory=False)
+        cols = [c.lower().strip() for c in df.columns]
+        log.info(f"[broker-discover] Mis columnas ({len(cols)}): {cols[:5]}...")
+        return cols
+    except Exception as e:
+        log.error(f"[broker-discover] Error leyendo columnas locales: {e}")
+        return []
+
+
+def _get_registered_connectors() -> list:
+    """
+    Consulta Fuseki directamente para obtener los conectores registrados en el broker.
+    Devuelve lista de dicts con {connector_uri, endpoint}.
+    """
+    query = """
+    SELECT DISTINCT ?connector ?endpoint WHERE {
+      GRAPH ?g {
+        ?connector a <https://w3id.org/idsa/core/BaseConnector> .
+        OPTIONAL { ?connector <https://w3id.org/idsa/core/hasDefaultEndpoint> ?endpoint . }
+      }
+    }
+    """
+    try:
+        resp = requests.post(
+            BROKER_SPARQL_URL,
+            data={"query": query},
+            headers={"Accept": "application/sparql-results+json"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        bindings = resp.json().get("results", {}).get("bindings", [])
+        connectors = []
+        for b in bindings:
+            uri      = b.get("connector", {}).get("value", "")
+            endpoint = b.get("endpoint",  {}).get("value", "")
+            if uri and uri != CONNECTOR_URI:  # excluir yo mismo
+                connectors.append({"connector_uri": uri, "endpoint": endpoint})
+        log.info(f"[broker-discover] {len(connectors)} conectores encontrados en el broker")
+        return connectors
+    except Exception as e:
+        log.error(f"[broker-discover] Error consultando Fuseki: {e}")
+        return []
+
+
+def _get_peer_columns(ecc_url: str, connector_uri: str) -> list:
+    """
+    Obtiene las columnas del CSV de un peer consultando su self-description IDS
+    y leyendo el campo ids:keyword donde publica sus columnas.
+    """
+    try:
+        desc = _ids_send(ecc_url, connector_uri, "ids:DescriptionRequestMessage")
+        # Buscar keywords en la self-description — columnas publicadas como keywords
+        catalogs = desc.get("ids:resourceCatalog", [])
+        for catalog in catalogs:
+            for resource in catalog.get("ids:offeredResource", []):
+                keywords = resource.get("ids:keyword", [])
+                cols = []
+                for kw in keywords:
+                    val = kw.get("@value", "") if isinstance(kw, dict) else str(kw)
+                    if val.startswith("col:"):
+                        cols.append(val[4:])
+                if cols:
+                    log.info(f"[broker-discover] {connector_uri} → {len(cols)} columnas")
+                    return cols
+        # Fallback: intentar /dataset/columns endpoint
+        import re
+        m = re.search(r"ecc-worker(\d+)", ecc_url)
+        if m:
+            wid = m.group(1)
+            dataapp_url = f"https://be-dataapp-worker{wid}:8500/dataset/columns"
+            r = requests.get(dataapp_url, verify=False, timeout=5)
+            if r.ok:
+                return r.json().get("columns", [])
+        return []
+    except Exception as e:
+        log.warning(f"[broker-discover] No se pudieron obtener columnas de {connector_uri}: {e}")
+        return []
+
+
+def _ecc_url_from_connector_uri(connector_uri: str, endpoint: str) -> str:
+    """
+    Deriva la URL del ECC (puerto 8889) desde el endpoint IDS del conector.
+    Ejemplo: https://ecc-worker3:8449/api/ids/data → https://ecc-worker3:8889/data
+    """
+    if endpoint:
+        import re
+        m = re.search(r"(ecc-worker\d+)", endpoint)
+        if m:
+            return f"https://{m.group(1)}:8889/data"
+    import re
+    m = re.search(r"worker(\d+)", connector_uri)
+    if m:
+        return f"https://ecc-worker{m.group(1)}:8889/data"
+    return ""
+
+
+def _discover_compatible_workers(my_columns: list) -> list:
+    """
+    Consulta el broker, obtiene self-descriptions y devuelve los peers
+    con columnas compatibles (intersección >= 80% de mis columnas).
+
+    Retorna lista de dicts:
+      { connector_uri, ecc_url, common_cols, match_ratio }
+    """
+    connectors = _get_registered_connectors()
+    if not connectors:
+        log.warning("[broker-discover] No hay conectores en el broker")
+        return []
+
+    compatible = []
+    my_set = set(c.lower() for c in my_columns)
+
+    for conn in connectors:
+        uri      = conn["connector_uri"]
+        endpoint = conn["endpoint"]
+        ecc_url  = _ecc_url_from_connector_uri(uri, endpoint)
+
+        if not ecc_url:
+            log.warning(f"[broker-discover] No se pudo derivar ECC URL para {uri}")
+            continue
+
+        peer_cols  = _get_peer_columns(ecc_url, uri)
+        peer_set   = set(c.lower() for c in peer_cols)
+        common     = my_set & peer_set
+        match_ratio = len(common) / len(my_set) if my_set else 0
+
+        log.info(
+            f"[broker-discover] {uri}\n"
+            f"  columnas peer: {len(peer_set)}  comunes: {len(common)}  "
+            f"match: {match_ratio:.0%}"
+        )
+
+        if match_ratio >= 0.8:
+            compatible.append({
+                "connector_uri": uri,
+                "ecc_url"      : ecc_url,
+                "common_cols"  : sorted(common),
+                "match_ratio"  : round(match_ratio, 3),
+            })
+
+    log.info(f"[broker-discover] {len(compatible)} workers compatibles encontrados")
+    return compatible
+
+
 def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
              algo_bytes: bytes = None, config_bytes: bytes = None):
     """
@@ -1014,15 +1273,37 @@ async def ids_data(request: Request):
         payload_dict      = json.loads(payload_val) if payload_val else {}
         contract_offer_id = payload_dict.get("@id", "")
 
-        # ── Comprobación de acceso: solo peers autorizados pueden negociar ──
+        # ── Comprobación de acceso basada en FL_AUTHORIZED_URIS ──────────────
+        # Si FL_AUTHORIZED_URIS está vacío → este worker NO participa en FL
+        # (caso worker4: rechaza cualquier solicitud de contrato FL)
         consumer_uri = mensaje.get("ids:issuerConnector", {}).get("@id", "")
-        if PEER_CONNECTOR_URIS and consumer_uri not in PEER_CONNECTOR_URIS:
+
+        if not FL_AUTHORIZED_URIS:
+            # Este worker no tiene URIs autorizadas → rechaza participar en FL
+            log.warning(
+                f"[ContractRequest] PARTICIPACIÓN DENEGADA — "
+                f"worker-{INSTANCE_ID} no está autorizado a participar en FL\n"
+                f"  Solicitante: {consumer_uri!r}"
+            )
+            rejection_header = _resp(
+                "ids:RejectionMessage", "rejectionMessage",
+                {"ids:rejectionReason": {"@id": "https://w3id.org/idsa/code/NOT_AUTHORIZED"}}
+            )
+            return _multipart_response(rejection_header, json.dumps({
+                "status"  : "rejected",
+                "reason"  : "fl_participation_denied",
+                "worker"  : INSTANCE_ID,
+                "message" : (
+                    f"Worker {INSTANCE_ID} has opted out of federated learning participation. "
+                    "This connector is registered in the broker but does not share its data."
+                )
+            }))
+
+        if FL_AUTHORIZED_URIS and consumer_uri not in FL_AUTHORIZED_URIS:
             log.warning(
                 f"[ContractRequest] ACCESO DENEGADO — connector no autorizado: {consumer_uri!r}\n"
-                f"  Peers autorizados: {PEER_CONNECTOR_URIS}"
+                f"  Peers autorizados: {FL_AUTHORIZED_URIS}"
             )
-            # ids:RejectionMessage es el tipo base que el ECC de TRUE Connector
-            # reenvía correctamente. ids:ContractRejectionMessage causa un 500.
             rejection_header = _resp(
                 "ids:RejectionMessage", "rejectionMessage",
                 {"ids:rejectionReason": {"@id": "https://w3id.org/idsa/code/NOT_AUTHORIZED"}}
@@ -1220,47 +1501,82 @@ async def ids_data_get():
 @app.post("/fl/start")
 async def fl_start(request: Request):
     """
-    Arranca el ciclo FL completo desde el coordinator.
-    Los parámetros (rounds, round_timeout, min_workers) se leen de fl_config.json.
-    Ya NO se aceptan en el body — todo viene del JSON enviado en el paso 5.
+    PASO 7 — Envía algoritmo + fl_config a los workers aceptados y arranca el FL.
+
+    Usa los workers guardados en memoria por /fl/negotiate (paso 6).
+    Si no se ejecutó /fl/negotiate, usa PEER_ECC_URLS del .env como fallback.
+
+    En un solo paso:
+    1. Envía algorithm.py + fl_config.json a cada worker aceptado (IDS ArtifactRequest)
+    2. Arranca el ciclo FL completo
     """
     global is_coordinator
 
     if not is_coordinator:
         return JSONResponse(
             status_code=400,
-            content={"error": "Este worker no es coordinator. Envía el algoritmo primero (paso 5)."}
+            content={"error": "Este worker no es coordinator. Envía el algoritmo primero (pasos 1-4)."}
         )
 
     algo_path = ALGO_IDS_PATH if os.path.exists(ALGO_IDS_PATH) else ALGO_BAKED_PATH
     if not os.path.exists(algo_path):
         return JSONResponse(
             status_code=400,
-            content={"error": "algorithm.py no encontrado. Envía el algoritmo primero (paso 5)."}
+            content={"error": "algorithm.py no encontrado. Envía el algoritmo primero (pasos 1-4)."}
         )
 
-    # Leer configuración desde fl_config.json (o defaults si no existe)
     cfg           = _load_fl_config()
     rounds        = int(cfg["rounds"])
     round_timeout = int(cfg["round_timeout"])
     min_workers   = int(cfg["min_workers"])
 
-    log.info(
-        f"[/fl/start] Arrancando FL — coordinator-{INSTANCE_ID}\n"
-        f"  rounds={rounds}  round_timeout={round_timeout}s  min_workers={min_workers}"
-    )
-
     with open(algo_path, "rb") as f:
         algo_bytes = f.read()
 
-    # Leer config bytes para redistribuir a peers
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH, "rb") as f:
             config_bytes = f.read()
     else:
         config_bytes = json.dumps(cfg).encode()
 
+    # Usar workers aceptados por /fl/negotiate o fallback al .env
+    with _negotiate_lock:
+        peers_to_use = list(_accepted_workers)
+
+    if peers_to_use:
+        peer_urls = [w["ecc_url"]      for w in peers_to_use]
+        peer_uris = [w["connector_uri"] for w in peers_to_use]
+        log.info(
+            f"[/fl/start] Usando {len(peers_to_use)} workers aceptados del paso /fl/negotiate:\n" +
+            "\n".join(f"  {w['connector_uri']}" for w in peers_to_use)
+        )
+    else:
+        peer_urls = PEER_ECC_URLS
+        peer_uris = PEER_CONNECTOR_URIS
+        log.warning(
+            f"[/fl/start] /fl/negotiate no fue ejecutado — usando PEER_ECC_URLS del .env: {peer_urls}"
+        )
+
+    if not peer_urls:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "No hay workers disponibles. Ejecuta /fl/negotiate primero.",
+                "hint" : "POST /broker/discover → POST /fl/negotiate → POST /fl/start"
+            }
+        )
+
+    log.info(
+        f"[/fl/start] Arrancando FL — coordinator-{INSTANCE_ID}\n"
+        f"  rounds={rounds}  round_timeout={round_timeout}s  min_workers={min_workers}\n"
+        f"  peers={peer_urls}"
+    )
+
     def _launch():
+        # Actualizar globales para que _run_fl los use
+        global PEER_ECC_URLS, PEER_CONNECTOR_URIS
+        PEER_ECC_URLS       = peer_urls
+        PEER_CONNECTOR_URIS = peer_uris
         _run_fl(rounds, round_timeout, min_workers, algo_bytes, config_bytes)
 
     threading.Thread(target=_launch, daemon=True).start()
@@ -1270,6 +1586,7 @@ async def fl_start(request: Request):
         content={
             "status"     : "started",
             "coordinator": INSTANCE_ID,
+            "peers"      : peer_urls,
             "fl_config"  : {
                 "rounds"       : rounds,
                 "round_timeout": round_timeout,
@@ -1277,6 +1594,206 @@ async def fl_start(request: Request):
             },
         }
     )
+
+
+@app.get("/dataset/columns")
+def dataset_columns():
+    """
+    Devuelve las columnas del CSV local.
+    El coordinator lo consulta durante el descubrimiento del broker.
+    """
+    try:
+        import pandas as pd
+        csv = _csv_path()
+        df  = pd.read_csv(csv, nrows=0, low_memory=False)
+        cols = [c.lower().strip() for c in df.columns]
+        return {"instance": INSTANCE_ID, "columns": cols, "count": len(cols)}
+    except FileNotFoundError:
+        return JSONResponse(status_code=404, content={"error": "CSV no encontrado"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/dataset/info")
+def dataset_info():
+    """
+    Devuelve información del dataset local: columnas, filas, estadísticas básicas.
+    """
+    try:
+        import pandas as pd
+        csv = _csv_path()
+        df  = pd.read_csv(csv, low_memory=False)
+        df.columns = [c.lower().strip() for c in df.columns]
+        cols = list(df.columns)
+        return {
+            "instance" : INSTANCE_ID,
+            "csv_file" : os.path.basename(csv),
+            "rows"     : len(df),
+            "columns"  : cols,
+            "count"    : len(cols),
+        }
+    except FileNotFoundError:
+        return JSONResponse(status_code=404, content={"error": "CSV no encontrado"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/broker/connectors")
+def broker_connectors():
+    """
+    Consulta el broker y devuelve la lista de conectores IDS registrados.
+    """
+    connectors = _get_registered_connectors()
+    return {
+        "coordinator" : INSTANCE_ID,
+        "count"       : len(connectors),
+        "connectors"  : connectors,
+    }
+
+
+@app.post("/broker/discover")
+async def broker_discover_post():
+    """
+    PASO 5 — Descubrimiento de workers compatibles via broker IDS.
+
+    1. Lee sus propias columnas del CSV local
+    2. Consulta Fuseki para obtener los conectores registrados en el broker
+    3. Consulta la self-description (DescriptionRequestMessage IDS) de cada peer
+    4. Filtra los que tienen >= 80% columnas en común
+
+    Devuelve los workers compatibles pero NO negocia contratos todavía.
+    """
+    if not is_coordinator:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Solo el coordinator puede hacer descubrimiento. Envía el algoritmo primero (pasos 1-4)."}
+        )
+
+    my_cols    = _get_my_columns()
+    compatible = _discover_compatible_workers(my_cols)
+
+    return {
+        "coordinator"        : INSTANCE_ID,
+        "my_columns_count"   : len(my_cols),
+        "compatible_workers" : compatible,
+        "count"              : len(compatible),
+        "next_step"          : "POST /fl/negotiate para negociar contratos con los compatibles",
+    }
+
+
+@app.post("/fl/negotiate")
+async def fl_negotiate():
+    """
+    PASO 6 — Negocia contratos IDS con los workers compatibles.
+
+    Para cada worker compatible:
+    - ContractRequestMessage IDS → worker acepta o rechaza
+    - Aceptados → guardados en memoria para /fl/start
+    - Rechazados (worker4) → excluidos del FL, siguen en el broker
+    """
+    global _accepted_workers, PEER_ECC_URLS, PEER_CONNECTOR_URIS
+
+    if not is_coordinator:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Solo el coordinator puede negociar. Envía el algoritmo primero (pasos 1-4)."}
+        )
+
+    my_cols    = _get_my_columns()
+    compatible = _discover_compatible_workers(my_cols)
+
+    if not compatible:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "No hay workers compatibles en el broker. Ejecuta /broker/discover primero."}
+        )
+
+    accepted = []
+    rejected = []
+
+    for worker in compatible:
+        uri     = worker["connector_uri"]
+        ecc_url = worker["ecc_url"]
+        log.info(f"[/fl/negotiate] Negociando contrato con {uri}")
+        try:
+            desc     = _ids_send(ecc_url, uri, "ids:DescriptionRequestMessage")
+            catalogs = desc.get("ids:resourceCatalog", [{}])
+            resource = (catalogs[0].get("ids:offeredResource", [{}]) or [{}])[0]
+            contract = (resource.get("ids:contractOffer",  [{}]) or [{}])[0]
+            repres   = (resource.get("ids:representation", [{}]) or [{}])[0]
+            instance = (repres.get("ids:instance",         [{}]) or [{}])[0]
+
+            contract_id       = contract.get("@id", "")
+            permission        = (contract.get("ids:permission", [{}]) or [{}])[0]
+            provider_id       = contract.get("ids:provider", {}).get("@id", "")
+            contract_artifact = instance.get("@id", "http://w3id.org/engrd/connector/artifact/1")
+
+            response = _ids_send(
+                ecc_url, uri, "ids:ContractRequestMessage",
+                requested_element=contract_artifact,
+                payload={
+                    "@context"      : _ids_context(),
+                    "@type"         : "ids:ContractRequest",
+                    "@id"           : contract_id,
+                    "ids:permission": [permission],
+                    "ids:provider"  : {"@id": provider_id},
+                    "ids:obligation": [], "ids:prohibition": [],
+                    "ids:consumer"  : {"@id": CONNECTOR_URI},
+                },
+            )
+
+            resp_type = response.get("@type", "")
+            if "Rejection" in resp_type or response.get("status") == "rejected":
+                reason = response.get("reason", "unknown")
+                log.warning(f"[/fl/negotiate] {uri} RECHAZÓ el contrato — razón: {reason}")
+                rejected.append({
+                    "connector_uri": uri,
+                    "ecc_url"      : ecc_url,
+                    "reason"       : reason,
+                    "message"      : response.get("message", ""),
+                })
+            else:
+                _ids_send(
+                    ecc_url, uri, "ids:ContractAgreementMessage",
+                    requested_artifact=contract_artifact,
+                    payload=response,
+                )
+                log.info(f"[/fl/negotiate] {uri} ACEPTÓ el contrato ✅")
+                accepted.append({
+                    "connector_uri"    : uri,
+                    "ecc_url"          : ecc_url,
+                    "match_ratio"      : worker["match_ratio"],
+                    "transfer_contract": response.get("@id", ""),
+                })
+
+        except Exception as exc:
+            log.error(f"[/fl/negotiate] Error negociando con {uri}: {exc}")
+            rejected.append({
+                "connector_uri": uri,
+                "ecc_url"      : ecc_url,
+                "reason"       : "error",
+                "message"      : str(exc),
+            })
+
+    with _negotiate_lock:
+        _accepted_workers   = accepted
+        PEER_ECC_URLS       = [w["ecc_url"]      for w in accepted]
+        PEER_CONNECTOR_URIS = [w["connector_uri"] for w in accepted]
+
+    log.info(
+        f"[/fl/negotiate] {len(accepted)} aceptados, {len(rejected)} rechazados\n"
+        f"  Aceptados : {[w['connector_uri'] for w in accepted]}\n"
+        f"  Rechazados: {[w['connector_uri'] for w in rejected]}"
+    )
+
+    return {
+        "coordinator"   : INSTANCE_ID,
+        "accepted"      : accepted,
+        "rejected"      : rejected,
+        "accepted_count": len(accepted),
+        "rejected_count": len(rejected),
+        "next_step"     : "POST /fl/start para enviar algoritmo y arrancar FL" if accepted else "No hay workers disponibles",
+    }
 
 
 @app.get("/ids/self-description")
