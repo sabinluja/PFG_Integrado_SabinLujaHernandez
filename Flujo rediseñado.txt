@@ -1,6 +1,6 @@
 Flujo rediseñado:
 
-Los 4 workers arrancan y se registran en el broker ✅
+Los 4 workers arrancan y se registran en el broker 
 Tú lanzas desde Postman POST envio config + algoritmo al worker2 (coordinador)
 Worker2 consulta el broker — obtiene los 4 conectores registrados
 Worker2 consulta la self-description de cada uno para ver sus columnas
@@ -13,3 +13,28 @@ Worker4 → rechaza el contrato → no participa (pero sigue en el broker)
 
 
 Worker2 envía algoritmo + fl_config solo a workers 1 y 3 + lanza el algoritmo
+
+----------------------------------------
+
+# 1. Solo contar cuántos conectores hay
+docker exec broker-fuseki curl -s -X POST \
+  http://localhost:3030/connectorData/sparql \
+  --data-urlencode "query=SELECT (COUNT(*) as ?n) WHERE { GRAPH ?g { ?s a <https://w3id.org/idsa/core/BaseConnector> } }" \
+  -H "Accept: application/sparql-results+json"
+
+# 2. Listar conectores con endpoint
+docker exec broker-fuseki curl -s -X POST \
+  http://localhost:3030/connectorData/sparql \
+  --data-urlencode "query=SELECT DISTINCT ?connector ?endpoint WHERE { GRAPH ?g { ?connector a <https://w3id.org/idsa/core/BaseConnector> . OPTIONAL { ?connector <https://w3id.org/idsa/core/hasDefaultEndpoint> ?endpoint } } }" \
+  -H "Accept: application/sparql-results+json"
+
+# 3. Ver todos los triples (cuántos hay en total)
+docker exec broker-fuseki curl -s -X POST \
+  http://localhost:3030/connectorData/sparql \
+  --data-urlencode "query=SELECT (COUNT(*) as ?n) WHERE { GRAPH ?g { ?s ?p ?o } }" \
+  -H "Accept: application/sparql-results+json"
+
+# 4. Ver los grafos disponibles
+docker exec broker-fuseki curl -s \
+  http://localhost:3030/connectorData/data \
+  -H "Accept: application/n-triples" | head -5

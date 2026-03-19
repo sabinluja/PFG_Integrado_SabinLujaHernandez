@@ -87,6 +87,7 @@ services:
       - broker-core
 
   broker-core:
+    restart: on-failure:5
     image: idstestbed/metadatabroker-core:5.0.3
     container_name: broker-core
     networks:
@@ -99,8 +100,16 @@ services:
       - DAPS_URL=https://omejdn/auth/token
       - COMPONENT_URI=https://broker-reverseproxy/
       - COMPONENT_CATALOG_URI=https://broker-reverseproxy/connectors/
+    entrypoint: ["sh", "/run_broker.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/ > /dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     volumes:
       - ./broker/isstbroker-keystore.jks:/etc/cert/isstbroker-keystore.jks
+      - ./scripts/run_broker.sh:/run_broker.sh
     depends_on:
       broker-fuseki:
         condition: service_started
@@ -169,8 +178,10 @@ services:
     extra_hosts:
       - "ecc-worker1:172.17.0.1"
     depends_on:
-      - omejdn-nginx
-      - broker-reverseproxy
+      omejdn-nginx:
+        condition: service_started
+      broker-core:
+        condition: service_healthy
 
   be-dataapp-worker1:
     build:
@@ -267,8 +278,10 @@ services:
     extra_hosts:
       - "ecc-worker2:172.17.0.1"
     depends_on:
-      - omejdn-nginx
-      - broker-reverseproxy
+      omejdn-nginx:
+        condition: service_started
+      broker-core:
+        condition: service_healthy
 
   be-dataapp-worker2:
     build:
@@ -365,8 +378,10 @@ services:
     extra_hosts:
       - "ecc-worker3:172.17.0.1"
     depends_on:
-      - omejdn-nginx
-      - broker-reverseproxy
+      omejdn-nginx:
+        condition: service_started
+      broker-core:
+        condition: service_healthy
 
   be-dataapp-worker3:
     build:
@@ -470,8 +485,10 @@ services:
     extra_hosts:
       - "ecc-worker4:172.17.0.1"
     depends_on:
-      - omejdn-nginx
-      - broker-reverseproxy
+      omejdn-nginx:
+        condition: service_started
+      broker-core:
+        condition: service_healthy
 
   be-dataapp-worker4:
     build:

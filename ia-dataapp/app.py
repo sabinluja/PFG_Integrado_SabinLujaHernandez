@@ -393,13 +393,14 @@ async def proxy(request: Request):
     try:
         corr_msg = body.get("correlationMessage") or transfer_contract or None
 
-        header_content_out = None
+        # fl_algorithm: DAT real en securityToken + algoritmo en ids:contentVersion
+        fl_extra = {}
         if isinstance(payload_in, dict) and payload_in.get("type") == "fl_algorithm":
-            algo_b64   = payload_in.pop("content", None) or ""
-            config_b64 = payload_in.pop("config",  None) or ""
-            # Empaquetar ambos en tokenValue: "<algo_b64>||fl_config::<config_b64>"
-            header_content_out = f"{algo_b64}||fl_config::{config_b64}" if config_b64 else algo_b64
-            log.info(f"[/proxy] fl_algorithm detectado — content+config → ids:tokenValue (config={'present' if config_b64 else 'absent'})")
+            algo_b64   = payload_in.get("content", "") or ""
+            config_b64 = payload_in.get("config",  "") or ""
+            combined   = f"{algo_b64}||fl_config::{config_b64}" if config_b64 else algo_b64
+            fl_extra   = {"ids:contentVersion": combined}
+            log.info(f"[/proxy] fl_algorithm detectado — content+config → ids:contentVersion (config={'present' if config_b64 else 'absent'})")
 
         result = _ids_send(
             forward_to_url       = forward_to,
@@ -410,7 +411,8 @@ async def proxy(request: Request):
             transfer_contract    = transfer_contract,
             payload              = payload_in,
             correlation_message  = corr_msg,
-            header_content       = header_content_out,
+            header_content       = None,
+            extra_header         = fl_extra,
         )
         return JSONResponse(content=result)
     except Exception as exc:
@@ -472,6 +474,8 @@ def _ids_send(
     header_content      : str  = None,
     header_content_type : str  = "fl_algorithm",
     peer_algorithm      : bool = False,
+    extra_header        : dict = None,
+    use_local_ecc       : bool = False,
 ) -> dict:
     extra = {}
     if requested_artifact:  extra["ids:requestedArtifact"]  = {"@id": requested_artifact}
@@ -489,7 +493,17 @@ def _ids_send(
         }
 
     header_dict = _build_outgoing_header(message_type, forward_to_connector, extra)
+    if extra_header:
+        header_dict.update(extra_header)
     str_header  = json.dumps(header_dict)
+
+    # Route through local ECC so it replaces the tokenValue with real DAT
+    actual_url = forward_to_url
+    if use_local_ecc:
+        actual_url = f"https://ecc-worker{INSTANCE_ID}:8887/incoming-data-app/multipartMessageBodyFormData"
+        header_dict["Forward-To"] = forward_to_url
+        str_header = json.dumps(header_dict)
+
     fields = {"header": ("header", str_header, "application/json")}
 
     if payload is not None:
@@ -500,7 +514,7 @@ def _ids_send(
     log.info(f"[IDS OUT] {message_type} → {forward_to_url}")
 
     resp = requests.post(
-        forward_to_url,
+        actual_url,
         data=encoder,
         headers={"Content-Type": encoder.content_type},
         verify=False,
@@ -581,25 +595,31 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
         transfer_contract = agreement.get("@id", "")
         log.info(f"[coordinator] 2/4 ContractAgreement OK")
 
+        agreement_id = agreement.get("@id", "")
         _ids_send(
             peer_ecc_url, peer_conn_uri, "ids:ContractAgreementMessage",
             requested_artifact=contract_artifact,
+            transfer_contract=transfer_contract,
+            correlation_message=transfer_contract or agreement_id,
             payload=agreement,
         )
         log.info(f"[coordinator] 3/4 Acuerdo confirmado")
 
-        # Empaquetar algorithm.py + fl_config.json juntos en el tokenValue
+        # Empaquetar algorithm.py + fl_config.json en el payload directamente
+        # NO usar header_content (sobreescribiría el securityToken con datos no-JWT)
+        # NO usar use_local_ecc (el ECC valida el token antes de pasar a la DataApp)
         algo_b64   = base64.b64encode(artifact_bytes).decode("utf-8")
         config_b64 = base64.b64encode(config_bytes).decode("utf-8")
-        combined   = f"{algo_b64}||fl_config::{config_b64}"
+        # Incluir from_coordinator=1 en ids:contentVersion para que el worker
+        # sepa que viene del coordinator aunque el ECC filtre el payload
+        combined   = f"{algo_b64}||fl_config::{config_b64}||from_coordinator::1"
 
         _ids_send(
             peer_ecc_url, peer_conn_uri, "ids:ArtifactRequestMessage",
             requested_artifact=contract_artifact,
             transfer_contract=transfer_contract,
-            header_content=combined,
-            header_content_type="fl_algorithm",
-            peer_algorithm=True,
+            correlation_message=transfer_contract or agreement_id,
+            extra_header={"ids:contentVersion": combined},
             payload={
                 "type"            : "fl_algorithm",
                 "filename"        : "algorithm.py",
@@ -1110,6 +1130,12 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                     except Exception as exc:
                         log.error(f"  [ronda {round_num}] → {peer}: ❌ {exc}")
 
+        # Esperar a que los peers hayan guardado el algoritmo antes de enviar pesos.
+        # Evita la condición de carrera: los pesos llegan antes de que algorithm.py
+        # esté escrito en disco y _load_algorithm() falla silenciosamente.
+        if algo_bytes:
+            time.sleep(3)
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(PEER_ECC_URLS)) as ex:
             for peer_url, peer_uri in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS):
                 ex.submit(_send_global_weights, peer_url, peer_uri,
@@ -1218,6 +1244,7 @@ async def ids_data(request: Request):
                     header_val = text
                 elif 'name="payload"' in disp:
                     payload_val = text
+                    log.info(f"[/data] payload_val (100 chars): {repr(payload_val[:100])}") 
                 elif not header_val and (text.startswith("{") or text.startswith("[")):
                     header_val = text
         except Exception as e:
@@ -1357,7 +1384,26 @@ async def ids_data(request: Request):
         except Exception:
             payload_dict = {}
 
-        # Recuperar desde tokenValue si payload llegó vacío
+        # Recuperar desde ids:contentVersion si payload llegó vacío
+        if not payload_dict.get("type"):
+            content_version = mensaje.get("ids:contentVersion", "")
+            if content_version and isinstance(content_version, str):
+                # Formato: algo_b64||fl_config::config_b64||from_coordinator::1
+                from_coord = False
+                if "||from_coordinator::1" in content_version:
+                    content_version = content_version.replace("||from_coordinator::1", "")
+                    from_coord = True
+                if "||fl_config::" in content_version:
+                    algo_part, config_part = content_version.split("||fl_config::", 1)
+                else:
+                    algo_part, config_part = content_version, None
+                payload_dict = {
+                    "type"            : "fl_algorithm",
+                    "content"         : algo_part,
+                    "config"          : config_part,
+                    "from_coordinator": from_coord,
+                }
+                log.info(f"[ArtifactRequest] fl_algorithm recuperado desde ids:contentVersion | config={'present' if config_part else 'absent'} | from_coordinator={from_coord}")
         if not payload_dict.get("type"):
             token     = mensaje.get("ids:securityToken", {})
             token_val = token.get("ids:tokenValue", "") if isinstance(token, dict) else ""
@@ -1428,6 +1474,17 @@ async def ids_data(request: Request):
 
             def _train_and_reply():
                 try:
+                    # Esperar a que algorithm.py esté disponible en disco
+                    # (puede llegar fl_global_weights antes de que se escriba el archivo)
+                    deadline_algo = time.time() + 15
+                    while time.time() < deadline_algo:
+                        if os.path.exists(ALGO_IDS_PATH) or os.path.exists(ALGO_BAKED_PATH):
+                            break
+                        log.info(f"[fl_global_weights] Esperando algorithm.py... (ronda {round_num})")
+                        time.sleep(1)
+                    else:
+                        log.error(f"[fl_global_weights] algorithm.py no disponible tras 15s — ronda {round_num} abortada")
+                        return
                     result = _train_local(global_weights_b64, round_num)
                     _send_local_weights(result["weights_b64"], result["n_samples"],
                                         result["metrics"], round_num)
