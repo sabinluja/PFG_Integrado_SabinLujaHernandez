@@ -52,7 +52,7 @@ Please [click here](https://engineering-ing-inf-rd.gitbook.io/true-connector/), 
     * [IDSCPv2 configuration](doc/modifyingConfiguration/idscp2.md)
   * [Advanced configuration](doc/advancedConfiguration/advanced-configuration.md)
     * [OCSP](doc/advancedConfiguration/ocsp.md) 
-    * [Supported Identity Providers](doc/advancedConfiguration/identityproviders.md)
+    * [Supported Identity Providers](doc/advancedConfiguration/.md)
     * [Extended jwt validation](doc/advancedConfiguration/extendedjwt.md)
     * [Convert keystorage files](doc/advancedConfiguration/convert_keystorage.md)
     * [Validate protocol](doc/advancedConfiguration/validateprotocol.md)

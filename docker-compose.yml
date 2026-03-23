@@ -282,6 +282,8 @@ services:
         condition: service_started
       broker-core:
         condition: service_healthy
+      ecc-worker1:
+        condition: service_healthy
 
   be-dataapp-worker2:
     build:
@@ -382,6 +384,8 @@ services:
         condition: service_started
       broker-core:
         condition: service_healthy
+      ecc-worker2:
+        condition: service_healthy
 
   be-dataapp-worker3:
     build:
@@ -433,6 +437,45 @@ services:
   #     porque su URI no está en PEER_CONNECTOR_URIS de los workers 1-3
   # ===========================================================================
 
+  be-dataapp-worker4:
+    build:
+      context: ./ia-dataapp
+      dockerfile: Dockerfile
+    image: ia-dataapp:latest
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1024M
+    logging:
+      options:
+        max-size: "100M"
+    networks:
+      - idsa
+    container_name: be-dataapp-worker4
+    ports:
+      - "5004:8500"
+    environment:
+      - INSTANCE_ID=4
+      - ECC_HOSTNAME=ecc-worker4
+      - ISSUER_CONNECTOR_URI=${WORKER4_ISSUER_CONNECTOR_URI}
+      - PEER_ECC_URLS=
+      - PEER_CONNECTOR_URIS=
+      - FL_AUTHORIZED_URIS=
+      - BROKER_URL=${BROKER_URL}
+      - FL_ROUNDS=${FL_ROUNDS}
+      - ROUND_TIMEOUT=${ROUND_TIMEOUT}
+      - TZ=Europe/Rome
+    volumes:
+      - ./ia-dataapp/data/worker4:/home/nobody/data/
+      - ./ia-dataapp/log:/home/nobody/log
+      - ./certs:/cert
+      - ./certs/dataapp/worker4:/cert/dataapp
+      - ./omejdn/keys/worker4.cert:/cert/daps/worker.cert
+      - ./omejdn/keys/worker4.key:/cert/daps/worker.key
+    depends_on:
+      - ecc-worker4
+  
   ecc-worker4:
     image: rdlabengpa/ids_execution_core_container:v1.14.8
     deploy:
@@ -489,45 +532,8 @@ services:
         condition: service_started
       broker-core:
         condition: service_healthy
-
-  be-dataapp-worker4:
-    build:
-      context: ./ia-dataapp
-      dockerfile: Dockerfile
-    image: ia-dataapp:latest
-    deploy:
-      resources:
-        limits:
-          cpus: "1"
-          memory: 1024M
-    logging:
-      options:
-        max-size: "100M"
-    networks:
-      - idsa
-    container_name: be-dataapp-worker4
-    ports:
-      - "5004:8500"
-    environment:
-      - INSTANCE_ID=4
-      - ECC_HOSTNAME=ecc-worker4
-      - ISSUER_CONNECTOR_URI=${WORKER4_ISSUER_CONNECTOR_URI}
-      - PEER_ECC_URLS=
-      - PEER_CONNECTOR_URIS=
-      - FL_AUTHORIZED_URIS=
-      - BROKER_URL=${BROKER_URL}
-      - FL_ROUNDS=${FL_ROUNDS}
-      - ROUND_TIMEOUT=${ROUND_TIMEOUT}
-      - TZ=Europe/Rome
-    volumes:
-      - ./ia-dataapp/data/worker4:/home/nobody/data/
-      - ./ia-dataapp/log:/home/nobody/log
-      - ./certs:/cert
-      - ./certs/dataapp/worker4:/cert/dataapp
-      - ./omejdn/keys/worker4.cert:/cert/daps/worker.cert
-      - ./omejdn/keys/worker4.key:/cert/daps/worker.key
-    depends_on:
-      - ecc-worker4
+      ecc-worker3:
+        condition: service_healthy
 
 networks:
   idsa: {}   # red única — todos los contenedores se ven entre sí

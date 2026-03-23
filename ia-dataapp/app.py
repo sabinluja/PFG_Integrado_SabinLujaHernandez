@@ -747,7 +747,6 @@ def _train_local(global_weights_b64: str, round_num: int) -> dict:
 def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                           weights_b64: str, round_num: int):
     try:
-        import base64 as _b64
         fl_payload = {
             "type"              : "fl_global_weights",
             "round"             : round_num,
@@ -756,14 +755,12 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
             "coordinator_ecc"   : f"https://{ECC_HOSTNAME}:8889/data",
             "coordinator_uri"   : CONNECTOR_URI,
         }
-        payload_b64 = _b64.b64encode(json.dumps(fl_payload).encode()).decode()
         _ids_send(
             peer_ecc_url, peer_conn_uri, "ids:ArtifactRequestMessage",
             requested_artifact=(
                 f"http://w3id.org/engrd/connector/artifact/fl_global_round{round_num}"
             ),
-            header_content=payload_b64,
-            header_content_type="fl_global_weights",
+            extra_header={"ids:contentVersion": f"fl_global_weights::round{round_num}"},
             payload=fl_payload,
         )
         log.info(f"Pesos globales ronda {round_num} → {peer_ecc_url} ✅")
@@ -777,7 +774,6 @@ def _send_local_weights(weights_b64: str, n_samples: int,
         log.error("coordinator_ecc_url no definido")
         return
     try:
-        import base64 as _b64
         fl_payload = {
             "type"       : "fl_weights",
             "instance_id": INSTANCE_ID,
@@ -786,7 +782,6 @@ def _send_local_weights(weights_b64: str, n_samples: int,
             "n_samples"  : n_samples,
             "metrics"    : metrics,
         }
-        payload_b64 = _b64.b64encode(json.dumps(fl_payload).encode()).decode()
         _ids_send(
             coordinator_ecc_url,
             coordinator_conn_uri or CONNECTOR_URI,
@@ -794,8 +789,7 @@ def _send_local_weights(weights_b64: str, n_samples: int,
             requested_artifact=(
                 f"http://w3id.org/engrd/connector/artifact/fl_weights_worker{INSTANCE_ID}"
             ),
-            header_content=payload_b64,
-            header_content_type="fl_weights",
+            extra_header={"ids:contentVersion": f"fl_weights::worker{INSTANCE_ID}::round{round_num}"},
             payload=fl_payload,
         )
         log.info(f"Pesos ronda {round_num} enviados al coordinator ✅")
