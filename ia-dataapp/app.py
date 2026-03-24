@@ -78,12 +78,8 @@ PEER_CONNECTOR_URIS = [
 BROKER_URL = os.getenv("BROKER_URL", "https://broker-reverseproxy/infrastructure")
 BROKER_SPARQL_URL = "http://broker-fuseki:3030/connectorData/sparql"
 
-# URIs autorizadas para FL (vacío = este worker no participa)
-FL_AUTHORIZED_URIS = [
-    u.strip()
-    for u in os.getenv("FL_AUTHORIZED_URIS", "").split(",")
-    if u.strip()
-]
+# Permite a un worker auto-excluirse del entrenamiento FL (Data Sovereignty)
+FL_OPT_OUT = os.getenv("FL_OPT_OUT", "false").lower() == "true"
 
 # Credenciales para la API interna del ECC
 API_USER = "apiUser"
@@ -187,14 +183,14 @@ async def _startup_identity_log():
     log.info(f"  BROKER_SPARQL   : {BROKER_SPARQL_URL}")
     log.info(f"  PEER_ECC_URLS   : {PEER_ECC_URLS or '(vacío — se rellenará via broker)'}")
     log.info(f"  PEER_CONN_URIS  : {PEER_CONNECTOR_URIS or '(vacío — se rellenará via broker)'}")
-    if FL_AUTHORIZED_URIS:
-        log.info(f"  FL_AUTHORIZED_URIS: {FL_AUTHORIZED_URIS}")
-    else:
+    if FL_OPT_OUT:
         log.warning(
-            f"  FL_AUTHORIZED_URIS: (vacío) — "
+            f"  FL_OPT_OUT      : True — "
             f"worker-{INSTANCE_ID} NO participará en FL. "
-            "Los ContractRequestMessage de coordinators serán rechazados."
+            "Los ContractRequestMessage de coordinators serán rechazados por política de datos."
         )
+    else:
+        log.info("  FL_OPT_OUT      : False (Participará en entrenamientos FL válidos).")
     log.info("=" * 60)
 
 
@@ -436,10 +432,22 @@ def _infer_connector_uri(ecc_url: str) -> str:
     for url, uri in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS):
         if url in ecc_url or ecc_url in url:
             return uri
-    import re
-    m = re.search(r"ecc-worker(\d+)", ecc_url)
-    if m:
-        return f"http://w3id.org/engrd/connector/worker{m.group(1)}"
+            
+    # Inferencia dinámica usando el catálogo del Broker en lugar de regex estática
+    try:
+        connectors = _get_registered_connectors()
+        from urllib.parse import urlparse
+        for c in connectors:
+            ep = c.get("endpoint", "")
+            if ep:
+                hostname = urlparse(ep).hostname
+                if hostname and hostname in ecc_url:
+                    return c["connector_uri"]
+            if c["connector_uri"] == ecc_url:
+                return c["connector_uri"]
+    except Exception as e:
+        log.warning(f"Error infiriendo URI dinámicamente dinámicamente: {e}")
+        
     return ecc_url
 
 
@@ -1027,15 +1035,13 @@ def _get_peer_columns(ecc_url: str, connector_uri: str) -> tuple:
 
 
 def _ecc_url_from_connector_uri(connector_uri: str, endpoint: str) -> str:
+    from urllib.parse import urlparse
     if endpoint:
-        import re
-        m = re.search(r"(ecc-worker\d+)", endpoint)
-        if m:
-            return f"https://{m.group(1)}:8889/data"
-    import re
-    m = re.search(r"worker(\d+)", connector_uri)
-    if m:
-        return f"https://ecc-worker{m.group(1)}:8889/data"
+        parsed = urlparse(endpoint)
+        if parsed.hostname:
+            return f"https://{parsed.hostname}:8889/data"
+    
+    # El regex rígido fue eliminado para favorecer la parametrización pura del DAPS/Broker.
     return ""
 
 
@@ -1306,10 +1312,10 @@ async def ids_data(request: Request):
 
         consumer_uri = mensaje.get("ids:issuerConnector", {}).get("@id", "")
 
-        if not FL_AUTHORIZED_URIS:
+        if FL_OPT_OUT:
             log.warning(
                 f"[ContractRequest] PARTICIPACIÓN DENEGADA — "
-                f"worker-{INSTANCE_ID} no está autorizado a participar en FL\n"
+                f"worker-{INSTANCE_ID} ha optado por no compartir datos (Soberanía)\n"
                 f"  Solicitante: {consumer_uri!r}"
             )
             rejection_header = _resp(
@@ -1318,32 +1324,48 @@ async def ids_data(request: Request):
             )
             return _multipart_response(rejection_header, json.dumps({
                 "status"  : "rejected",
-                "reason"  : "fl_participation_denied",
+                "reason"  : "fl_opt_out",
                 "worker"  : INSTANCE_ID,
                 "message" : (
                     f"Worker {INSTANCE_ID} has opted out of federated learning participation. "
-                    "This connector is registered in the broker but does not share its data."
+                    "This connector is registered in the broker but does not share its data (Data Sovereignty rules)."
                 )
             }))
 
-        if FL_AUTHORIZED_URIS and consumer_uri not in FL_AUTHORIZED_URIS:
-            log.warning(
-                f"[ContractRequest] ACCESO DENEGADO — connector no autorizado: {consumer_uri!r}\n"
-                f"  Peers autorizados: {FL_AUTHORIZED_URIS}"
-            )
-            rejection_header = _resp(
-                "ids:RejectionMessage", "rejectionMessage",
-                {"ids:rejectionReason": {"@id": "https://w3id.org/idsa/code/NOT_AUTHORIZED"}}
-            )
-            return _multipart_response(rejection_header, json.dumps({
-                "status"  : "rejected",
-                "reason"  : "unauthorized_consumer",
-                "consumer": consumer_uri,
-                "message" : (
-                    f"Connector {consumer_uri!r} is not authorised to access "
-                    "this federated learning resource."
-                )
-            }))
+        # ── Verificar si el consumer está autorizado en el contrato FL restringido ──
+        # El modelo FL publicado usa connector-restricted-policy con ids:constraint IN [peers].
+        # Si el solicitante no está en esa lista, rechazamos con unauthorized_consumer.
+        if _published_fl_contract and consumer_uri:
+            _perms      = _published_fl_contract.get("ids:permission", [])
+            _perm       = (_perms or [{}])[0]
+            _desc_list  = _perm.get("ids:description", [{}])
+            _desc_val   = (_desc_list[0].get("@value", "") if _desc_list else "")
+            if _desc_val == "connector-restricted-policy":
+                _constraints  = _perm.get("ids:constraint", [])
+                _constraint   = (_constraints or [{}])[0]
+                _allowed_uris = [
+                    v.get("@value") or v.get("@id", "")
+                    for v in _constraint.get("ids:rightOperand", [])
+                ]
+                if _allowed_uris and consumer_uri not in _allowed_uris:
+                    log.warning(
+                        f"[ContractRequest] ACCESO DENEGADO — {consumer_uri!r} "
+                        f"no está en la lista de peers autorizados del modelo FL.\n"
+                        f"  Autorizados: {_allowed_uris}"
+                    )
+                    _rej_header = _resp(
+                        "ids:RejectionMessage", "rejectionMessage",
+                        {"ids:rejectionReason": {"@id": "https://w3id.org/idsa/code/NOT_AUTHORIZED"}}
+                    )
+                    return _multipart_response(_rej_header, json.dumps({
+                        "status"  : "rejected",
+                        "reason"  : "unauthorized_consumer",
+                        "consumer": consumer_uri,
+                        "message" : (
+                            f"Consumer {consumer_uri!r} is not in the authorized peer list "
+                            "for this FL model contract (connector-restricted-policy)."
+                        ),
+                    }))
 
         if not contract_offer_id:
             try:
