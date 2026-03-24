@@ -1,14 +1,14 @@
 [
   {
     "round": 1,
-    "worker": "2",
-    "n_samples": 20746,
+    "worker": "3",
+    "n_samples": 17120,
     "metrics": {
-      "loss": 0.237071,
-      "accuracy": 0.895295,
-      "auc": 0.968732,
-      "precision": 0.873303,
-      "recall": 0.933408
+      "loss": 0.221575,
+      "accuracy": 0.905841,
+      "auc": 0.973413,
+      "precision": 0.881392,
+      "recall": 0.903784
     },
     "input_dim": 37,
     "feature_cols": [
@@ -53,14 +53,14 @@
   },
   {
     "round": 2,
-    "worker": "2",
-    "n_samples": 20746,
+    "worker": "3",
+    "n_samples": 17120,
     "metrics": {
-      "loss": 0.221585,
-      "accuracy": 0.904358,
-      "auc": 0.971484,
-      "precision": 0.901621,
-      "recall": 0.914425
+      "loss": 0.210876,
+      "accuracy": 0.907009,
+      "auc": 0.976254,
+      "precision": 0.857143,
+      "recall": 0.941558
     },
     "input_dim": 37,
     "feature_cols": [
@@ -105,14 +105,14 @@
   },
   {
     "round": 3,
-    "worker": "2",
-    "n_samples": 20746,
+    "worker": "3",
+    "n_samples": 17120,
     "metrics": {
-      "loss": 0.195756,
-      "accuracy": 0.919977,
-      "auc": 0.976827,
-      "precision": 0.925009,
-      "recall": 0.921944
+      "loss": 0.19797,
+      "accuracy": 0.917757,
+      "auc": 0.975345,
+      "precision": 0.911073,
+      "recall": 0.889636
     },
     "input_dim": 37,
     "feature_cols": [
@@ -157,14 +157,14 @@
   },
   {
     "round": 4,
-    "worker": "2",
-    "n_samples": 20746,
+    "worker": "3",
+    "n_samples": 17120,
     "metrics": {
-      "loss": 0.181008,
-      "accuracy": 0.924026,
-      "auc": 0.980845,
-      "precision": 0.908741,
-      "recall": 0.951318
+      "loss": 0.171093,
+      "accuracy": 0.928972,
+      "auc": 0.981632,
+      "precision": 0.919373,
+      "recall": 0.91121
     },
     "input_dim": 37,
     "feature_cols": [
@@ -209,14 +209,14 @@
   },
   {
     "round": 5,
-    "worker": "2",
-    "n_samples": 20746,
+    "worker": "3",
+    "n_samples": 17120,
     "metrics": {
-      "loss": 0.16541,
-      "accuracy": 0.930004,
-      "auc": 0.983179,
-      "precision": 0.930299,
-      "recall": 0.939993
+      "loss": 0.159373,
+      "accuracy": 0.932944,
+      "auc": 0.98402,
+      "precision": 0.908077,
+      "recall": 0.937466
     },
     "input_dim": 37,
     "feature_cols": [

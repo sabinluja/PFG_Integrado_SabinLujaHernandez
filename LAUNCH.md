@@ -43,6 +43,7 @@ docker compose build --no-cache ia-dataapp-3
 docker compose build --no-cache be-dataapp-consumer
 docker compose up -d
 
+docker compose down -v
 docker compose build be-dataapp-worker1
 docker compose up -d
 

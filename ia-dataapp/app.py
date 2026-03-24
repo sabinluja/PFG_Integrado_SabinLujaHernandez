@@ -2,18 +2,26 @@
 app.py  —  IA DataApp Worker/Coordinator
 =========================================
 
-Flujo desde Postman (tú eres el coordinator en worker-1):
-  1. POST /proxy  DescriptionRequestMessage → ecc-worker2:8889/data
-  2. POST /proxy  ContractRequestMessage    → ecc-worker2:8889/data
-  3. POST /proxy  ContractAgreementMessage  → ecc-worker2:8889/data
-  4. POST /proxy  ArtifactRequestMessage    → ecc-worker2:8889/data
-     payload: {
-       "type": "fl_algorithm",
-       "content": "<base64 de algorithm.py>",
-       "config": "<base64 de fl_config.json>"   ← NUEVO
-     }
-     → worker-2 recibe algorithm.py + fl_config.json, se convierte en COORDINATOR,
-       distribuye ambos a los workers y arranca el FL con los parámetros del JSON.
+Cualquier worker puede ser coordinator — se elige en Postman enviando el
+algoritmo (fl_algorithm) al worker destino via IDS/TRUE Connector.
+
+Flujo completo con Broker + DAPS (pasos Postman):
+  Pasos 1-4  — Negociación IDS manual (proxy → ecc destino)
+               El worker receptor recibe algorithm.py + fl_config.json
+               y se convierte en COORDINATOR.
+
+  Paso 5a    — POST /broker/discover   → coordinator consulta Fuseki SPARQL
+                                          y descubre workers compatibles.
+  Paso 5b    — POST /fl/negotiate      → coordinator negocia contratos IDS
+                                          con los workers compatibles del broker.
+                                          Worker4 (FL_AUTHORIZED_URIS vacío) es
+                                          rechazado automáticamente.
+  Paso 5c    — POST /fl/start          → coordinator envía algoritmo + pesos
+                                          a los workers aceptados y arranca FL.
+
+  Pasos 13-17 — Verificación del modelo publicado y control de acceso.
+               Worker4 no puede negociar contrato del recurso FL porque
+               su CONNECTOR_URI no aparece en ids:rightOperand del constraint.
 
   El fl_config.json se guarda en /home/nobody/data/fl_config.json.
   Los parámetros FL_ROUNDS y ROUND_TIMEOUT ya NO vienen de variables de entorno.
@@ -100,11 +108,6 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # =============================================================================
 
 def _load_fl_config() -> dict:
-    """
-    Lee fl_config.json guardado en DATA_DIR.
-    Si no existe, devuelve valores por defecto.
-    Estos valores también los lee algorithm.py directamente en cada ronda.
-    """
     defaults = {
         "rounds"       : 5,
         "round_timeout": 180,
@@ -144,8 +147,7 @@ _published_fl_contract: dict = {}
 coordinator_ecc_url  = None
 coordinator_conn_uri = None
 
-# Workers aceptados tras /fl/negotiate — usados por /fl/start
-_accepted_workers: list = []  # [{ connector_uri, ecc_url, match_ratio }, ...]
+_accepted_workers: list = []
 _negotiate_lock = threading.Lock()
 
 fl_state = {
@@ -170,8 +172,30 @@ app = FastAPI(
         "Sustituye al Java DataApp del TRUE Connector. "
         "POST /proxy para Postman. POST /data para el ECC."
     ),
-    version="7.0.0",
+    version="7.2.0",
 )
+
+
+@app.on_event("startup")
+async def _startup_identity_log():
+    """Log de identidad IDS al arrancar — facilita debug con broker y DAPS."""
+    log.info("=" * 60)
+    log.info(f"  IA DataApp arrancando — Worker {INSTANCE_ID}")
+    log.info(f"  CONNECTOR_URI   : {CONNECTOR_URI}")
+    log.info(f"  ECC_HOSTNAME    : {ECC_HOSTNAME}")
+    log.info(f"  BROKER_URL      : {BROKER_URL}")
+    log.info(f"  BROKER_SPARQL   : {BROKER_SPARQL_URL}")
+    log.info(f"  PEER_ECC_URLS   : {PEER_ECC_URLS or '(vacío — se rellenará via broker)'}")
+    log.info(f"  PEER_CONN_URIS  : {PEER_CONNECTOR_URIS or '(vacío — se rellenará via broker)'}")
+    if FL_AUTHORIZED_URIS:
+        log.info(f"  FL_AUTHORIZED_URIS: {FL_AUTHORIZED_URIS}")
+    else:
+        log.warning(
+            f"  FL_AUTHORIZED_URIS: (vacío) — "
+            f"worker-{INSTANCE_ID} NO participará en FL. "
+            "Los ContractRequestMessage de coordinators serán rechazados."
+        )
+    log.info("=" * 60)
 
 
 # =============================================================================
@@ -190,9 +214,7 @@ def _ids_context() -> dict:
 
 
 # =============================================================================
-# Token DAT real — obtenido del DAPS usando los certificados DAPS del worker
-# Montados en /cert/daps/worker.cert y /cert/daps/worker.key
-# (omejdn/keys/workerX.cert y omejdn/keys/workerX.key)
+# Token DAT real
 # =============================================================================
 
 CERT_PATH      = "/cert/daps/worker.cert"
@@ -203,14 +225,6 @@ _dat_cache: dict = {"token": None, "exp": 0}
 
 
 def _get_dat_token() -> str:
-    """
-    Obtiene el token DAT real del DAPS (Omejdn) usando el certificado
-    DAPS del worker montado en /cert/daps/.
-
-    El token se cachea hasta 30s antes de su expiración.
-    Si falla, devuelve None y _security_token() usará DummyTokenValue.
-    """
-    import time
     import jwt as pyjwt
     from cryptography.hazmat.primitives.serialization import load_pem_private_key
     from cryptography import x509 as _x509
@@ -218,7 +232,6 @@ def _get_dat_token() -> str:
 
     now = int(time.time())
 
-    # Devolver cacheado si aún es válido
     if _dat_cache["token"] and _dat_cache["exp"] > now + 30:
         return _dat_cache["token"]
 
@@ -227,7 +240,6 @@ def _get_dat_token() -> str:
     with open(KEY_PATH, "rb") as f:
         private_key = load_pem_private_key(f.read(), password=None)
 
-    # Construir client_id desde SKI y AKI del certificado
     cert = _x509.load_pem_x509_certificate(cert_pem, default_backend())
     ski_ext = cert.extensions.get_extension_for_class(_x509.SubjectKeyIdentifier)
     aki_ext = cert.extensions.get_extension_for_class(_x509.AuthorityKeyIdentifier)
@@ -235,7 +247,6 @@ def _get_dat_token() -> str:
     aki_fmt = ":".join(f"{b:02X}" for b in aki_ext.value.key_identifier)
     client_id = f"{ski_fmt}:keyid:{aki_fmt}"
 
-    # Construir client_assertion JWT firmado con la clave privada
     assertion = pyjwt.encode(
         {
             "iss": client_id,
@@ -264,7 +275,6 @@ def _get_dat_token() -> str:
     resp.raise_for_status()
     token = resp.json()["access_token"]
 
-    # Cachear hasta expiración
     decoded = pyjwt.decode(token, options={"verify_signature": False})
     _dat_cache["token"] = token
     _dat_cache["exp"]   = decoded.get("exp", now + 3600)
@@ -393,7 +403,6 @@ async def proxy(request: Request):
     try:
         corr_msg = body.get("correlationMessage") or transfer_contract or None
 
-        # fl_algorithm: DAT real en securityToken + algoritmo en ids:contentVersion
         fl_extra = {}
         if isinstance(payload_in, dict) and payload_in.get("type") == "fl_algorithm":
             algo_b64   = payload_in.get("content", "") or ""
@@ -497,7 +506,6 @@ def _ids_send(
         header_dict.update(extra_header)
     str_header  = json.dumps(header_dict)
 
-    # Route through local ECC so it replaces the tokenValue with real DAT
     actual_url = forward_to_url
     if use_local_ecc:
         actual_url = f"https://ecc-worker{INSTANCE_ID}:8887/incoming-data-app/multipartMessageBodyFormData"
@@ -553,15 +561,12 @@ def _ids_send(
 
 
 # =============================================================================
-# Negociación IDS completa — coordinator → peer (enviar algorithm.py + config)
+# Negociación IDS completa — coordinator → peer
 # =============================================================================
 
 def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
                                    artifact_bytes: bytes,
                                    config_bytes: bytes) -> bool:
-    """
-    4 pasos IDS para enviar algorithm.py + fl_config.json a un peer worker.
-    """
     log.info(f"[coordinator] Negociación con {peer_ecc_url}")
     try:
         desc     = _ids_send(peer_ecc_url, peer_conn_uri, "ids:DescriptionRequestMessage")
@@ -605,13 +610,8 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
         )
         log.info(f"[coordinator] 3/4 Acuerdo confirmado")
 
-        # Empaquetar algorithm.py + fl_config.json en el payload directamente
-        # NO usar header_content (sobreescribiría el securityToken con datos no-JWT)
-        # NO usar use_local_ecc (el ECC valida el token antes de pasar a la DataApp)
         algo_b64   = base64.b64encode(artifact_bytes).decode("utf-8")
         config_b64 = base64.b64encode(config_bytes).decode("utf-8")
-        # Incluir from_coordinator=1 en ids:contentVersion para que el worker
-        # sepa que viene del coordinator aunque el ECC filtre el payload
         combined   = f"{algo_b64}||fl_config::{config_b64}||from_coordinator::1"
 
         _ids_send(
@@ -654,7 +654,6 @@ def _save_algorithm(data: bytes):
 
 
 def _save_config(data: bytes):
-    """Guarda fl_config.json en DATA_DIR."""
     with open(CONFIG_PATH, "wb") as f:
         f.write(data)
     cfg = json.loads(data.decode())
@@ -729,7 +728,6 @@ def _save_local_metrics(result: dict, round_num: int):
 
 
 def _train_local(global_weights_b64: str, round_num: int) -> dict:
-    # Pasa CONFIG_PATH a algorithm.run() para que lea los hiperparámetros
     result = _load_algorithm().run(
         _csv_path(),
         global_weights_b64=global_weights_b64,
@@ -747,6 +745,8 @@ def _train_local(global_weights_b64: str, round_num: int) -> dict:
 def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                           weights_b64: str, round_num: int):
     try:
+        # Forzar renovación del token DAT antes de enviar
+        _dat_cache["exp"] = 0
         fl_payload = {
             "type"              : "fl_global_weights",
             "round"             : round_num,
@@ -755,12 +755,21 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
             "coordinator_ecc"   : f"https://{ECC_HOSTNAME}:8889/data",
             "coordinator_uri"   : CONNECTOR_URI,
         }
+        # Serializar payload completo en base64 dentro de ids:contentVersion
+        # como canal de respaldo por si el ECC descarta el payload multipart
+        payload_b64 = base64.b64encode(
+            json.dumps(fl_payload).encode()
+        ).decode()
+        content_version = (
+            f"fl_global_weights::round{round_num}"
+            f"::payload::{payload_b64}"
+        )
         _ids_send(
             peer_ecc_url, peer_conn_uri, "ids:ArtifactRequestMessage",
             requested_artifact=(
                 f"http://w3id.org/engrd/connector/artifact/fl_global_round{round_num}"
             ),
-            extra_header={"ids:contentVersion": f"fl_global_weights::round{round_num}"},
+            extra_header={"ids:contentVersion": content_version},
             payload=fl_payload,
         )
         log.info(f"Pesos globales ronda {round_num} → {peer_ecc_url} ✅")
@@ -774,6 +783,8 @@ def _send_local_weights(weights_b64: str, n_samples: int,
         log.error("coordinator_ecc_url no definido")
         return
     try:
+        # Forzar renovación del token DAT antes de enviar
+        _dat_cache["exp"] = 0
         fl_payload = {
             "type"       : "fl_weights",
             "instance_id": INSTANCE_ID,
@@ -782,6 +793,15 @@ def _send_local_weights(weights_b64: str, n_samples: int,
             "n_samples"  : n_samples,
             "metrics"    : metrics,
         }
+        # Serializar payload completo en base64 dentro de ids:contentVersion
+        # como canal de respaldo por si el ECC descarta el payload multipart
+        payload_b64 = base64.b64encode(
+            json.dumps(fl_payload).encode()
+        ).decode()
+        content_version = (
+            f"fl_weights::worker{INSTANCE_ID}::round{round_num}"
+            f"::payload::{payload_b64}"
+        )
         _ids_send(
             coordinator_ecc_url,
             coordinator_conn_uri or CONNECTOR_URI,
@@ -789,7 +809,7 @@ def _send_local_weights(weights_b64: str, n_samples: int,
             requested_artifact=(
                 f"http://w3id.org/engrd/connector/artifact/fl_weights_worker{INSTANCE_ID}"
             ),
-            extra_header={"ids:contentVersion": f"fl_weights::worker{INSTANCE_ID}::round{round_num}"},
+            extra_header={"ids:contentVersion": content_version},
             payload=fl_payload,
         )
         log.info(f"Pesos ronda {round_num} enviados al coordinator ✅")
@@ -797,7 +817,12 @@ def _send_local_weights(weights_b64: str, n_samples: int,
         log.error(f"Error enviando pesos locales: {exc}")
 
 
-def _publish_fl_model_as_ids_resource(global_weights_b64: str, global_metrics: dict, n_rounds: int):
+def _publish_fl_model_as_ids_resource(
+    global_weights_b64: str,
+    global_metrics: dict,
+    n_rounds: int,
+    peer_connector_uris: list = None,
+):
     from requests.auth import HTTPBasicAuth
     basic_api = HTTPBasicAuth(API_USER, API_PASS)
     ecc_base  = f"https://{ECC_HOSTNAME}:8449"
@@ -846,9 +871,15 @@ def _publish_fl_model_as_ids_resource(global_weights_b64: str, global_metrics: d
             log.error(f"[publish] Error creando recurso: {resp.status_code}")
             return
 
-        log.info("[publish] Añadiendo contrato restringido a peers (connector-restricted-policy)...")
+        log.info("[publish] Añadiendo contrato restringido a peers...")
+        # FIX 1: Usar snapshot inmutable de URIs aceptados en el momento del FL,
+        # no el global PEER_CONNECTOR_URIS que puede haber cambiado (race condition).
+        _authorized = peer_connector_uris if peer_connector_uris is not None else PEER_CONNECTOR_URIS
+        if not _authorized:
+            log.warning("[publish] peer_connector_uris vacío — el contrato FL no tendrá restricción de peers")
+        log.info(f"[publish] Peers autorizados en el contrato FL: {_authorized}")
         allowed_uris = [{"@value": u, "@type": "http://www.w3.org/2001/XMLSchema#anyURI"}
-                        for u in PEER_CONNECTOR_URIS]
+                        for u in _authorized]
         contract_body = {
             "@id"           : contract_id,
             "@type"         : "ids:ContractOffer",
@@ -910,7 +941,7 @@ def _publish_fl_model_as_ids_resource(global_weights_b64: str, global_metrics: d
         log.info(
             f"🎉 Modelo FL publicado como recurso IDS en coordinator-{INSTANCE_ID}\n"
             f"   Resource  : {resource_id}\n"
-            f"   Contrato  : {contract_id} (restringido a {len(PEER_CONNECTOR_URIS)} peers)"
+            f"   Contrato  : {contract_id} (restringido a {len(_authorized)} peers)"
         )
 
     except Exception as exc:
@@ -922,9 +953,6 @@ def _publish_fl_model_as_ids_resource(global_weights_b64: str, global_metrics: d
 # =============================================================================
 
 def _get_my_columns() -> list:
-    """
-    Devuelve las columnas del CSV local del coordinator.
-    """
     try:
         import pandas as pd
         csv = _csv_path()
@@ -938,10 +966,6 @@ def _get_my_columns() -> list:
 
 
 def _get_registered_connectors() -> list:
-    """
-    Consulta Fuseki directamente para obtener los conectores registrados en el broker.
-    Devuelve lista de dicts con {connector_uri, endpoint}.
-    """
     query = """
     SELECT DISTINCT ?connector ?endpoint WHERE {
       GRAPH ?g {
@@ -963,7 +987,7 @@ def _get_registered_connectors() -> list:
         for b in bindings:
             uri      = b.get("connector", {}).get("value", "")
             endpoint = b.get("endpoint",  {}).get("value", "")
-            if uri and uri != CONNECTOR_URI:  # excluir yo mismo
+            if uri and uri != CONNECTOR_URI:
                 connectors.append({"connector_uri": uri, "endpoint": endpoint})
         log.info(f"[broker-discover] {len(connectors)} conectores encontrados en el broker")
         return connectors
@@ -972,14 +996,10 @@ def _get_registered_connectors() -> list:
         return []
 
 
-def _get_peer_columns(ecc_url: str, connector_uri: str) -> list:
-    """
-    Obtiene las columnas del CSV de un peer consultando su self-description IDS
-    y leyendo el campo ids:keyword donde publica sus columnas.
-    """
+def _get_peer_columns(ecc_url: str, connector_uri: str) -> tuple:
     try:
         desc = _ids_send(ecc_url, connector_uri, "ids:DescriptionRequestMessage")
-        # Buscar keywords en la self-description — columnas publicadas como keywords
+        real_uri = desc.get("@id", "") or connector_uri
         catalogs = desc.get("ids:resourceCatalog", [])
         for catalog in catalogs:
             for resource in catalog.get("ids:offeredResource", []):
@@ -990,9 +1010,8 @@ def _get_peer_columns(ecc_url: str, connector_uri: str) -> list:
                     if val.startswith("col:"):
                         cols.append(val[4:])
                 if cols:
-                    log.info(f"[broker-discover] {connector_uri} → {len(cols)} columnas")
-                    return cols
-        # Fallback: intentar /dataset/columns endpoint
+                    log.info(f"[broker-discover] {real_uri} → {len(cols)} columnas")
+                    return cols, real_uri
         import re
         m = re.search(r"ecc-worker(\d+)", ecc_url)
         if m:
@@ -1000,18 +1019,14 @@ def _get_peer_columns(ecc_url: str, connector_uri: str) -> list:
             dataapp_url = f"https://be-dataapp-worker{wid}:8500/dataset/columns"
             r = requests.get(dataapp_url, verify=False, timeout=5)
             if r.ok:
-                return r.json().get("columns", [])
-        return []
+                return r.json().get("columns", []), real_uri
+        return [], real_uri
     except Exception as e:
         log.warning(f"[broker-discover] No se pudieron obtener columnas de {connector_uri}: {e}")
-        return []
+        return [], connector_uri
 
 
 def _ecc_url_from_connector_uri(connector_uri: str, endpoint: str) -> str:
-    """
-    Deriva la URL del ECC (puerto 8889) desde el endpoint IDS del conector.
-    Ejemplo: https://ecc-worker3:8449/api/ids/data → https://ecc-worker3:8889/data
-    """
     if endpoint:
         import re
         m = re.search(r"(ecc-worker\d+)", endpoint)
@@ -1025,13 +1040,6 @@ def _ecc_url_from_connector_uri(connector_uri: str, endpoint: str) -> str:
 
 
 def _discover_compatible_workers(my_columns: list) -> list:
-    """
-    Consulta el broker, obtiene self-descriptions y devuelve los peers
-    con columnas compatibles (intersección >= 80% de mis columnas).
-
-    Retorna lista de dicts:
-      { connector_uri, ecc_url, common_cols, match_ratio }
-    """
     connectors = _get_registered_connectors()
     if not connectors:
         log.warning("[broker-discover] No hay conectores en el broker")
@@ -1039,6 +1047,7 @@ def _discover_compatible_workers(my_columns: list) -> list:
 
     compatible = []
     my_set = set(c.lower() for c in my_columns)
+    my_ecc_url = f"https://{ECC_HOSTNAME}:8889/data"
 
     for conn in connectors:
         uri      = conn["connector_uri"]
@@ -1049,20 +1058,27 @@ def _discover_compatible_workers(my_columns: list) -> list:
             log.warning(f"[broker-discover] No se pudo derivar ECC URL para {uri}")
             continue
 
-        peer_cols  = _get_peer_columns(ecc_url, uri)
+        # Saltar propio coordinator (por URI o por ECC URL) — dinámico vía ECC_HOSTNAME
+        if uri == CONNECTOR_URI or ecc_url == my_ecc_url:
+            log.info(f"[broker-discover] Saltando propio connector: {uri}")
+            continue
+
+        peer_cols, real_uri = _get_peer_columns(ecc_url, uri)
+        if real_uri != uri:
+            log.info(f"[broker-discover] URI broker {uri!r} → URI IDS real {real_uri!r}")
         peer_set   = set(c.lower() for c in peer_cols)
         common     = my_set & peer_set
         match_ratio = len(common) / len(my_set) if my_set else 0
 
         log.info(
-            f"[broker-discover] {uri}\n"
+            f"[broker-discover] {real_uri}\n"
             f"  columnas peer: {len(peer_set)}  comunes: {len(common)}  "
             f"match: {match_ratio:.0%}"
         )
 
         if match_ratio >= 0.8:
             compatible.append({
-                "connector_uri": uri,
+                "connector_uri": real_uri,   # URI IDS nativa, no la del broker
                 "ecc_url"      : ecc_url,
                 "common_cols"  : sorted(common),
                 "match_ratio"  : round(match_ratio, 3),
@@ -1074,12 +1090,10 @@ def _discover_compatible_workers(my_columns: list) -> list:
 
 def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
              algo_bytes: bytes = None, config_bytes: bytes = None):
-    """
-    Bucle FL — parámetros leídos de fl_config.json.
-    El coordinator distribuye algorithm.py + fl_config.json a los peers
-    al inicio de CADA ronda, garantizando independencia entre rondas.
-    """
     global fl_state
+    # FIX 1: Snapshot inmutable de los peers aceptados al inicio del FL.
+    # Evita race condition si PEER_CONNECTOR_URIS cambia durante el entrenamiento.
+    _peers_snapshot = list(PEER_CONNECTOR_URIS)
 
     with _fl_lock:
         fl_state.update({"status": "running", "current_round": 0,
@@ -1108,7 +1122,6 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         _round_weights.clear()
         t0 = time.time()
 
-        # Distribuir algorithm.py + fl_config.json al inicio de cada ronda
         if algo_bytes:
             log.info(f"[ronda {round_num}] Distribuyendo algorithm.py + fl_config.json a peers…")
             with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(PEER_ECC_URLS), 1)) as ex:
@@ -1124,9 +1137,6 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                     except Exception as exc:
                         log.error(f"  [ronda {round_num}] → {peer}: ❌ {exc}")
 
-        # Esperar a que los peers hayan guardado el algoritmo antes de enviar pesos.
-        # Evita la condición de carrera: los pesos llegan antes de que algorithm.py
-        # esté escrito en disco y _load_algorithm() falla silenciosamente.
         if algo_bytes:
             time.sleep(3)
 
@@ -1206,7 +1216,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
 
     try:
         last_metrics = fl_state["history"][-1]["global_metrics"] if fl_state["history"] else {}
-        _publish_fl_model_as_ids_resource(global_weights_b64, last_metrics, n_rounds)
+        _publish_fl_model_as_ids_resource(global_weights_b64, last_metrics, n_rounds, peer_connector_uris=_peers_snapshot)
     except Exception as exc:
         log.error(f"Error publicando modelo IDS: {exc}")
 
@@ -1238,7 +1248,7 @@ async def ids_data(request: Request):
                     header_val = text
                 elif 'name="payload"' in disp:
                     payload_val = text
-                    log.info(f"[/data] payload_val (100 chars): {repr(payload_val[:100])}") 
+                    log.info(f"[/data] payload_val (100 chars): {repr(payload_val[:100])}")
                 elif not header_val and (text.startswith("{") or text.startswith("[")):
                     header_val = text
         except Exception as e:
@@ -1294,13 +1304,9 @@ async def ids_data(request: Request):
         payload_dict      = json.loads(payload_val) if payload_val else {}
         contract_offer_id = payload_dict.get("@id", "")
 
-        # ── Comprobación de acceso basada en FL_AUTHORIZED_URIS ──────────────
-        # Si FL_AUTHORIZED_URIS está vacío → este worker NO participa en FL
-        # (caso worker4: rechaza cualquier solicitud de contrato FL)
         consumer_uri = mensaje.get("ids:issuerConnector", {}).get("@id", "")
 
         if not FL_AUTHORIZED_URIS:
-            # Este worker no tiene URIs autorizadas → rechaza participar en FL
             log.warning(
                 f"[ContractRequest] PARTICIPACIÓN DENEGADA — "
                 f"worker-{INSTANCE_ID} no está autorizado a participar en FL\n"
@@ -1378,26 +1384,64 @@ async def ids_data(request: Request):
         except Exception:
             payload_dict = {}
 
-        # Recuperar desde ids:contentVersion si payload llegó vacío
+        # ── FIX BUG 1: Solo parsear ids:contentVersion como fl_algorithm
+        #    si NO es fl_global_weights:: ni fl_weights::
+        #    Antes este bloque asumía que CUALQUIER contentVersion era fl_algorithm,
+        #    lo que causaba que los pesos globales sobreescribieran algorithm.py
+        #    y convirtieran al worker en coordinator erróneamente.
         if not payload_dict.get("type"):
             content_version = mensaje.get("ids:contentVersion", "")
             if content_version and isinstance(content_version, str):
-                # Formato: algo_b64||fl_config::config_b64||from_coordinator::1
-                from_coord = False
-                if "||from_coordinator::1" in content_version:
-                    content_version = content_version.replace("||from_coordinator::1", "")
-                    from_coord = True
-                if "||fl_config::" in content_version:
-                    algo_part, config_part = content_version.split("||fl_config::", 1)
+                if (content_version.startswith("fl_global_weights::") or
+                        content_version.startswith("fl_weights::")):
+                    # El tipo y datos vienen del payload JSON — parsear explícitamente
+                    log.info(f"[ArtifactRequest] ids:contentVersion={content_version[:40]}... — parseando payload JSON")
+                    if payload_val:
+                        try:
+                            payload_dict = json.loads(payload_val)
+                            log.info(f"[ArtifactRequest] payload_dict parseado desde payload_val: type={payload_dict.get('type','?')!r}")
+                        except Exception as _pe:
+                            log.error(f"[ArtifactRequest] Error parseando payload_val para {content_version[:30]}: {_pe}")
+                    # Si payload_val está vacío o falló el parse, intentar extraer
+                    # el payload serializado en base64 dentro del contentVersion
+                    # (canal de respaldo usado por _send_local_weights y _send_global_weights)
+                    if not payload_dict.get("type"):
+                        _cv = content_version
+                        # fl_weights::workerX::roundN::payload::<b64>
+                        if "::payload::" in _cv:
+                            try:
+                                _b64_payload = _cv.split("::payload::", 1)[1]
+                                payload_dict = json.loads(base64.b64decode(_b64_payload).decode())
+                                log.info(f"[ArtifactRequest] payload recuperado desde contentVersion b64: type={payload_dict.get('type','?')!r}")
+                            except Exception as _e:
+                                log.error(f"[ArtifactRequest] Error decodificando payload b64 de contentVersion: {_e}")
+                    # Último recurso: inferir solo el tipo desde el prefijo
+                    if not payload_dict.get("type"):
+                        if content_version.startswith("fl_global_weights::"):
+                            payload_dict["type"] = "fl_global_weights"
+                            log.warning("[ArtifactRequest] type inferido desde contentVersion: fl_global_weights (payload vacío)")
+                        elif content_version.startswith("fl_weights::"):
+                            payload_dict["type"] = "fl_weights"
+                            log.warning("[ArtifactRequest] type inferido desde contentVersion: fl_weights (payload vacío — pesos perdidos)")
                 else:
-                    algo_part, config_part = content_version, None
-                payload_dict = {
-                    "type"            : "fl_algorithm",
-                    "content"         : algo_part,
-                    "config"          : config_part,
-                    "from_coordinator": from_coord,
-                }
-                log.info(f"[ArtifactRequest] fl_algorithm recuperado desde ids:contentVersion | config={'present' if config_part else 'absent'} | from_coordinator={from_coord}")
+                    # Es fl_algorithm — extraer algoritmo y config
+                    from_coord = False
+                    if "||from_coordinator::1" in content_version:
+                        content_version = content_version.replace("||from_coordinator::1", "")
+                        from_coord = True
+                    if "||fl_config::" in content_version:
+                        algo_part, config_part = content_version.split("||fl_config::", 1)
+                    else:
+                        algo_part, config_part = content_version, None
+                    payload_dict = {
+                        "type"            : "fl_algorithm",
+                        "content"         : algo_part,
+                        "config"          : config_part,
+                        "from_coordinator": from_coord,
+                    }
+                    log.info(f"[ArtifactRequest] fl_algorithm recuperado desde ids:contentVersion | config={'present' if config_part else 'absent'} | from_coordinator={from_coord}")
+
+        # Fallback: intentar recuperar desde ids:securityToken.ids:tokenValue
         if not payload_dict.get("type"):
             token     = mensaje.get("ids:securityToken", {})
             token_val = token.get("ids:tokenValue", "") if isinstance(token, dict) else ""
@@ -1409,7 +1453,6 @@ async def ids_data(request: Request):
                     payload_b64 = rest[len("from_coordinator::"):] if from_coord else rest
 
                     if prefix == "fl_algorithm":
-                        # Separar algorithm.py de fl_config.json si vienen juntos
                         if "||fl_config::" in payload_b64:
                             algo_part, config_part = payload_b64.split("||fl_config::", 1)
                         else:
@@ -1428,7 +1471,7 @@ async def ids_data(request: Request):
                             log.error(f"[ArtifactRequest] Error decodificando tokenValue {prefix}: {e}")
                     break
 
-        # También intentar extraer config del payload JSON si viene por esa vía
+        # Intentar extraer config del payload JSON si falta
         if payload_dict.get("type") == "fl_algorithm" and not payload_dict.get("config"):
             if payload_val:
                 try:
@@ -1439,6 +1482,7 @@ async def ids_data(request: Request):
                     pass
 
         artifact_type = payload_dict.get("type", "")
+        log.info(f"[ArtifactRequest] artifact_type={artifact_type!r}")
         resp_h = _resp(
             "ids:ArtifactResponseMessage", "artifactResponseMessage",
             {"ids:transferContract": mensaje.get("ids:transferContract", {})}
@@ -1446,15 +1490,30 @@ async def ids_data(request: Request):
 
         # fl_weights — pesos locales de un worker → coordinator acumula
         if artifact_type == "fl_weights":
-            sender    = payload_dict.get("instance_id", "?")
-            round_num = payload_dict.get("round", 0)
+            sender      = payload_dict.get("instance_id", "?")
+            round_num   = payload_dict.get("round", 0)
+            weights_b64 = payload_dict.get("weights_b64")
+            n_samples   = payload_dict.get("n_samples")
+            metrics     = payload_dict.get("metrics")
             log.info(f"Pesos de worker-{sender} (ronda {round_num})")
+            if not weights_b64 or n_samples is None or metrics is None:
+                log.error(
+                    f"[fl_weights] Payload incompleto desde worker-{sender} ronda {round_num} — "
+                    f"weights={'present' if weights_b64 else 'MISSING'}  "
+                    f"n_samples={n_samples}  metrics={'present' if metrics else 'MISSING'}"
+                )
+                return _multipart_response(resp_h, json.dumps({
+                    "status": "error",
+                    "reason": "incomplete_payload",
+                    "from"  : sender,
+                }))
             with _round_lock:
                 _round_weights[sender] = {
-                    "weights_b64": payload_dict["weights_b64"],
-                    "n_samples"  : payload_dict["n_samples"],
-                    "metrics"    : payload_dict["metrics"],
+                    "weights_b64": weights_b64,
+                    "n_samples"  : n_samples,
+                    "metrics"    : metrics,
                 }
+            log.info(f"[fl_weights] ✅ Pesos de worker-{sender} ronda {round_num} acumulados ({len(_round_weights)} total)")
             return _multipart_response(resp_h, json.dumps({"status": "weights_received", "from": sender}))
 
         # fl_global_weights — worker entrena localmente
@@ -1463,13 +1522,28 @@ async def ids_data(request: Request):
             global_weights_b64 = payload_dict.get("global_weights_b64")
 
             if not coordinator_ecc_url:
-                coordinator_ecc_url  = payload_dict.get("coordinator_ecc")
-                coordinator_conn_uri = payload_dict.get("coordinator_uri")
+                # Intentar desde payload JSON primero
+                _coord_ecc  = payload_dict.get("coordinator_ecc")
+                _coord_uri  = payload_dict.get("coordinator_uri")
+                # Fallback: inferir desde issuerConnector del mensaje IDS (siempre disponible)
+                if not _coord_ecc:
+                    _issuer = mensaje.get("ids:issuerConnector", {})
+                    if isinstance(_issuer, dict):
+                        _issuer_id = _issuer.get("@id", "")
+                    else:
+                        _issuer_id = str(_issuer)
+                    import re as _re2
+                    m = _re2.search(r"worker(\d+)", _issuer_id)
+                    if m:
+                        cid = m.group(1)
+                        _coord_ecc = f"https://ecc-worker{cid}:8889/data"
+                        _coord_uri = f"http://w3id.org/engrd/connector/worker{cid}"
+                        log.info(f"[fl_global_weights] coordinator_ecc_url inferido del issuerConnector: {_coord_ecc}")
+                coordinator_ecc_url  = _coord_ecc
+                coordinator_conn_uri = _coord_uri
 
             def _train_and_reply():
                 try:
-                    # Esperar a que algorithm.py esté disponible en disco
-                    # (puede llegar fl_global_weights antes de que se escriba el archivo)
                     deadline_algo = time.time() + 15
                     while time.time() < deadline_algo:
                         if os.path.exists(ALGO_IDS_PATH) or os.path.exists(ALGO_BAKED_PATH):
@@ -1500,7 +1574,6 @@ async def ids_data(request: Request):
 
             _save_algorithm(algo_bytes)
 
-            # Guardar fl_config.json si viene en el mensaje
             if config_b64:
                 try:
                     config_bytes = base64.b64decode(config_b64)
@@ -1551,16 +1624,6 @@ async def ids_data_get():
 
 @app.post("/fl/start")
 async def fl_start(request: Request):
-    """
-    PASO 7 — Envía algoritmo + fl_config a los workers aceptados y arranca el FL.
-
-    Usa los workers guardados en memoria por /fl/negotiate (paso 6).
-    Si no se ejecutó /fl/negotiate, usa PEER_ECC_URLS del .env como fallback.
-
-    En un solo paso:
-    1. Envía algorithm.py + fl_config.json a cada worker aceptado (IDS ArtifactRequest)
-    2. Arranca el ciclo FL completo
-    """
     global is_coordinator
 
     if not is_coordinator:
@@ -1590,7 +1653,6 @@ async def fl_start(request: Request):
     else:
         config_bytes = json.dumps(cfg).encode()
 
-    # Usar workers aceptados por /fl/negotiate o fallback al .env
     with _negotiate_lock:
         peers_to_use = list(_accepted_workers)
 
@@ -1624,7 +1686,6 @@ async def fl_start(request: Request):
     )
 
     def _launch():
-        # Actualizar globales para que _run_fl los use
         global PEER_ECC_URLS, PEER_CONNECTOR_URIS
         PEER_ECC_URLS       = peer_urls
         PEER_CONNECTOR_URIS = peer_uris
@@ -1649,10 +1710,6 @@ async def fl_start(request: Request):
 
 @app.get("/dataset/columns")
 def dataset_columns():
-    """
-    Devuelve las columnas del CSV local.
-    El coordinator lo consulta durante el descubrimiento del broker.
-    """
     try:
         import pandas as pd
         csv = _csv_path()
@@ -1667,9 +1724,6 @@ def dataset_columns():
 
 @app.get("/dataset/info")
 def dataset_info():
-    """
-    Devuelve información del dataset local: columnas, filas, estadísticas básicas.
-    """
     try:
         import pandas as pd
         csv = _csv_path()
@@ -1691,9 +1745,6 @@ def dataset_info():
 
 @app.get("/broker/connectors")
 def broker_connectors():
-    """
-    Consulta el broker y devuelve la lista de conectores IDS registrados.
-    """
     connectors = _get_registered_connectors()
     return {
         "coordinator" : INSTANCE_ID,
@@ -1704,16 +1755,6 @@ def broker_connectors():
 
 @app.post("/broker/discover")
 async def broker_discover_post():
-    """
-    PASO 5 — Descubrimiento de workers compatibles via broker IDS.
-
-    1. Lee sus propias columnas del CSV local
-    2. Consulta Fuseki para obtener los conectores registrados en el broker
-    3. Consulta la self-description (DescriptionRequestMessage IDS) de cada peer
-    4. Filtra los que tienen >= 80% columnas en común
-
-    Devuelve los workers compatibles pero NO negocia contratos todavía.
-    """
     if not is_coordinator:
         return JSONResponse(
             status_code=400,
@@ -1734,14 +1775,6 @@ async def broker_discover_post():
 
 @app.post("/fl/negotiate")
 async def fl_negotiate():
-    """
-    PASO 6 — Negocia contratos IDS con los workers compatibles.
-
-    Para cada worker compatible:
-    - ContractRequestMessage IDS → worker acepta o rechaza
-    - Aceptados → guardados en memoria para /fl/start
-    - Rechazados (worker4) → excluidos del FL, siguen en el broker
-    """
     global _accepted_workers, PEER_ECC_URLS, PEER_CONNECTOR_URIS
 
     if not is_coordinator:
@@ -1756,7 +1789,7 @@ async def fl_negotiate():
     if not compatible:
         return JSONResponse(
             status_code=404,
-            content={"error": "No hay workers compatibles en el broker. Ejecuta /broker/discover primero."}
+            content={"error": "No hay workers compatibles en el broker."}
         )
 
     accepted = []
@@ -1768,6 +1801,15 @@ async def fl_negotiate():
         log.info(f"[/fl/negotiate] Negociando contrato con {uri}")
         try:
             desc     = _ids_send(ecc_url, uri, "ids:DescriptionRequestMessage")
+
+            # FIX: Usar el @id real de la self-description como connector_uri,
+            # no la URI del broker (que puede ser https://broker-reverseproxy/connectors/XXXXX).
+            # La self-description siempre contiene el @id IDS nativo del connector.
+            real_uri = desc.get("@id", "") or uri
+            if real_uri != uri:
+                log.info(f"[/fl/negotiate] URI broker {uri!r} → URI IDS real {real_uri!r}")
+                uri = real_uri
+
             catalogs = desc.get("ids:resourceCatalog", [{}])
             resource = (catalogs[0].get("ids:offeredResource", [{}]) or [{}])[0]
             contract = (resource.get("ids:contractOffer",  [{}]) or [{}])[0]
@@ -1804,9 +1846,13 @@ async def fl_negotiate():
                     "message"      : response.get("message", ""),
                 })
             else:
+                agreement_id = response.get("@id", "")
+                # FIX BUG 2: ContractAgreementMessage en /fl/negotiate necesita
+                # correlation_message para que el ECC no lo rechace como MALFORMED_MESSAGE
                 _ids_send(
                     ecc_url, uri, "ids:ContractAgreementMessage",
                     requested_artifact=contract_artifact,
+                    correlation_message=agreement_id,
                     payload=response,
                 )
                 log.info(f"[/fl/negotiate] {uri} ACEPTÓ el contrato ✅")
@@ -1814,7 +1860,7 @@ async def fl_negotiate():
                     "connector_uri"    : uri,
                     "ecc_url"          : ecc_url,
                     "match_ratio"      : worker["match_ratio"],
-                    "transfer_contract": response.get("@id", ""),
+                    "transfer_contract": agreement_id,
                 })
 
         except Exception as exc:

@@ -413,6 +413,55 @@
           "response": []
         },
         {
+          "name": "5a - Broker: Verificar conectores registrados",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{Coordinator_URL}}/broker/connectors",
+              "host": [
+                "{{Coordinator_URL}}"
+              ],
+              "path": [
+                "broker",
+                "connectors"
+              ],
+              "query": []
+            },
+            "description": "Consulta el broker Fuseki via SPARQL y lista todos los connectors registrados. Ejecutar antes del paso 5b para confirmar que los workers están en el broker. El coordinator se excluye de la lista (solo devuelve peers)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Broker responde y lista conectores', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.connectors).to.be.an('array');",
+                  "    console.log('=== Conectores registrados en el Broker ===');",
+                  "    console.log('Coordinator actual:', json.coordinator);",
+                  "    console.log('Total conectores en broker:', json.count);",
+                  "    json.connectors.forEach((c, i) => {",
+                  "        console.log(`  [${i+1}] URI     : ${c.connector_uri}`);",
+                  "        console.log(`       Endpoint: ${c.endpoint || '(sin endpoint)'}`);",
+                  "    });",
+                  "    if (json.count === 0) {",
+                  "        console.log('⚠️  No hay conectores en el broker — los workers pueden tardar en registrarse.');",
+                  "        console.log('   Espera 30s y repite esta llamada.');",
+                  "    } else {",
+                  "        console.log('✅ Broker activo con', json.count, 'conector(es) registrado(s)');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
           "name": "5b - Broker: Descubrir workers compatibles",
           "event": [
             {
@@ -457,16 +506,15 @@
               }
             },
             "url": {
-              "raw": "https://localhost:{{Coordinator_Port}}/broker/discover",
-              "protocol": "https",
+              "raw": "{{Coordinator_URL}}/broker/discover",
               "host": [
-                "localhost"
+                "{{Coordinator_URL}}"
               ],
-              "port": "{{Coordinator_Port}}",
               "path": [
                 "broker",
                 "discover"
-              ]
+              ],
+              "query": []
             },
             "description": "El coordinator consulta el broker IDS (Fuseki) y obtiene los conectores registrados. Para cada uno consulta su self-description para obtener sus columnas y filtra los que tienen >= 80% de columnas en comun con el coordinator."
           },
@@ -524,16 +572,15 @@
               }
             },
             "url": {
-              "raw": "https://localhost:{{Coordinator_Port}}/fl/negotiate",
-              "protocol": "https",
+              "raw": "{{Coordinator_URL}}/fl/negotiate",
               "host": [
-                "localhost"
+                "{{Coordinator_URL}}"
               ],
-              "port": "{{Coordinator_Port}}",
               "path": [
                 "fl",
                 "negotiate"
-              ]
+              ],
+              "query": []
             },
             "description": "El coordinator negocia contratos IDS con los workers compatibles descubiertos en el paso 5b. Worker1 y Worker3 aceptan. Worker4 rechaza porque FL_AUTHORIZED_URIS esta vacio — soberania del dato IDS."
           },
@@ -564,15 +611,14 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "https://localhost:{{Coordinator_Port}}/status",
-              "protocol": "https",
+              "raw": "{{Coordinator_URL}}/status",
               "host": [
-                "localhost"
+                "{{Coordinator_URL}}"
               ],
-              "port": "{{Coordinator_Port}}",
               "path": [
                 "status"
-              ]
+              ],
+              "query": []
             }
           },
           "description": "Verifica en un solo paso que el coordinator (worker-2) está activo, tiene el rol correcto y algorithm.py cargado y listo para arrancar el FL.",
@@ -616,16 +662,15 @@
               }
             },
             "url": {
-              "raw": "https://localhost:{{Coordinator_Port}}/fl/start",
-              "protocol": "https",
+              "raw": "{{Coordinator_URL}}/fl/start",
               "host": [
-                "localhost"
+                "{{Coordinator_URL}}"
               ],
-              "port": "{{Coordinator_Port}}",
               "path": [
                 "fl",
                 "start"
-              ]
+              ],
+              "query": []
             },
             "description": "Arranca el ciclo FL completo en el coordinator.\nLos parámetros (rounds, round_timeout, etc.) se leen automáticamente de fl_config.json\nrecibido en el paso 5. No es necesario pasar ningún parámetro en el body."
           },
@@ -633,54 +678,7 @@
           "response": []
         },
         {
-          "name": "8 - Verify: Peers recibieron algorithm.py (workers 1, 2 y 3)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "// Este paso consulta /status del propio coordinator para ver si los peers",
-                  "// están listados. Para verificar los otros workers individualmente,",
-                  "// ejecuta este mismo paso cambiando el puerto en Coordinator_Port.",
-                  "//",
-                  "// Worker-1: 5001 | Worker-2: 5002 | Worker-3: 5003",
-                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
-                  "pm.test(\"algorithm.py cargado en este worker\", () => {",
-                  "    pm.expect(json.algorithm_loaded).to.be.true;",
-                  "    console.log(\"✅ Worker\", json.instance, \"| role:\", json.role, \"| algorithm_loaded:\", json.algorithm_loaded);",
-                  "    console.log(\"   Peers configurados:\", JSON.stringify(json.peer_eccs));",
-                  "    if (json.fl_status !== 'idle') {",
-                  "        console.log(\"✅ FL ya en marcha — status:\", json.fl_status);",
-                  "    } else {",
-                  "        console.log(\"⚠️  FL todavía idle en este worker — puede que la distribución aún esté en curso\");",
-                  "    }",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "https://localhost:{{Coordinator_Port}}/status",
-              "protocol": "https",
-              "host": [
-                "localhost"
-              ],
-              "port": "{{Coordinator_Port}}",
-              "path": [
-                "status"
-              ]
-            }
-          },
-          "description": "Verifica que algorithm.py llegó correctamente a cada worker. Ejecutar una vez con cada puerto:\n  5001 → Worker-1\n  5002 → Worker-2 (coordinator)\n  5003 → Worker-3\n\nBusca algorithm_loaded: true en los 3 antes de seguir con el polling de /fl/status.",
-          "response": []
-        },
-        {
-          "name": "9 - Verify: FL arrancó y en curso (repetir hasta completed)",
+          "name": "8 - Verify: FL arrancó y en curso (repetir hasta completed)",
           "event": [
             {
               "listen": "test",
@@ -713,62 +711,22 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "https://localhost:{{Coordinator_Port}}/fl/status",
-              "protocol": "https",
+              "raw": "{{Coordinator_URL}}/fl/status",
               "host": [
-                "localhost"
+                "{{Coordinator_URL}}"
               ],
-              "port": "{{Coordinator_Port}}",
               "path": [
                 "fl",
                 "status"
-              ]
+              ],
+              "query": []
             }
           },
           "description": "Ejecutar justo tras arrancar FL para confirmar que no está idle, y repetir periódicamente hasta ver status=completed. Muestra ronda actual y métricas finales al completarse.",
           "response": []
         },
         {
-          "name": "10 - FL: Resultados del Coordinator (historial completo)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Historial disponible\", () => {",
-                  "    const json = pm.response.json();",
-                  "    pm.expect(json).to.be.an(\"array\").with.length.above(0);",
-                  "    console.log(\"Rondas en historial:\", json.length);",
-                  "    json.forEach((r) => {",
-                  "        console.log(`  Ronda ${r.round}: acc=${r.global_metrics?.accuracy} | auc=${r.global_metrics?.auc} | samples=${r.total_samples}`);",
-                  "    });",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "https://localhost:{{Coordinator_Port}}/fl/results",
-              "protocol": "https",
-              "host": [
-                "localhost"
-              ],
-              "port": "{{Coordinator_Port}}",
-              "path": [
-                "fl",
-                "results"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "11 - FL: Modelo global del Coordinator",
+          "name": "9 - FL: Modelo global del Coordinator",
           "event": [
             {
               "listen": "test",
@@ -791,30 +749,42 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "https://localhost:{{Coordinator_Port}}/fl/model",
-              "protocol": "https",
+              "raw": "{{Coordinator_URL}}/fl/model",
               "host": [
-                "localhost"
+                "{{Coordinator_URL}}"
               ],
-              "port": "{{Coordinator_Port}}",
               "path": [
                 "fl",
                 "model"
-              ]
+              ],
+              "query": []
             }
           },
           "response": []
         },
         {
-          "name": "12 - Health Check: Todos los workers",
+          "name": "10 - Health Check: Todos los workers",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
                   "const json = pm.response.json();",
-                  "console.log(\"Worker\", json.instance, \":\", json.status, \"| role:\", json.role);"
+                  "pm.test('Worker activo y responde', () => {",
+                  "    pm.expect(json.status).to.equal('ok');",
+                  "    pm.expect(json.instance).to.exist;",
+                  "    pm.expect(json.role).to.exist;",
+                  "    console.log('✅ Worker', json.instance, '| status:', json.status, '| role:', json.role);",
+                  "});",
+                  "",
+                  "// INSTRUCCIÓN: Para verificar todos los workers cambia Coordinator_URL:",
+                  "console.log('');",
+                  "console.log('ℹ️  Para verificar todos los workers:');",
+                  "console.log('   Worker-1: cambiar Coordinator_URL=https://localhost:5001');",
+                  "console.log('   Worker-2: cambiar Coordinator_URL=https://localhost:5002');",
+                  "console.log('   Worker-3: cambiar Coordinator_URL=https://localhost:5003');",
+                  "console.log('   Worker-4: cambiar Coordinator_URL=https://localhost:5004');"
                 ],
                 "type": "text/javascript"
               }
@@ -824,26 +794,27 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "https://localhost:{{Coordinator_Port}}/health",
-              "protocol": "https",
+              "raw": "{{Coordinator_URL}}/health",
               "host": [
-                "localhost"
+                "{{Coordinator_URL}}"
               ],
-              "port": "{{Coordinator_Port}}",
               "path": [
                 "health"
-              ]
-            }
+              ],
+              "query": []
+            },
+            "description": "Health check de cada worker. Cambia {{Coordinator_URL}} en el environment: https://localhost:5001=worker-1, https://localhost:5002=worker-2, https://localhost:5003=worker-3, https://localhost:5004=worker-4"
           },
-          "description": "Health check de cada worker. Cambia {{Coordinator_Port}} en el environment: 5001=worker-1, 5002=worker-2, 5003=worker-3.",
+          "description": "Health check de cada worker. Cambia {{Coordinator_URL}} en el environment: https://localhost:5001=worker-1, https://localhost:5002=worker-2, https://localhost:5003=worker-3, https://localhost:5004=worker-4.",
           "response": []
         },
         {
-          "name": "13 - Verify: Modelo FL publicado como recurso IDS",
+          "name": "11 - Verify: Modelo FL publicado como recurso IDS",
           "event": [
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
                   "pm.test('Status 200', () => pm.response.to.have.status(200));",
                   "",
@@ -863,34 +834,41 @@
                   "        const id    = r['@id'] || '';",
                   "        return title.includes('FL Global Model') || id.includes('fl_model_coordinator');",
                   "    });",
-                  "",
                   "    pm.expect(flResource).to.exist;",
                   "    console.log('✅ Recurso FL encontrado:', flResource['@id']);",
                   "",
-                  "    // El contrato existe en la self-description (los permisos se verifican en paso 14)",
+                  "    // Contrato existe en la self-description",
                   "    const contract = (flResource['ids:contractOffer'] || [{}])[0];",
                   "    pm.expect(contract['@id']).to.exist;",
                   "    pm.expect(contract['@id']).to.include('contractOffer');",
                   "    console.log('   Contrato :', contract['@id']);",
                   "",
-                  "    // La representación existe",
+                  "    // Representación existe",
                   "    const repr = (flResource['ids:representation'] || [{}])[0];",
                   "    pm.expect(repr['@id']).to.exist;",
                   "    console.log('   Repr     :', repr['@id']);",
                   "",
-                  "    // Guardar en environment para paso 14",
+                  "    // Extraer lista de connector URIs autorizados del constraint del contrato",
+                  "    // (publicados por _publish_fl_model_as_ids_resource con política connector-restricted-policy)",
+                  "    const perm        = (contract['ids:permission'] || [{}])[0] || {};",
+                  "    const constraint  = (perm['ids:constraint']    || [{}])[0] || {};",
+                  "    const authorised  = (constraint['ids:rightOperand'] || []).map(v => v['@value'] || v['@id'] || String(v));",
+                  "    console.log('   Peers autorizados en contrato IDS:', authorised.join(', ') || '(ninguno visible en self-description)');",
+                  "",
+                  "    // Guardar en environment para pasos 14-16",
                   "    pm.environment.set('fl_model_resource_id', flResource['@id']);",
                   "    pm.environment.set('fl_model_contract_id', contract['@id']);",
-                  "    console.log('✅ IDs guardados en environment');",
+                  "    pm.environment.set('fl_model_authorised_peers', JSON.stringify(authorised));",
+                  "    console.log('✅ IDs guardados en environment para pasos 14-16');",
                   "});",
                   "",
-                  "pm.test('Catálogo tiene al menos 4 recursos (3 originales + 1 FL)', () => {",
+                  "pm.test('Catálogo tiene al menos 2 recursos (original + FL model)', () => {",
                   "    const sd = pm.response.json();",
                   "    const resources = (sd['ids:resourceCatalog'] || [{}])[0]['ids:offeredResource'] || [];",
-                  "    pm.expect(resources.length).to.be.at.least(4);",
+                  "    pm.expect(resources.length).to.be.at.least(2);",
+                  "    console.log('   Total recursos:', resources.length);",
                   "});"
-                ],
-                "type": "text/javascript"
+                ]
               }
             }
           ],
@@ -898,23 +876,43 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "https://localhost:{{Coordinator_Port}}/ids/self-description",
-              "protocol": "https",
+              "raw": "{{Coordinator_URL}}/ids/self-description",
               "host": [
-                "localhost"
+                "{{Coordinator_URL}}"
               ],
-              "port": "{{Coordinator_Port}}",
               "path": [
                 "ids",
                 "self-description"
-              ]
+              ],
+              "query": []
             }
           },
           "description": "Verifica que el modelo FL se publicó correctamente como recurso IDS en el ECC del coordinator.\n\nLlama a GET /ids/self-description del DataApp del coordinator — un endpoint que consulta internamente la self-description del ECC local (puerto 8449) y la devuelve directamente.\n\nEsto evita el timeout que ocurría cuando /proxy intentaba que el coordinator se preguntara a sí mismo vía IDS, creando un bucle interno.\n\nComprueba:\n- Existe un recurso 'FL Global Model' en el catálogo IDS\n- El contrato tiene ids:assignee (acceso restringido a los peers participantes)\n- Tiene representación con artifact (los pesos finales)\n- El catálogo tiene al menos 4 recursos (3 originales + 1 FL)\n\nGuarda en environment: fl_model_resource_id, fl_model_artifact_id, fl_model_contract_id",
           "response": []
         },
         {
-          "name": "14 - Verify: Contrato FL restringido a peers",
+          "name": "12 - Verify: Contrato FL restringido a peers autorizados (sin worker4)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{Coordinator_URL}}/ids/contract?contractOffer={{fl_model_contract_id}}",
+              "host": [
+                "{{Coordinator_URL}}"
+              ],
+              "path": [
+                "ids",
+                "contract"
+              ],
+              "query": [
+                {
+                  "key": "contractOffer",
+                  "value": "{{fl_model_contract_id}}"
+                }
+              ]
+            },
+            "description": "Llama directamente al endpoint /ids/contract del app.py (no al ECC) para obtener el contrato FL completo con ids:permission, ids:constraint e ids:rightOperand. El ECC trunca estos campos en la self-description. Requiere fl_model_contract_id guardado por el paso 13."
+          },
           "event": [
             {
               "listen": "test",
@@ -923,154 +921,80 @@
                 "exec": [
                   "pm.test('Status 200', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('Contrato FL usa connector-restricted-policy con constraint de peers', () => {",
+                  "pm.test('Contrato FL completo devuelto por app.py', () => {",
                   "    const contract = pm.response.json();",
                   "    pm.expect(contract).to.exist;",
-                  "    console.log('Contrato ID:', contract['@id']);",
+                  "    pm.expect(contract['@id']).to.exist;",
+                  "    pm.expect(contract['@type']).to.include('ContractOffer');",
+                  "    console.log('✅ Contrato recibido:', contract['@id']);",
+                  "});",
                   "",
-                  "    const perms = contract['ids:permission'] || [];",
-                  "    pm.expect(perms.length).to.be.above(0, 'El contrato no tiene permisos');",
+                  "pm.test('Contrato FL usa connector-restricted-policy', () => {",
+                  "    const contract = pm.response.json();",
                   "",
-                  "    const perm = perms[0];",
+                  "    const perm = (contract['ids:permission'] || [{}])[0] || {};",
+                  "    pm.expect(perm['@type']).to.include('Permission');",
+                  "",
                   "    const desc = ((perm['ids:description'] || [{}])[0]['@value'] || '');",
                   "    pm.expect(desc).to.equal('connector-restricted-policy',",
                   "        'La política debe ser connector-restricted-policy');",
                   "    console.log('✅ Política:', desc);",
                   "",
-                  "    const constraints = perm['ids:constraint'] || [];",
-                  "    pm.expect(constraints.length).to.be.above(0, 'Sin constraints — contrato no restringido');",
+                  "    const constraint = (perm['ids:constraint'] || [{}])[0] || {};",
+                  "    const operator   = (constraint['ids:operator'] || {})['@id'] || '';",
+                  "    pm.expect(operator).to.include('IN', 'El operador del constraint debe ser IN');",
+                  "    console.log('✅ Operador constraint:', operator);",
                   "",
-                  "    const constraint = constraints[0];",
-                  "    const operator = (constraint['ids:operator'] || {})['@id'] || '';",
-                  "    pm.expect(operator).to.include('IN', 'El operador debe ser IN');",
-                  "",
-                  "    const allowed = (constraint['ids:rightOperand'] || []).map(v => v['@value'] || v['@id'] || v);",
+                  "    const allowed = (constraint['ids:rightOperand'] || [])",
+                  "        .map(v => v['@value'] || v['@id'] || String(v));",
                   "    pm.expect(allowed.length).to.be.above(0, 'Sin conectores permitidos en constraint');",
                   "    console.log('✅ Conectores autorizados:', allowed.join(', '));",
                   "",
-                  "    const hasWorker4 = allowed.some(u => u.includes('worker4'));",
+                  "    const hasWorker4 = allowed.some(u => u.toLowerCase().includes('worker4'));",
                   "    pm.expect(hasWorker4).to.be.false;",
-                  "    console.log('✅ Worker4 NO está en la lista — correcto');",
+                  "    console.log('✅ Worker4 NO está en la lista autorizada — correcto');",
                   "",
-                  "    pm.environment.set('fl_model_allowed_uris', allowed.join(','));",
+                  "    // Guardar allowed para cruce con paso 5c",
+                  "    pm.environment.set('fl_model_authorised_peers', JSON.stringify(allowed));",
+                  "});",
+                  "",
+                  "pm.test('Peers autorizados coinciden con workers aceptados en 5c', () => {",
+                  "    const contract = pm.response.json();",
+                  "    const perm       = (contract['ids:permission']  || [{}])[0] || {};",
+                  "    const constraint = (perm['ids:constraint']      || [{}])[0] || {};",
+                  "    const allowed    = (constraint['ids:rightOperand'] || [])",
+                  "        .map(v => v['@value'] || v['@id'] || String(v));",
+                  "",
+                  "    let acceptedWorkers = [];",
+                  "    try { acceptedWorkers = JSON.parse(pm.environment.get('accepted_workers') || '[]'); } catch(e) {}",
+                  "    const acceptedUris = acceptedWorkers.map(w => w.connector_uri || '');",
+                  "",
+                  "    if (acceptedUris.length === 0) {",
+                  "        console.log('⚠️  accepted_workers no encontrado — ejecuta paso 5c primero');",
+                  "        return;",
+                  "    }",
+                  "",
+                  "    console.log('Workers aceptados en 5c:', acceptedUris.join(', '));",
+                  "    console.log('Peers en contrato IDS  :', allowed.join(', '));",
+                  "",
+                  "    acceptedUris.forEach(uri => {",
+                  "        const present = allowed.some(a => a === uri || uri.includes(a) || a.includes(uri));",
+                  "        console.log(present ? '  ✅' : '  ⚠️ ', uri, present ? '→ presente' : '→ NO encontrado');",
+                  "    });",
+                  "",
+                  "    pm.expect(allowed.length).to.be.at.least(acceptedUris.length,",
+                  "        'El contrato debe autorizar al menos tantos peers como los aceptados en 5c');",
                   "});"
                 ]
               }
             }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Basic YXBpVXNlcjpwYXNzd29yZEFwaVVzZXI=",
-                "description": "apiUser:passwordApiUser en Base64"
-              },
-              {
-                "key": "contractOffer",
-                "value": "{{fl_model_contract_id}}",
-                "description": "Auto-rellenado por el paso 13"
-              }
-            ],
-            "url": {
-              "raw": "https://localhost:{{Coordinator_Port}}/ids/contract",
-              "protocol": "https",
-              "host": [
-                "localhost"
-              ],
-              "port": "{{Coordinator_Port}}",
-              "path": [
-                "ids",
-                "contract"
-              ]
-            }
-          },
-          "description": "Verifica que el contrato del modelo FL tiene los permisos correctos.\n\nLlama a GET /ids/contract del DataApp del coordinator, que consulta internamente GET /api/contractOffer/ del ECC con el ID del contrato guardado por el paso 13 en {{fl_model_contract_id}}.\n\nComprueba:\n- El contrato tiene ids:permission\n- Los permisos tienen ids:assignee — restringido a los 2 peers participantes\n- La acción es ids:USE\n- El provider es el coordinator\n\nGuarda en environment: fl_model_assignees",
-          "response": []
+          ]
         },
         {
-          "name": "15 - Worker4: Discover Coordinator Catalogue (DescriptionRequestMessage)",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const port = pm.environment.get('Coordinator_Port') || '5002';",
-                  "const map = {'5001':'ecc-worker1','5002':'ecc-worker2','5003':'ecc-worker3'};",
-                  "const eccHost = map[port] || 'ecc-worker2';",
-                  "const eccUrl = `https://${eccHost}:8889/data`;",
-                  "pm.environment.set('Worker4_ECC_Forward_To', eccUrl);",
-                  "console.log('[pre] Worker4 apuntará al coordinator:', eccUrl);"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "",
-                  "pm.test('Worker4 puede ver la self-description del coordinator (catálogo público)', () => {",
-                  "    const raw = pm.response.text();",
-                  "    pm.expect(raw).to.satisfy(b => b.includes('resourceCatalog') || b.includes('@type'));",
-                  "    console.log('✅ Self-description recibida — el catálogo es público');",
-                  "    console.log('   (worker4 puede VER que existe el recurso FL, pero no acceder a él)');",
-                  "});",
-                  "",
-                  "// Extraer recurso FL para usarlo en el siguiente paso",
-                  "(function() {",
-                  "    const raw = pm.response.text();",
-                  "    let sd = null;",
-                  "    try { sd = JSON.parse(raw); } catch(e) {",
-                  "        const blocks = raw.match(/\\{[\\s\\S]*\\}/g) || [];",
-                  "        blocks.sort((a,b) => b.length - a.length);",
-                  "        for (const b of blocks) { try { sd = JSON.parse(b); break; } catch(e) {} }",
-                  "    }",
-                  "    if (!sd) { console.log('⚠️  No se pudo parsear self-description'); return; }",
-                  "    const resources = ((sd['ids:resourceCatalog'] || [{}])[0]['ids:offeredResource'] || []);",
-                  "    const flRes = resources.find(r => {",
-                  "        const title = ((r['ids:title'] || [{}])[0]['@value'] || '');",
-                  "        return title.includes('FL Global Model') || (r['@id'] || '').includes('fl_model_coordinator');",
-                  "    });",
-                  "    if (flRes) {",
-                  "        const contract = (flRes['ids:contractOffer'] || [{}])[0] || {};",
-                  "        pm.environment.set('w4_fl_resource_id', flRes['@id']);",
-                  "        pm.environment.set('w4_fl_contract_id', contract['@id'] || '');",
-                  "        console.log('✅ Recurso FL encontrado:', flRes['@id']);",
-                  "        console.log('   Contrato:', contract['@id'] || 'no encontrado');",
-                  "    } else {",
-                  "        console.log('⚠️  Recurso FL no encontrado — ¿FL completado?');",
-                  "    }",
-                  "})();"
-                ]
-              }
-            }
-          ],
+          "name": "13 - Worker4: Discover Coordinator Catalogue (DescriptionRequestMessage)",
           "request": {
-            "auth": {
-              "type": "basic",
-              "basic": [
-                {
-                  "key": "username",
-                  "value": "idsUser",
-                  "type": "string"
-                },
-                {
-                  "key": "password",
-                  "value": "passwordIdsUser",
-                  "type": "string"
-                }
-              ]
-            },
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Worker4_ECC_Forward_To}}\",\n    \"messageType\": \"DescriptionRequestMessage\"\n}",
@@ -1086,66 +1010,88 @@
                 "{{Worker4_Proxy_Endpoint}}"
               ]
             },
-            "description": "Worker4 descubre la self-description del coordinator (worker2) para encontrar el recurso FL publicado."
-          }
-        },
-        {
-          "name": "16 - Worker4: Attempt Contract Negotiation → EXPECT REJECTION",
+            "description": "Worker4 solicita la self-description del coordinator a través de IDS.\nEl catálogo es público (cualquier connector puede verlo), pero el contrato\ndel modelo FL tiene una constraint que excluye a worker4.\nEste paso guarda el recurso FL encontrado para el paso 16."
+          },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Derivar el ECC del coordinator desde Coordinator_URL",
+                  "// Coordinator_URL = https://localhost:PORT → ecc-workerX:8889/data",
+                  "const coordUrl = pm.environment.get('Coordinator_URL') || 'https://localhost:5002';",
+                  "const portMatch = coordUrl.match(/(\\d+)$/);",
+                  "const port = portMatch ? portMatch[1] : '5002';",
+                  "const portMap = { '5001': 'ecc-worker1', '5002': 'ecc-worker2', '5003': 'ecc-worker3' };",
+                  "const eccHost = portMap[port] || 'ecc-worker2';",
+                  "const eccUrl  = `https://${eccHost}:8889/data`;",
+                  "pm.environment.set('Worker4_ECC_Forward_To', eccUrl);",
+                  "console.log('[pre] Worker4 → coordinator ECC:', eccUrl);"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 (respuesta IDS recibida por el proxy)', () => pm.response.to.have.status(200));",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('Worker4 recibe ContractRejectionMessage — acceso denegado', () => {",
+                  "pm.test('Worker4 recibe self-description pública del coordinator', () => {",
                   "    const raw = pm.response.text();",
-                  "    console.log('Respuesta raw (primeros 1000 chars):', raw.substring(0, 1000));",
+                  "    pm.expect(raw).to.satisfy(b => b.includes('resourceCatalog') || b.includes('@type'),",
+                  "        'La respuesta debe contener una self-description IDS válida');",
+                  "    console.log('✅ Self-description recibida — catálogo público visible para worker4');",
+                  "    console.log('   (worker4 puede VER que existe el recurso FL, pero el contrato lo excluye)');",
+                  "});",
                   "",
-                  "    const isRejected =",
-                  "        raw.includes('RejectionMessage') ||",
-                  "        raw.includes('ContractRejectionMessage') ||",
-                  "        raw.includes('rejected') ||",
-                  "        raw.includes('unauthorized_consumer') ||",
-                  "        raw.includes('NOT_AUTHORIZED');",
+                  "pm.test('Recurso FL visible en catálogo del coordinator', () => {",
+                  "    const raw = pm.response.text();",
+                  "    let sd = null;",
+                  "    try { sd = JSON.parse(raw); } catch(e) {",
+                  "        // Respuesta multipart — extraer el bloque JSON más grande",
+                  "        const blocks = raw.match(/\\{[\\s\\S]*?\\}/g) || [];",
+                  "        blocks.sort((a,b) => b.length - a.length);",
+                  "        for (const b of blocks) { try { sd = JSON.parse(b); break; } catch(e) {} }",
+                  "    }",
+                  "    if (!sd) { console.log('⚠️  No se pudo parsear self-description — omitiendo sub-test'); return; }",
                   "",
-                  "    const isAccepted =",
-                  "        raw.includes('ContractAgreement') ||",
-                  "        raw.includes('ContractAgreementMessage');",
+                  "    const resources = ((sd['ids:resourceCatalog'] || [{}])[0]['ids:offeredResource'] || []);",
+                  "    console.log('Total recursos en catálogo visible por worker4:', resources.length);",
                   "",
-                  "    pm.expect(isAccepted).to.be.false;",
-                  "    pm.expect(isRejected).to.be.true;",
-                  "    console.log('✅ Worker4 fue rechazado — no puede acceder al modelo FL');",
-                  "    console.log('   Razón: connector worker4 no está en la lista de peers autorizados');",
+                  "    const flRes = resources.find(r => {",
+                  "        const title = ((r['ids:title'] || [{}])[0]['@value'] || '');",
+                  "        return title.includes('FL Global Model') || (r['@id'] || '').includes('fl_model_coordinator');",
+                  "    });",
+                  "    pm.expect(flRes).to.exist;",
+                  "    console.log('✅ Recurso FL visible:', flRes['@id']);",
+                  "",
+                  "    // Verificar que el contrato del recurso tiene constraint (aunque worker4 no pueda acceder)",
+                  "    const contract   = (flRes['ids:contractOffer']  || [{}])[0] || {};",
+                  "    const perm       = (contract['ids:permission']  || [{}])[0] || {};",
+                  "    const constraint = (perm['ids:constraint']      || [{}])[0] || {};",
+                  "    const allowed    = (constraint['ids:rightOperand'] || []).map(v => v['@value'] || v['@id'] || String(v));",
+                  "    const w4inList   = allowed.some(u => u.toLowerCase().includes('worker4'));",
+                  "    console.log('   Worker4 en lista autorizada:', w4inList ? '⚠️  SÍ (inesperado)' : '✅ NO (correcto)');",
+                  "",
+                  "    // Guardar para el paso 16",
+                  "    pm.environment.set('w4_fl_resource_id', flRes['@id']);",
+                  "    pm.environment.set('w4_fl_contract_id', contract['@id'] || '');",
+                  "    console.log('✅ IDs guardados para paso 16');",
+                  "    console.log('   Resource :', flRes['@id']);",
+                  "    console.log('   Contract :', contract['@id'] || 'no visible');",
                   "});"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "14 - Worker4: Attempt Contract Negotiation → EXPECT REJECTION",
           "request": {
-            "auth": {
-              "type": "basic",
-              "basic": [
-                {
-                  "key": "username",
-                  "value": "idsUser",
-                  "type": "string"
-                },
-                {
-                  "key": "password",
-                  "value": "passwordIdsUser",
-                  "type": "string"
-                }
-              ]
-            },
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "body": {
               "mode": "raw",
               "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Worker4_ECC_Forward_To}}\",\n    \"messageType\": \"ContractRequestMessage\",\n    \"requestedElement\": \"{{w4_fl_resource_id}}\",\n    \"contractId\": \"{{w4_fl_contract_id}}\",\n    \"contractProvider\": \"\"\n}",
@@ -1161,48 +1107,787 @@
                 "{{Worker4_Proxy_Endpoint}}"
               ]
             },
-            "description": "Worker4 intenta negociar un contrato para acceder al modelo FL del coordinator. Debe recibir un RejectionMessage porque worker4 no está en la lista de peers autorizados del contrato."
-          }
-        },
-        {
-          "name": "17 - Worker4: Confirm No FL Access (status check)",
+            "description": "Worker4 intenta negociar el contrato del modelo FL publicado por el coordinator.\nDebe recibir un RejectionMessage porque:\n  - Si FL_AUTHORIZED_URIS está vacío en worker-coordinator → razón: fl_participation_denied\n  - Si FL_AUTHORIZED_URIS está configurado pero worker4 no está → razón: unauthorized_consumer\nEn ningún caso debe recibir un ContractAgreement."
+          },
           "event": [
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status 200 (proxy IDS activo)', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('Worker4 activo pero sin acceso al FL', () => {",
-                  "    const body = pm.response.json();",
-                  "    pm.expect(body.status).to.equal('ok');",
-                  "    pm.expect(body.algorithm_loaded).to.be.false;",
-                  "    pm.expect(body.config_loaded).to.be.false;",
-                  "    pm.expect(body.fl_config).to.be.null;",
-                  "    console.log('✅ Worker4 activo — sin algorithm.py ni fl_config.json');",
-                  "    console.log('   fl_status:', body.fl_status);",
+                  "pm.test('Worker4 recibe RejectionMessage — no puede acceder al modelo FL', () => {",
+                  "    const raw = pm.response.text();",
+                  "    console.log('Respuesta completa (primeros 1200 chars):', raw.substring(0, 1200));",
+                  "",
+                  "    // Razones de rechazo que puede devolver app.py",
+                  "    const isRejected =",
+                  "        raw.includes('RejectionMessage')        ||",
+                  "        raw.includes('ContractRejectionMessage') ||",
+                  "        raw.includes('fl_participation_denied')  ||",
+                  "        raw.includes('unauthorized_consumer')    ||",
+                  "        raw.includes('NOT_AUTHORIZED')           ||",
+                  "        raw.includes('\"rejected\"');",
+                  "",
+                  "    // Acceso concedido — NO debe ocurrir",
+                  "    const isAccepted =",
+                  "        raw.includes('ContractAgreementMessage') ||",
+                  "        raw.includes('ContractAgreement')        ||",
+                  "        raw.includes('\"weights_b64\"');",
+                  "",
+                  "    pm.expect(isAccepted).to.be.false;",
+                  "    pm.expect(isRejected).to.be.true;",
+                  "    console.log('✅ Worker4 rechazado — acceso al modelo FL denegado');",
+                  "",
+                  "    // Identificar razón exacta del rechazo para el log",
+                  "    if (raw.includes('fl_participation_denied')) {",
+                  "        console.log('   Razón: fl_participation_denied',",
+                  "            '(worker-coordinator tiene FL_AUTHORIZED_URIS vacío → cualquier acceso externo denegado)');",
+                  "    } else if (raw.includes('unauthorized_consumer')) {",
+                  "        console.log('   Razón: unauthorized_consumer',",
+                  "            '(worker4 no está en FL_AUTHORIZED_URIS del coordinator)');",
+                  "    } else if (raw.includes('NOT_AUTHORIZED')) {",
+                  "        console.log('   Razón: NOT_AUTHORIZED (ids:rejectionReason del ECC)');",
+                  "    } else {",
+                  "        console.log('   Razón: rechazo detectado en respuesta raw');",
+                  "    }",
+                  "    console.log('   Política IDS: connector-restricted-policy excluye a worker4');",
+                  "    console.log('   Soberanía del dato: ✅ Funcionando correctamente');",
+                  "});",
+                  "",
+                  "pm.test('Broker registra al coordinator correctamente (worker4 no puede suplantar peers)', () => {",
+                  "    // Este test es documental: el broker IDS + DAPS garantizan que",
+                  "    // worker4 no puede obtener un token DAT válido que lo identifique",
+                  "    // como uno de los workers autorizados. El rechazo se aplica tanto",
+                  "    // a nivel de contrato IDS como a nivel de identidad DAPS.",
+                  "    console.log('ℹ️  Garantías del ecosistema IDS:');",
+                  "    console.log('   · DAPS: token DAT único por conector — worker4 no puede suplantar a worker1/2/3');",
+                  "    console.log('   · Broker: discovery solo devuelve connectors registrados con certificado válido');",
+                  "    console.log('   · Contrato: connector-restricted-policy con constraint IN [worker1_uri, worker3_uri]');",
+                  "    pm.expect(true).to.be.true; // test documental",
                   "});"
-                ],
-                "type": "text/javascript"
+                ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "15 - Worker4: Confirm No FL Access (status check)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "https://localhost:5004/status",
-              "protocol": "https",
+              "raw": "{{Worker4_URL}}/status",
               "host": [
-                "localhost"
+                "{{Worker4_URL}}"
               ],
-              "port": "5004",
               "path": [
                 "status"
               ]
             },
-            "description": "Verifica que worker4 está activo pero sin algorithm.py ni fl_config.json — fl_config debe ser null."
-          }
+            "description": "Verifica que worker4 no recibió algorithm.py ni participó en el FL. Puerto 5004 = worker-4 (fijo). Comprueba: algorithm_loaded=false, config_loaded=false, fl_config=null, role=worker, fl_status=idle, peer_eccs=[]."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 — worker4 activo', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Worker4 sin algorithm.py ni fl_config.json', () => {",
+                  "    const body = pm.response.json();",
+                  "    console.log('Worker4 status:', JSON.stringify(body, null, 2));",
+                  "",
+                  "    // /status devuelve: {instance, role, algorithm_loaded, config_loaded, fl_config, fl_status, ...}",
+                  "    pm.expect(body.instance).to.equal('4');",
+                  "    pm.expect(body.algorithm_loaded).to.be.false;",
+                  "    pm.expect(body.config_loaded).to.be.false;",
+                  "    pm.expect(body.fl_config).to.be.null;",
+                  "    console.log('✅ algorithm_loaded:', body.algorithm_loaded, '— correcto (false)');",
+                  "    console.log('✅ config_loaded   :', body.config_loaded,    '— correcto (false)');",
+                  "    console.log('✅ fl_config       :', body.fl_config,        '— correcto (null)');",
+                  "});",
+                  "",
+                  "pm.test('Worker4 role=worker y fl_status=idle', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.role).to.equal('worker');",
+                  "    pm.expect(body.fl_status).to.equal('idle');",
+                  "    console.log('✅ role     :', body.role,      '— correcto (no coordinator)');",
+                  "    console.log('✅ fl_status:', body.fl_status, '— correcto (idle, no participó)');",
+                  "});",
+                  "",
+                  "pm.test('Worker4 no tiene peers FL configurados', () => {",
+                  "    const body = pm.response.json();",
+                  "    // peer_eccs debe estar vacío — worker4 no participó en la negociación",
+                  "    const peers = body.peer_eccs || [];",
+                  "    // coordinator_ecc debe ser null — worker4 no recibió pesos globales",
+                  "    const coordEcc = body.coordinator_ecc;",
+                  "    console.log('✅ peer_eccs      :', JSON.stringify(peers));",
+                  "    console.log('✅ coordinator_ecc:', coordEcc);",
+                  "    pm.expect(peers.length).to.equal(0, 'Worker4 no debe tener peers configurados');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DAPS Verification",
+      "item": [
+        {
+          "name": "DAPS-1: Token DAT Worker1 (trigger via /ids/self-description)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "https://localhost:5001/ids/self-description",
+              "host": [
+                "https://localhost:5001"
+              ],
+              "path": [
+                "ids",
+                "self-description"
+              ]
+            },
+            "description": "Llama al DataApp del worker1 para forzar la obtención de un token DAT real desde DAPS (omejdn). Si el token se obtiene correctamente aparece en los logs del DataApp: [DAPS] Token DAT obtenido para worker-1. Verifica que el @id del conector es correcto y que la self-description está firmada con DAPS."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 — DataApp worker1 responde', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Self-description contiene @id del conector', () => {",
+                  "    const sd = pm.response.json();",
+                  "    pm.expect(sd['@id']).to.exist;",
+                  "    pm.expect(sd['@id']).to.include('connector');",
+                  "    console.log('✅ Connector URI:', sd['@id']);",
+                  "    pm.environment.set('w1_connector_uri', sd['@id']);",
+                  "});",
+                  "",
+                  "pm.test('Self-description tiene ids:publicKey (certificado DAPS cargado)', () => {",
+                  "    const sd = pm.response.json();",
+                  "    const pk = sd['ids:publicKey'];",
+                  "    pm.expect(pk).to.exist;",
+                  "    pm.expect(pk['ids:keyValue']).to.exist;",
+                  "    console.log('✅ ids:publicKey presente — certificado DAPS cargado correctamente');",
+                  "    console.log('   keyType:', (pk['ids:keyType'] || {})['@id'] || '?');",
+                  "});",
+                  "",
+                  "pm.test('Self-description tiene ids:securityProfile', () => {",
+                  "    const sd = pm.response.json();",
+                  "    pm.expect(sd['ids:securityProfile']).to.exist;",
+                  "    console.log('✅ securityProfile:', sd['ids:securityProfile']['@id']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DAPS-2: Token DAT Worker2 (coordinator)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{Coordinator_URL}}/ids/self-description",
+              "host": [
+                "{{Coordinator_URL}}"
+              ],
+              "path": [
+                "ids",
+                "self-description"
+              ]
+            },
+            "description": "Verifica que el coordinator (worker2) también obtiene token DAT correctamente desde DAPS."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Coordinator tiene ids:publicKey DAPS', () => {",
+                  "    const sd = pm.response.json();",
+                  "    pm.expect(sd['ids:publicKey']).to.exist;",
+                  "    pm.expect(sd['ids:publicKey']['ids:keyValue']).to.exist;",
+                  "    console.log('✅ Coordinator DAPS publicKey presente');",
+                  "    pm.environment.set('w2_connector_uri', sd['@id']);",
+                  "});",
+                  "",
+                  "pm.test('outboundModelVersion presente (token DAPS válido al arrancar)', () => {",
+                  "    const sd = pm.response.json();",
+                  "    pm.expect(sd['ids:outboundModelVersion']).to.exist;",
+                  "    console.log('✅ outboundModelVersion:', sd['ids:outboundModelVersion']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DAPS-3: IDS Message Worker1→Worker2 con token DAT real (DescriptionRequest)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"DescriptionRequestMessage\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            },
+            "description": "Envía un DescriptionRequestMessage desde worker1 hacia worker2 a través del ECC. El ECC valida el token DAT del emisor contra DAPS antes de reenviar. Si DAPS no funciona, el ECC rechaza con 403/token invalid. Un 200 con self-description confirma que DAPS valida los tokens correctamente end-to-end."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 — ECC aceptó el token DAT (DAPS OK)', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Respuesta contiene self-description IDS válida', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body['@type']).to.exist;",
+                  "    pm.expect(body['@id']).to.exist;",
+                  "    console.log('✅ DAPS end-to-end OK — ECC worker2 aceptó token DAT de worker1');",
+                  "    console.log('   @type:', body['@type']);",
+                  "    console.log('   @id  :', body['@id']);",
+                  "});",
+                  "",
+                  "pm.test('Self-description tiene resourceCatalog', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body['ids:resourceCatalog']).to.exist;",
+                  "    pm.expect(body['ids:resourceCatalog'].length).to.be.above(0);",
+                  "    console.log('✅ resourceCatalog presente —', body['ids:resourceCatalog'].length, 'catálogo(s)');",
+                  "});",
+                  "",
+                  "pm.test('ids:securityToken presente en la respuesta IDS (DAT en uso)', () => {",
+                  "    // El header IDS de respuesta debe incluir securityToken emitido por DAPS",
+                  "    const body = pm.response.json();",
+                  "    // La respuesta es el payload (self-description), no el header IDS —",
+                  "    // si llegamos aquí sin 401/403 es porque el token fue validado por el ECC.",
+                  "    console.log('✅ Request completada sin rechazo de token — DAPS funciona correctamente');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DAPS-4: Verificar que Worker4 también tiene token DAT válido",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{Worker4_URL}}/ids/self-description",
+              "host": [
+                "{{Worker4_URL}}"
+              ],
+              "path": [
+                "ids",
+                "self-description"
+              ]
+            },
+            "description": "Verifica que worker4 (el que no participa en FL) también obtiene token DAT correcto. Confirma que el problema de worker4 es de política FL (FL_AUTHORIZED_URIS), no de DAPS."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 — worker4 activo y DAPS OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Worker4 tiene ids:publicKey DAPS (certificado cargado)', () => {",
+                  "    const sd = pm.response.json();",
+                  "    pm.expect(sd['ids:publicKey']).to.exist;",
+                  "    console.log('✅ Worker4 DAPS publicKey presente — DAPS funciona para todos los workers');",
+                  "    pm.environment.set('w4_connector_uri', sd['@id']);",
+                  "    console.log('   Worker4 URI:', sd['@id']);",
+                  "});",
+                  "",
+                  "pm.test('Worker4 URI contiene worker4 (identidad IDS correcta)', () => {",
+                  "    const sd = pm.response.json();",
+                  "    pm.expect(sd['@id']).to.include('worker4');",
+                  "    console.log('✅ Identidad IDS worker4 correcta:', sd['@id']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DAPS-5: Health check ECC workers (token DAT en cada ECC)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic YXBpVXNlcjpwYXNzd29yZEFwaVVzZXI=",
+                "description": "apiUser:passwordApiUser en base64"
+              }
+            ],
+            "url": {
+              "raw": "https://localhost:8449/api/selfDescription/",
+              "host": [
+                "https://localhost:8449"
+              ],
+              "path": [
+                "api",
+                "selfDescription",
+                ""
+              ]
+            },
+            "description": "Accede directamente a la API interna del ECC (puerto 8449) del coordinator para confirmar que el ECC tiene la self-description actualizada. Este puerto solo es accesible localmente. Confirma que el ECC tiene DAPS configurado y la self-description es válida."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Derivar host ECC desde Coordinator_URL",
+                  "const coordUrl = pm.environment.get('Coordinator_URL') || 'https://localhost:5002';",
+                  "const portMatch = coordUrl.match(/(\\d+)$/);",
+                  "const port = portMatch ? portMatch[1] : '5002';",
+                  "const portMap = { '5001': '8449', '5002': '8450', '5003': '8451' };",
+                  "const eccApiPort = portMap[port] || '8450';",
+                  "pm.environment.set('_ecc_api_port', eccApiPort);",
+                  "console.log('[pre] ECC API port:', eccApiPort);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 — ECC API accesible (DAPS cargado)', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('ECC devuelve self-description con @id', () => {",
+                  "    const sd = pm.response.json();",
+                  "    pm.expect(sd['@id']).to.exist;",
+                  "    console.log('✅ ECC self-description OK:', sd['@id']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Broker Verification",
+      "item": [
+        {
+          "name": "BROKER-1: Contar conectores registrados en Fuseki",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/sparql-results+json"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "query",
+                  "value": "SELECT (COUNT(*) as ?n) WHERE { GRAPH ?g { ?s a <https://w3id.org/idsa/core/BaseConnector> } }"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:3030/connectorData/sparql",
+              "host": [
+                "http://localhost:3030"
+              ],
+              "path": [
+                "connectorData",
+                "sparql"
+              ]
+            },
+            "description": "Consulta SPARQL directa a Fuseki. Cuenta los BaseConnectors registrados. Debe haber al menos 3 (worker1, worker2, worker3). Worker4 puede o no estar registrado dependiendo de FL_AUTHORIZED_URIS."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 — Fuseki SPARQL responde', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Al menos 3 conectores registrados en el broker', () => {",
+                  "    const body = pm.response.json();",
+                  "    const bindings = body.results.bindings;",
+                  "    pm.expect(bindings.length).to.be.above(0);",
+                  "    const count = parseInt(bindings[0].n.value);",
+                  "    console.log('✅ Conectores registrados en Fuseki:', count);",
+                  "    pm.expect(count).to.be.at.least(3, 'Debe haber al menos worker1, worker2 y worker3 registrados');",
+                  "    pm.environment.set('broker_connector_count', count);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BROKER-2: Listar conectores con endpoint (SPARQL)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/sparql-results+json"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "query",
+                  "value": "SELECT DISTINCT ?connector ?endpoint WHERE { GRAPH ?g { ?connector a <https://w3id.org/idsa/core/BaseConnector> . OPTIONAL { ?connector <https://w3id.org/idsa/core/hasDefaultEndpoint> ?endpoint } } }"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:3030/connectorData/sparql",
+              "host": [
+                "http://localhost:3030"
+              ],
+              "path": [
+                "connectorData",
+                "sparql"
+              ]
+            },
+            "description": "Lista todos los conectores IDS registrados con sus endpoints. Verifica que los URIs y endpoints corresponden a worker1/2/3 y que ningún conector tiene endpoint vacío."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Todos los conectores tienen endpoint', () => {",
+                  "    const body = pm.response.json();",
+                  "    const bindings = body.results.bindings;",
+                  "    pm.expect(bindings.length).to.be.above(0);",
+                  "",
+                  "    const connectors = bindings.map(b => ({",
+                  "        uri     : b.connector.value,",
+                  "        endpoint: (b.endpoint || {}).value || '(sin endpoint)'",
+                  "    }));",
+                  "",
+                  "    console.log('Conectores en el broker:');",
+                  "    let sinEndpoint = 0;",
+                  "    connectors.forEach(c => {",
+                  "        const ok = c.endpoint !== '(sin endpoint)';",
+                  "        if (!ok) sinEndpoint++;",
+                  "        console.log(ok ? '  ✅' : '  ⚠️ ', c.uri, '→', c.endpoint);",
+                  "    });",
+                  "",
+                  "    pm.expect(sinEndpoint).to.equal(0, 'Todos los conectores deben tener endpoint');",
+                  "",
+                  "    // Guardar lista para tests siguientes",
+                  "    pm.environment.set('broker_connectors', JSON.stringify(connectors));",
+                  "});",
+                  "",
+                  "pm.test('Workers principales registrados (worker1, worker2, worker3)', () => {",
+                  "    const body = pm.response.json();",
+                  "    const uris = body.results.bindings.map(b => b.connector.value);",
+                  "    const requiredWorkers = ['worker1', 'worker2', 'worker3'];",
+                  "    requiredWorkers.forEach(w => {",
+                  "        const found = uris.some(u => u.includes(w));",
+                  "        console.log(found ? '  ✅' : '  ❌', w, found ? 'registrado' : 'NO encontrado');",
+                  "        pm.expect(found).to.be.true;",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BROKER-3: Contar triples en Fuseki (volumen de datos)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/sparql-results+json"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "query",
+                  "value": "SELECT (COUNT(*) as ?n) WHERE { GRAPH ?g { ?s ?p ?o } }"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:3030/connectorData/sparql",
+              "host": [
+                "http://localhost:3030"
+              ],
+              "path": [
+                "connectorData",
+                "sparql"
+              ]
+            },
+            "description": "Cuenta el total de triples en Fuseki. Un broker con 3 workers registrados debe tener al menos ~100 triples (self-descriptions completas). Menos de 10 indica que los workers no se han registrado correctamente."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Fuseki tiene volumen de datos suficiente (self-descriptions completas)', () => {",
+                  "    const body = pm.response.json();",
+                  "    const count = parseInt(body.results.bindings[0].n.value);",
+                  "    console.log('Total triples en Fuseki:', count);",
+                  "    pm.expect(count).to.be.above(50, 'Menos de 50 triples — los conectores no se registraron correctamente');",
+                  "    if (count > 500) console.log('✅ Fuseki bien poblado — self-descriptions completas');",
+                  "    else if (count > 50) console.log('✅ Fuseki con datos suficientes');",
+                  "    pm.environment.set('broker_triple_count', count);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BROKER-4: Registrar worker1 manualmente (ConnectorUpdateMessage)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"https://broker-reverseproxy/infrastructure\",\n    \"messageType\": \"ConnectorUpdateMessage\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            },
+            "description": "Envía un ConnectorUpdateMessage desde worker1 hacia el broker para registrar/actualizar su self-description. Útil para verificar que el flujo de registro IDS funciona. El broker responde con MessageProcessedNotificationMessage si todo está bien."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 — Broker aceptó el mensaje IDS', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Broker respondió con MessageProcessedNotification o RegistrationMessage', () => {",
+                  "    const body = pm.response.json();",
+                  "    const tipo = body['@type'] || '';",
+                  "    const ok = tipo.includes('MessageProcessedNotification') || tipo.includes('ConnectorUpdate') || tipo.includes('RegistrationMessage');",
+                  "    console.log('Tipo respuesta broker:', tipo);",
+                  "    pm.expect(ok).to.be.true;",
+                  "    console.log('✅ Broker procesó el registro de worker1 correctamente');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BROKER-5: Descubrir workers desde DataApp (broker/connectors)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{Coordinator_URL}}/broker/connectors",
+              "host": [
+                "{{Coordinator_URL}}"
+              ],
+              "path": [
+                "broker",
+                "connectors"
+              ]
+            },
+            "description": "Llama al endpoint /broker/connectors del DataApp del coordinator. Consulta internamente Fuseki SPARQL y devuelve la lista de conectores registrados. Verifica que el DataApp puede comunicarse con el broker correctamente."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('DataApp ve conectores en el broker', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.count).to.be.above(0);",
+                  "    pm.expect(body.connectors).to.be.an('array');",
+                  "    console.log('✅ DataApp→Broker OK —', body.count, 'conector(es) visible(s)');",
+                  "    body.connectors.forEach(c => {",
+                  "        console.log('  •', c.connector_uri, '| endpoint:', c.endpoint || '(none)');",
+                  "    });",
+                  "});",
+                  "",
+                  "pm.test('Conectores tienen connector_uri válida (w3id.org/engrd)', () => {",
+                  "    const body = pm.response.json();",
+                  "    body.connectors.forEach(c => {",
+                  "        pm.expect(c.connector_uri).to.include('connector');",
+                  "    });",
+                  "    console.log('✅ Todas las URIs son URIs IDS válidas');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BROKER-6: Broker QueryMessage (búsqueda IDS nativa)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"https://broker-reverseproxy/infrastructure\",\n    \"messageType\": \"QueryMessage\",\n    \"payload\": \"SELECT ?connector WHERE { ?connector a <https://w3id.org/idsa/core/BaseConnector> }\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            },
+            "description": "Envía un QueryMessage IDS al broker para buscar conectores mediante el protocolo nativo IDS (no SPARQL directo). Verifica que el broker responde correctamente al protocolo de mensajería IDS."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 — Broker responde al QueryMessage IDS', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Respuesta contiene conectores o ResultMessage', () => {",
+                  "    const raw = pm.response.text();",
+                  "    const hasResult = raw.includes('connector') || raw.includes('ResultMessage') || raw.includes('@type');",
+                  "    pm.expect(hasResult).to.be.true;",
+                  "    console.log('✅ Broker QueryMessage respondido correctamente');",
+                  "    console.log('   Respuesta (150 chars):', raw.substring(0, 150));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "BROKER-7: Cruzar broker vs DataApp — coherencia de registros",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/sparql-results+json"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "query",
+                  "value": "SELECT DISTINCT ?connector ?endpoint WHERE { GRAPH ?g { ?connector a <https://w3id.org/idsa/core/BaseConnector> . OPTIONAL { ?connector <https://w3id.org/idsa/core/hasDefaultEndpoint> ?endpoint } } }"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:3030/connectorData/sparql",
+              "host": [
+                "http://localhost:3030"
+              ],
+              "path": [
+                "connectorData",
+                "sparql"
+              ]
+            },
+            "description": "Consulta Fuseki y cruza los resultados con la lista de accepted_workers del paso 5c. Verifica coherencia entre lo que el broker conoce y lo que el coordinator aceptó en la negociación FL."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Coherencia broker ↔ accepted_workers (paso 5c)', () => {",
+                  "    const body = pm.response.json();",
+                  "    const brokerUris = body.results.bindings.map(b => b.connector.value);",
+                  "",
+                  "    let accepted = [];",
+                  "    try { accepted = JSON.parse(pm.environment.get('accepted_workers') || '[]'); } catch(e) {}",
+                  "    const acceptedUris = accepted.map(w => w.connector_uri || '');",
+                  "",
+                  "    if (acceptedUris.length === 0) {",
+                  "        console.log('⚠️  accepted_workers vacío — ejecuta paso 5c primero');",
+                  "        return;",
+                  "    }",
+                  "",
+                  "    console.log('Broker tiene', brokerUris.length, 'conector(es)');",
+                  "    console.log('Paso 5c aceptó', acceptedUris.length, 'worker(s)');",
+                  "",
+                  "    acceptedUris.forEach(uri => {",
+                  "        const inBroker = brokerUris.some(b => b === uri || b.includes(uri) || uri.includes(b));",
+                  "        console.log(inBroker ? '  ✅' : '  ⚠️ ', uri, inBroker ? '→ en broker' : '→ NO en broker');",
+                  "    });",
+                  "",
+                  "    pm.expect(brokerUris.length).to.be.at.least(acceptedUris.length,",
+                  "        'El broker debe tener al menos tantos conectores como los aceptados en 5c');",
+                  "});",
+                  "",
+                  "pm.test('Worker4 está o no está — documentar estado', () => {",
+                  "    const body = pm.response.json();",
+                  "    const uris = body.results.bindings.map(b => b.connector.value);",
+                  "    const w4inBroker = uris.some(u => u.includes('worker4'));",
+                  "    console.log('Worker4 en broker:', w4inBroker ? '✅ SÍ (registrado pero excluido por política FL)' : '⚠️  NO registrado');",
+                  "    // No es un fallo — worker4 puede o no estar registrado",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

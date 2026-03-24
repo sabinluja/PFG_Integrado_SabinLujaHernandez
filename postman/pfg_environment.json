@@ -10,9 +10,9 @@
       "enabled": true
     },
     {
-      "key": "Coordinator_Port",
-      "value": "5002",
-      "description": "Puerto del coordinator. 5001=worker-1, 5002=worker-2, 5003=worker-3. Cambia solo este valor para apuntar a otro coordinator.",
+      "key": "Coordinator_URL",
+      "value": "https://localhost:5002",
+      "description": "URL base del coordinator. Cambia la URL completa para apuntar a otro coordinator o despliegue remoto. Ejemplos: https://localhost:5001 (worker-1), https://localhost:5002 (worker-2), https://localhost:5003 (worker-3), https://mi-servidor.com:5002",
       "type": "default",
       "enabled": true
     },
@@ -26,7 +26,7 @@
     {
       "key": "Forward-To",
       "value": "https://ecc-worker2:8889/data",
-      "description": "ECC destino dentro de la red Docker. Cambia a https://ecc-worker3:8889/data para repetir el flujo con Worker 3.",
+      "description": "ECC destino para los pasos 1-5 (flujo manual IDS). Dentro de la red Docker. Ej: https://ecc-worker2:8889/data",
       "type": "default",
       "enabled": true
     },
@@ -47,7 +47,7 @@
     {
       "key": "contract_permission",
       "value": "{}",
-      "description": "Auto-rellenado por el test script del paso 1 → ids:contractOffer[0].ids:permission[0] (objeto JSON completo)",
+      "description": "Auto-rellenado por el test script del paso 1 → ids:contractOffer[0].ids:permission[0] (objeto JSON completo). Usado en paso 3.",
       "type": "default",
       "enabled": true
     },
@@ -61,7 +61,7 @@
     {
       "key": "contract_agreement",
       "value": "{}",
-      "description": "Auto-rellenado por el test script del paso 3 → JSON completo del ContractAgreement recibido del worker",
+      "description": "Auto-rellenado por el test script del paso 3 → JSON completo del ContractAgreement. Usado en paso 4.",
       "type": "default",
       "enabled": true
     },
@@ -101,47 +101,96 @@
     {
       "key": "compatible_workers",
       "value": "[]",
-      "description": "Auto-rellenado por el paso 5b → lista de workers con dataset compatible (JSON)",
+      "description": "Auto-rellenado por el paso 5b → lista de workers compatibles descubiertos via broker Fuseki SPARQL (JSON array).",
       "type": "default",
       "enabled": true
     },
     {
       "key": "accepted_workers",
       "value": "[]",
-      "description": "Auto-rellenado por el paso 5c → workers que aceptaron el contrato IDS (JSON)",
+      "description": "Auto-rellenado por el paso 5c → workers que aceptaron el contrato IDS (JSON array con connector_uri, ecc_url, transfer_contract).",
       "type": "default",
       "enabled": true
     },
     {
       "key": "rejected_workers",
       "value": "[]",
-      "description": "Auto-rellenado por el paso 5c → workers que rechazaron el contrato (ej. worker4)",
+      "description": "Auto-rellenado por el paso 5c → workers rechazados (ej. worker4 con FL_AUTHORIZED_URIS vacío).",
       "type": "default",
       "enabled": true
     },
     {
       "key": "Coordinator_Discover_Endpoint",
       "value": "https://localhost:5002/broker/discover",
-      "description": "Endpoint de descubrimiento del coordinator. Cambia el puerto segun el coordinator elegido.",
+      "description": "Referencia documental. La colección usa {{Coordinator_URL}}/broker/discover",
       "type": "default",
       "enabled": true
     },
     {
       "key": "Coordinator_Negotiate_Endpoint",
       "value": "https://localhost:5002/fl/negotiate",
-      "description": "Endpoint de negociacion IDS del coordinator.",
+      "description": "Referencia documental. La colección usa {{Coordinator_URL}}/fl/negotiate",
       "type": "default",
       "enabled": true
     },
     {
       "key": "Coordinator_Start_Endpoint",
       "value": "https://localhost:5002/fl/start",
-      "description": "Endpoint de arranque FL del coordinator.",
+      "description": "Referencia documental. La colección usa {{Coordinator_URL}}/fl/start",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "Worker4_ECC_Forward_To",
+      "value": "https://ecc-worker2:8889/data",
+      "description": "Auto-calculado en el pre-request del paso 15 según Coordinator_Port. ECC del coordinator al que worker4 intenta acceder.",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "fl_model_resource_id",
+      "value": "",
+      "description": "Auto-rellenado por el paso 13 → @id del recurso FL publicado por el coordinator.",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "fl_model_contract_id",
+      "value": "",
+      "description": "Auto-rellenado por el paso 13 → @id del contractOffer del recurso FL (política connector-restricted-policy).",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "fl_model_authorised_peers",
+      "value": "[]",
+      "description": "Auto-rellenado por el paso 13 → lista de connector URIs autorizados en el constraint del contrato FL (JSON array).",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "w4_fl_resource_id",
+      "value": "",
+      "description": "Auto-rellenado por el paso 15 → @id del recurso FL visible por worker4 en el catálogo del coordinator.",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "w4_fl_contract_id",
+      "value": "",
+      "description": "Auto-rellenado por el paso 15 → @id del contrato FL usado por worker4 en el intento de negociación (paso 16).",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "Worker4_URL",
+      "value": "https://localhost:5004",
+      "description": "URL base del worker4. Cambiar para despliegue remoto.",
       "type": "default",
       "enabled": true
     }
   ],
   "_postman_variable_scope": "environment",
-  "_postman_exported_at": "2026-03-05T16:45:00.000Z",
+  "_postman_exported_at": "2026-03-23T00:00:00.000Z",
   "_postman_exported_using": "Postman/10.16.9"
 }
