@@ -645,6 +645,171 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
         return False
 
 
+def _activate_coordinator_from_local() -> bool:
+    """
+    Activa el rol coordinator cargando el algorithm.py que ya existe en
+    este conector (baked en la imagen o previamente recibido via IDS).
+
+    Este es el mecanismo correcto para el self-fetch del coordinator:
+    el conector TIENE el artefacto (en el contexto IDS, está disponible
+    como recurso en su propio catálogo). No necesita pedirse a sí mismo
+    a través del ECC (lo que causaría un self-loop rechazado por DAPS).
+
+    El handshake IDS completo (Description → Contract → Artifact) tiene
+    sentido cuando el consumer ES DIFERENTE del provider. Para la
+    activación del coordinator (mismo conector), la carga directa es
+    semantícamente equivalente y arquitectónicamente correcta.
+    """
+    global is_coordinator
+    algo_src = _algo_path()  # IDS path primero, luego baked
+    if not os.path.exists(algo_src):
+        log.error(
+            f"[activate-coordinator] algorithm.py no encontrado en {algo_src}\n"
+            f"  (ALGO_IDS_PATH={ALGO_IDS_PATH}, ALGO_BAKED_PATH={ALGO_BAKED_PATH})"
+        )
+        return False
+
+    try:
+        with open(algo_src, "rb") as f:
+            algo_bytes = f.read()
+
+        # Si ya está en ALGO_IDS_PATH no hace falta copiar;
+        # si viene de ALGO_BAKED_PATH, guardarlo en ALGO_IDS_PATH
+        if algo_src == ALGO_BAKED_PATH and algo_src != ALGO_IDS_PATH:
+            _save_algorithm(algo_bytes)
+
+        # Cargar fl_config.json si existe
+        if os.path.exists(CONFIG_PATH):
+            with open(CONFIG_PATH, "rb") as f:
+                config_bytes = f.read()
+            _save_config(config_bytes)
+
+        is_coordinator = True
+        log.info(
+            f"★ algorithm.py cargado desde propio conector "
+            f"({len(algo_bytes)} bytes) — worker-{INSTANCE_ID} = COORDINATOR\n"
+            f"  Fuente: {algo_src}"
+        )
+        return True
+
+    except Exception as exc:
+        log.error(f"[activate-coordinator] Error: {exc}", exc_info=True)
+        return False
+
+
+# =============================================================================
+# Obtención del algoritmo via IDS — coordinator como CONSUMER (de otro conector)
+# =============================================================================
+
+def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) -> bool:
+    """
+    El worker que quiere ser coordinator actúa como consumer IDS:
+    ejecuta el handshake completo (Description → ContractRequest → Agreement →
+    ArtifactRequest) contra el ECC fuente para obtener algorithm.py +
+    fl_config.json. Al terminar, activa is_coordinator = True.
+
+    El ECC fuente debe tener un worker DataApp que responda al
+    ArtifactRequestMessage con el algoritmo (modo 'source').
+    """
+    global is_coordinator
+    log.info(f"[fetch-algorithm] Iniciando fetch desde {source_ecc_url} ({source_connector_uri})")
+    try:
+        # ── Paso 1: DescriptionRequestMessage → catálogo del fuente ──────────
+        desc     = _ids_send(source_ecc_url, source_connector_uri, "ids:DescriptionRequestMessage")
+        catalogs = desc.get("ids:resourceCatalog", [{}])
+        resource = (catalogs[0].get("ids:offeredResource", [{}]) or [{}])[0]
+        contract = (resource.get("ids:contractOffer",   [{}]) or [{}])[0]
+        repres   = (resource.get("ids:representation",  [{}]) or [{}])[0]
+        instance = (repres.get("ids:instance",          [{}]) or [{}])[0]
+
+        contract_id       = contract.get("@id", "")
+        permission        = (contract.get("ids:permission", [{}]) or [{}])[0]
+        provider_id       = contract.get("ids:provider", {}).get("@id", "")
+        contract_artifact = instance.get(
+            "@id", "http://w3id.org/engrd/connector/artifact/1"
+        )
+        log.info(f"[fetch-algorithm] 1/4 Description OK — artifact={contract_artifact}")
+
+        # ── Paso 2: ContractRequestMessage ───────────────────────────────────
+        agreement = _ids_send(
+            source_ecc_url, source_connector_uri, "ids:ContractRequestMessage",
+            requested_element=contract_artifact,
+            payload={
+                "@context"      : _ids_context(),
+                "@type"         : "ids:ContractRequest",
+                "@id"           : contract_id,
+                "ids:permission": [permission],
+                "ids:provider"  : {"@id": provider_id},
+                "ids:obligation": [], "ids:prohibition": [],
+                "ids:consumer"  : {"@id": CONNECTOR_URI},
+            },
+        )
+        transfer_contract = agreement.get("@id", "")
+        log.info(f"[fetch-algorithm] 2/4 ContractAgreement OK — transfer={transfer_contract}")
+
+        # ── Paso 3: ContractAgreementMessage ─────────────────────────────────
+        _ids_send(
+            source_ecc_url, source_connector_uri, "ids:ContractAgreementMessage",
+            requested_artifact=contract_artifact,
+            transfer_contract=transfer_contract,
+            correlation_message=transfer_contract,
+            payload=agreement,
+        )
+        log.info("[fetch-algorithm] 3/4 Acuerdo confirmado")
+
+        # ── Paso 4: ArtifactRequestMessage → recibir algorithm.py ────────────
+        # IMPORTANTE: No ponemos payload ni ids:contentVersion extra.
+        # El DataApp fuente (modo source) detecta el ArtifactRequest genérico
+        # y responde directamente con {type:fl_algorithm, content:<b64>, ...}.
+        resp = _ids_send(
+            source_ecc_url, source_connector_uri, "ids:ArtifactRequestMessage",
+            requested_artifact=contract_artifact,
+            transfer_contract=transfer_contract,
+            correlation_message=transfer_contract,
+        )
+        log.info(f"[fetch-algorithm] 4/4 ArtifactResponse recibida — type={resp.get('type','?')!r}")
+
+        # ── Extraer y guardar algoritmo ───────────────────────────────────────
+        algo_b64   = resp.get("content", "")
+        config_b64 = resp.get("config")
+
+        if not algo_b64:
+            log.error(f"[fetch-algorithm] Respuesta sin contenido: {str(resp)[:300]}")
+            return False
+
+        try:
+            algo_bytes = base64.b64decode(algo_b64)
+        except Exception:
+            algo_bytes = algo_b64.encode() if isinstance(algo_b64, str) else b""
+
+        _save_algorithm(algo_bytes)
+
+        if config_b64:
+            try:
+                config_bytes = base64.b64decode(config_b64)
+                _save_config(config_bytes)
+            except Exception as e:
+                log.warning(f"[fetch-algorithm] No se pudo guardar fl_config.json: {e}")
+        else:
+            log.warning(
+                "[fetch-algorithm] fl_config.json no incluido en la respuesta — "
+                "guardando valores por defecto en disco"
+            )
+            _save_config(json.dumps(_load_fl_config()).encode())
+
+
+        is_coordinator = True
+        log.info(
+            f"★ algorithm.py + config obtenidos via IDS desde {source_ecc_url} "
+            f"— worker-{INSTANCE_ID} = COORDINATOR"
+        )
+        return True
+
+    except Exception as exc:
+        log.error(f"[fetch-algorithm] Error: {exc}", exc_info=True)
+        return False
+
+
 # =============================================================================
 # Lógica FL
 # =============================================================================
@@ -1106,6 +1271,10 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                           "total_rounds": n_rounds, "history": []})
 
     global_weights_b64 = None
+    best_accuracy      = -1.0
+    best_weights_b64   = None
+    best_metrics       = None
+    best_round         = -1
     model_path         = os.path.join(OUTPUT_DIR, "global_model.json")
 
     if os.path.exists(model_path):
@@ -1203,8 +1372,16 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                 "global_metrics" : global_metrics,
             })
 
-        with open(model_path, "w") as f:
-            json.dump({"round": round_num, "weights_b64": global_weights_b64, "metrics": global_metrics}, f)
+        acc = global_metrics.get("accuracy", 0)
+        if acc > best_accuracy:
+            best_accuracy = acc
+            best_weights_b64 = global_weights_b64
+            best_metrics = global_metrics
+            best_round = round_num
+
+            with open(model_path, "w") as f:
+                json.dump({"round": best_round, "weights_b64": best_weights_b64, "metrics": best_metrics}, f)
+            log.info(f"✨ Nueva mejor ronda encontrada ({best_round}) con acc={best_accuracy} — guardada en disco")
 
         log.info(
             f"Ronda {round_num} OK en {elapsed}s  "
@@ -1218,14 +1395,18 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
     with open(os.path.join(OUTPUT_DIR, "fl_results.json"), "w") as f:
         json.dump(fl_state["history"], f, indent=2)
 
-    log.info(f"✅ FL completado — {n_rounds} rondas")
+    log.info(f"✅ FL completado — {n_rounds} rondas. Mejor ronda: {best_round}")
 
     try:
-        last_metrics = fl_state["history"][-1]["global_metrics"] if fl_state["history"] else {}
-        _publish_fl_model_as_ids_resource(global_weights_b64, last_metrics, n_rounds, peer_connector_uris=_peers_snapshot)
+        last_metrics = best_metrics if best_metrics else (fl_state["history"][-1]["global_metrics"] if fl_state["history"] else {})
+        _publish_fl_model_as_ids_resource(
+            best_weights_b64 or global_weights_b64,
+            last_metrics,
+            best_round if best_round > 0 else n_rounds,
+            peer_connector_uris=_peers_snapshot
+        )
     except Exception as exc:
         log.error(f"Error publicando modelo IDS: {exc}")
-
 
 # =============================================================================
 # POST /data — mensajes IDS entrantes del ECC
@@ -1446,20 +1627,30 @@ async def ids_data(request: Request):
                             payload_dict["type"] = "fl_weights"
                             log.warning("[ArtifactRequest] type inferido desde contentVersion: fl_weights (payload vacío — pesos perdidos)")
                 else:
-                    # Es fl_algorithm — extraer algoritmo y config
-                    from_coord = False
-                    if "||from_coordinator::1" in content_version:
-                        content_version = content_version.replace("||from_coordinator::1", "")
-                        from_coord = True
-                    if "||fl_config::" in content_version:
-                        algo_part, config_part = content_version.split("||fl_config::", 1)
-                    else:
-                        algo_part, config_part = content_version, None
-                    payload_dict = {
-                        "type"            : "fl_algorithm",
-                        "content"         : algo_part,
-                        "config"          : config_part,
-                        "from_coordinator": from_coord,
+                    # Es fl_algorithm SOLO si parece payload IDS-FL válido:
+                    # el codec IDS-FL incluye siempre al menos "||from_coordinator"
+                    # o "||fl_config::" o un base64 largo (> 50 chars) sin "::" adicionales.
+                    # Si el ECC añade su propia value (p.ej. una URI o token corto),
+                    # lo ignoramos y dejamos artifact_type vacío → modo fuente.
+                    _looks_like_fl_algo = (
+                        "||from_coordinator" in content_version
+                        or "||fl_config::" in content_version
+                        or (len(content_version) > 100 and "::" not in content_version[:20])
+                    )
+                    if _looks_like_fl_algo:
+                        from_coord = False
+                        if "||from_coordinator::1" in content_version:
+                            content_version = content_version.replace("||from_coordinator::1", "")
+                            from_coord = True
+                        if "||fl_config::" in content_version:
+                            algo_part, config_part = content_version.split("||fl_config::", 1)
+                        else:
+                            algo_part, config_part = content_version, None
+                        payload_dict = {
+                            "type"            : "fl_algorithm",
+                            "content"         : algo_part,
+                            "config"          : config_part,
+                            "from_coordinator": from_coord,
                     }
                     log.info(f"[ArtifactRequest] fl_algorithm recuperado desde ids:contentVersion | config={'present' if config_part else 'absent'} | from_coordinator={from_coord}")
 
@@ -1628,6 +1819,49 @@ async def ids_data(request: Request):
                 }),
             )
 
+        # ── Modo fuente: servir algorithm.py a otro coordinator que lo solicita ──
+        # Cuando el artifact_type es desconocido/vacío y el artefacto solicitado
+        # no es de tipo fl_weights/fl_global_weights, este DataApp actúa como
+        # PROVEEDOR y devuelve su algorithm.py (baked o recibido previamente).
+        req_art_hdr = mensaje.get("ids:requestedArtifact", {})
+        req_art_id  = req_art_hdr.get("@id", "") if isinstance(req_art_hdr, dict) else str(req_art_hdr)
+        is_algo_request = (
+            not artifact_type
+            and req_art_id
+            and "fl_weights" not in req_art_id
+            and "fl_global" not in req_art_id
+        )
+
+        if is_algo_request:
+            algo_src = _algo_path()
+            if os.path.exists(algo_src):
+                try:
+                    with open(algo_src, "rb") as f:
+                        algo_bytes_src = f.read()
+                    algo_b64_src = base64.b64encode(algo_bytes_src).decode()
+
+                    config_b64_src = None
+                    if os.path.exists(CONFIG_PATH):
+                        with open(CONFIG_PATH, "rb") as f:
+                            config_b64_src = base64.b64encode(f.read()).decode()
+
+                    requester = mensaje.get("ids:issuerConnector", {}).get("@id", "?")
+                    log.info(
+                        f"[ArtifactRequest SOURCE] Sirviendo algorithm.py "
+                        f"({len(algo_bytes_src)} bytes) → {requester}"
+                    )
+                    return _multipart_response(resp_h, json.dumps({
+                        "type"    : "fl_algorithm",
+                        "filename": "algorithm.py",
+                        "content" : algo_b64_src,
+                        "config"  : config_b64_src,
+                        "source"  : INSTANCE_ID,
+                    }))
+                except Exception as e:
+                    log.error(f"[ArtifactRequest SOURCE] Error sirviendo algoritmo: {e}")
+            else:
+                log.error(f"[ArtifactRequest SOURCE] algorithm.py no encontrado en {algo_src}")
+
         log.warning(f"Tipo de artefacto desconocido: {artifact_type!r}")
         return _multipart_response(resp_h, json.dumps({"status": "unknown_artifact_type"}))
 
@@ -1643,6 +1877,104 @@ async def ids_data_get():
 # =============================================================================
 # Endpoints de control y monitorización
 # =============================================================================
+
+# =============================================================================
+# POST /fl/fetch-algorithm — coordinator solicita el algoritmo via IDS
+# =============================================================================
+
+@app.post("/fl/fetch-algorithm")
+async def fl_fetch_algorithm(request: Request):
+    """
+    El worker que quiere ser coordinator llama a este endpoint.
+    Ejecuta el handshake IDS completo contra el ECC fuente para obtener
+    algorithm.py + fl_config.json y activar el rol coordinator.
+
+    Por defecto (body vacío) hace un **IDS self-fetch**:
+      el coordinator actúa como CONSUMER Y PROVIDER de su propio ECC.
+      DescriptionRequestMessage → ContractRequestMessage
+      → ContractAgreementMessage → ArtifactRequestMessage
+      El ECC reenvía al /data local que sirve el algorithm.py baked.
+
+    Body JSON (todos opcionales):
+      source_ecc_url:       URL del ECC fuente. Si se omite, se usa el
+                            propio ECC del coordinator (self-fetch IDS).
+      source_connector_uri: URI IDS del conector fuente.
+                            Si se omite, se usa el propio CONNECTOR_URI.
+    """
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+
+    source_ecc_url       = body.get("source_ecc_url", "")
+    source_connector_uri = body.get("source_connector_uri", "")
+
+    # ── MODO DEFAULT: IDS self-fetch (sin intermediario externo) ─────────────
+    # Si no se especifica source_ecc_url, el coordinator construye la URL de
+    # su propio ECC y ejecuta el handshake IDS completo contra él:
+    #   DescriptionRequestMessage → ContractRequestMessage
+    #   → ContractAgreementMessage → ArtifactRequestMessage
+    # El ECC reenvía cada mensaje al /data del propio DataApp, que actúa en
+    # "modo fuente" y sirve el algorithm.py + fl_config.json baked.
+    # run_in_executor libera el event loop para que /data pueda responder
+    # concurrentemente → no hay deadlock.
+    if not source_ecc_url:
+        source_ecc_url       = f"https://{ECC_HOSTNAME}:8889/data"
+        source_connector_uri = CONNECTOR_URI
+        log.info(
+            f"[/fl/fetch-algorithm] IDS self-fetch — coordinator actúa como consumer Y provider\n"
+            f"  source_ecc_url : {source_ecc_url}\n"
+            f"  connector_uri  : {source_connector_uri}"
+        )
+
+    # ── Handshake IDS (self-fetch o externo) ─────────────────────────────────
+    # Ejecutar en thread pool para liberar el event loop:
+    #   el ECC necesita llamar de vuelta a /data (o al ECC externo),
+    #   y ese handler debe poder ejecutarse concurrentemente.
+    log.info(
+        f"[/fl/fetch-algorithm] Iniciando fetch —\n"
+        f"  source_ecc_url       : {source_ecc_url}\n"
+        f"  source_connector_uri : {source_connector_uri}"
+    )
+
+    import asyncio
+    loop = asyncio.get_event_loop()
+    success = await loop.run_in_executor(
+        None, _fetch_algorithm_from_ecc, source_ecc_url, source_connector_uri
+    )
+
+    if success:
+        cfg = _load_fl_config()
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status"      : "everything_received",
+                "coordinator" : INSTANCE_ID,
+                "source_ecc"  : source_ecc_url,
+                "fl_config"   : {
+                    "rounds"       : cfg["rounds"],
+                    "round_timeout": cfg["round_timeout"],
+                    "epochs"       : cfg["epochs"],
+                    "batch_size"   : cfg["batch_size"],
+                    "learning_rate": cfg["learning_rate"],
+                },
+                "next_step": "POST /broker/discover → POST /fl/negotiate → POST /fl/start",
+            }
+        )
+    else:
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error"     : "No se pudo obtener el algoritmo via IDS.",
+                "source_ecc": source_ecc_url,
+                "hint"      : (
+                    "Self-fetch: comprueba que el ECC acepta mensajes del propio conector "
+                    "y que algorithm.py está disponible en el DataApp fuente."
+                ),
+            }
+        )
+
 
 @app.post("/fl/start")
 async def fl_start(request: Request):

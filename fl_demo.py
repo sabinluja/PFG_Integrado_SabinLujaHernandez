@@ -1,0 +1,1188 @@
+#!/usr/bin/env python3
+"""
+fl_demo.py  —  Demostración completa IDS + Federated Learning
+==============================================================
+
+  FASE 0  Resolver endpoints
+          ├─ GET /status            → ECC del coordinator (autoritativo)
+          └─ GET /broker/connectors  → peers vía SPARQL Fuseki (owl:sameAs)
+
+  FASE 1  Coordinator obtiene el algoritmo via IDS (auto-fetch)
+          └─ POST /fl/fetch-algorithm
+             El coordinator actúa como CONSUMER IDS:
+               DescriptionRequestMessage → ContractRequestMessage
+               → ContractAgreementMessage → ArtifactRequestMessage
+             El ECC fuente (otro worker del Broker) responde con
+             algorithm.py + fl_config.json. El coordinator los guarda
+             en disco y activa su rol de coordinator.
+             No hay intermediario externo ni lectura de ficheros locales.
+
+  FASE 2  Descubrimiento de peers (broker + match de columnas)
+          └─ POST /broker/discover
+
+  FASE 3  Negociación IDS coordinator → cada peer  (TODA la lógica IDS aqui)
+          └─ POST /fl/negotiate
+             ├─ Worker-1: Description → ContractRequest → ContractAgreement → ACEPTA
+             ├─ Worker-3: Description → ContractRequest → ContractAgreement → ACEPTA
+             └─ Worker-4: Description → ContractRequest → RejectionMessage  → RECHAZA
+                          (FL_OPT_OUT=true en docker-compose — soberanía del dato)
+
+  FASE 4  Arranque del entrenamiento (omitir con --skip-fl)
+          └─ POST /fl/start
+
+Uso:
+  python fl_demo.py
+  python fl_demo.py --skip-fl
+  python fl_demo.py --coordinator 3
+  python fl_demo.py --timeout 120
+"""
+
+import sys
+import json
+import argparse
+import time
+import re
+
+import requests
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+# =============================================================================
+# Configuración
+# =============================================================================
+
+# Puerto del dataapp coordinator: convencion 5000 + N (p.ej. 5002 para worker-2)
+# Se puede sobreescribir con --coordinator-port
+DEFAULT_COORDINATOR_PORT_BASE = 5000
+
+
+# =============================================================================
+# Colores y logging
+# =============================================================================
+
+RESET   = "\033[0m"
+BOLD    = "\033[1m"
+CYAN    = "\033[96m"
+GREEN   = "\033[92m"
+YELLOW  = "\033[93m"
+RED     = "\033[91m"
+GRAY    = "\033[90m"
+BLUE    = "\033[94m"
+MAGENTA = "\033[95m"
+WHITE   = "\033[97m"
+
+
+def _sep(char="=", width=72, color=CYAN):
+    print(f"{color}{char * width}{RESET}")
+
+
+def banner(title, subtitle=""):
+    print()
+    _sep("=", color=BOLD + CYAN)
+    print(f"{BOLD}{CYAN}  {title}{RESET}")
+    if subtitle:
+        print(f"{GRAY}  {subtitle}{RESET}")
+    _sep("=", color=BOLD + CYAN)
+
+
+def phase(num, title, description=""):
+    print()
+    _sep("-", color=BLUE)
+    print(f"{BOLD}{BLUE}  FASE {num}  —  {title}{RESET}")
+    if description:
+        for line in description.splitlines():
+            print(f"{GRAY}  {line}{RESET}")
+    _sep("-", color=BLUE)
+
+
+def step(num, title):
+    print(f"\n{BOLD}{WHITE}  > Paso {num}  —  {title}{RESET}")
+
+
+def substep(msg):
+    print(f"    {GRAY}-> {msg}{RESET}")
+
+
+def ok(msg):
+    print(f"    {GREEN}OK  {msg}{RESET}")
+
+
+def fail(msg):
+    print(f"    {RED}ERR {msg}{RESET}")
+    sys.exit(1)
+
+
+def warn(msg):
+    print(f"    {YELLOW}WARN {msg}{RESET}")
+
+
+def info(msg):
+    print(f"    {GRAY}INFO {msg}{RESET}")
+
+
+def field(label, value, indent=4):
+    pad = " " * indent
+    val = str(value)
+    if len(val) > 110:
+        val = val[:107] + "..."
+    print(f"{pad}{MAGENTA}{label:<28}{RESET} {val}")
+
+
+def ids_arrow(direction, msg_type, src, dst):
+    arrow = "->" if direction == "out" else "<-"
+    color = CYAN if direction == "out" else GREEN
+    short = msg_type.replace("ids:", "").replace("Message", "Msg")
+    print(f"    {color}[IDS {arrow}] {short:<42}{GRAY}  {src}  ->  {dst}{RESET}")
+
+
+def section(title):
+    print(f"\n    {BOLD}{WHITE}-- {title} --{RESET}")
+
+
+# =============================================================================
+# Cliente HTTP
+# =============================================================================
+
+SESSION = requests.Session()
+SESSION.verify = False
+
+
+def http_get(url, timeout=60):
+    substep(f"GET  {url}")
+    try:
+        r = SESSION.get(url, timeout=timeout)
+        r.raise_for_status()
+        try:
+            return r.json()
+        except Exception:
+            return {"_raw": r.text}
+    except requests.exceptions.ConnectionError:
+        fail(f"Conexion rechazada en {url} -- el container no esta levantado?")
+    except requests.exceptions.ReadTimeout:
+        fail(f"Timeout ({timeout}s) esperando {url}")
+    except requests.exceptions.HTTPError as exc:
+        fail(f"HTTP {exc.response.status_code} en {url}")
+
+
+def http_post(url, body, timeout=90):
+    substep(f"POST {url}")
+    try:
+        r = SESSION.post(url, json=body, timeout=timeout)
+        r.raise_for_status()
+        try:
+            return r.json()
+        except Exception:
+            return {"_raw": r.text}
+    except requests.exceptions.ConnectionError:
+        fail(f"Conexion rechazada en {url}")
+    except requests.exceptions.ReadTimeout:
+        fail(
+            f"Timeout ({timeout}s) esperando respuesta de {url}\n"
+            f"      El ECC TRUE Connector puede tardar en la primera llamada (token DAPS).\n"
+            f"      Usa --timeout N para subir el limite."
+        )
+    except requests.exceptions.HTTPError as exc:
+        body_txt = ""
+        try:
+            body_txt = exc.response.text[:400]
+        except Exception:
+            pass
+        fail(f"HTTP {exc.response.status_code} en {url}\n      {body_txt}")
+
+
+def http_post_raw(url, body, timeout=90):
+    substep(f"POST {url}")
+    try:
+        r = SESSION.post(url, json=body, timeout=timeout)
+        r.raise_for_status()
+        return r.text
+    except requests.exceptions.ConnectionError:
+        fail(f"Conexion rechazada en {url}")
+    except requests.exceptions.ReadTimeout:
+        fail(
+            f"Timeout ({timeout}s) esperando respuesta de {url}\n"
+            f"      El ECC TRUE Connector puede tardar en la primera llamada (token DAPS).\n"
+            f"      Usa --timeout N para subir el limite."
+        )
+    except requests.exceptions.HTTPError as exc:
+        body_txt = ""
+        try:
+            body_txt = exc.response.text[:400]
+        except Exception:
+            pass
+        fail(f"HTTP {exc.response.status_code} en {url}\n      {body_txt}")
+
+
+# =============================================================================
+# Parser IDS — JSON puro o embebido en multipart
+# =============================================================================
+
+def parse_ids(raw, want_type=None):
+    if not raw:
+        return {}
+    try:
+        obj = json.loads(raw)
+        if isinstance(obj, dict):
+            if not want_type or want_type in obj.get("@type", ""):
+                return obj
+    except Exception:
+        pass
+
+    blocks = re.findall(r'\{[\s\S]*?\}', raw)
+    blocks.sort(key=len, reverse=True)
+
+    if want_type:
+        for b in blocks:
+            try:
+                obj = json.loads(b)
+                if isinstance(obj, dict) and want_type in obj.get("@type", ""):
+                    return obj
+            except Exception:
+                pass
+
+    for b in blocks:
+        try:
+            obj = json.loads(b)
+            if isinstance(obj, dict) and ("@id" in obj or "ids:resourceCatalog" in obj):
+                return obj
+        except Exception:
+            pass
+
+    return {}
+
+
+# =============================================================================
+# FASE 0 — Resolver endpoints desde /status y Broker Fuseki
+# =============================================================================
+
+def _ecc_internal_url(endpoint_raw, connector_uri):
+    """
+    Convierte el endpoint publico del broker (puerto 8449 externo)
+    al endpoint interno Docker (puerto 8889 /data).
+    Mapeo: ecc-workerN:8449/api/ids/data  ->  ecc-workerN:8889/data
+    """
+    if endpoint_raw:
+        m = re.search(r"(ecc-worker\d+):(\d+)", endpoint_raw)
+        if m:
+            host = m.group(1)
+            port = m.group(2)
+            internal = "8889" if port == "8449" else port
+            return f"https://{host}:{internal}/data"
+        m2 = re.search(r"(ecc-worker\d+)", endpoint_raw)
+        if m2:
+            return f"https://{m2.group(1)}:8889/data"
+    m = re.search(r"worker(\d+)", connector_uri)
+    if m:
+        return f"https://ecc-worker{m.group(1)}:8889/data"
+    return ""
+
+
+def _ecc_label(ecc_url):
+    m = re.search(r"(ecc-worker\d+):(\d+)", ecc_url)
+    if m:
+        return f"{m.group(1)}:{m.group(2)}"
+    m2 = re.search(r"https?://([^/]+)", ecc_url)
+    return m2.group(1) if m2 else ecc_url
+
+
+def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
+    phase(
+        0,
+        "Resolver endpoints",
+        "Paso 0a: GET /status           -> health check del DataApp coordinator\n"
+        "Paso 0b: GET /broker/connectors -> todos los conectores registrados en Fuseki\n"
+        f"Paso 0c: Extraer Worker-{cid} del Broker -> ECC URL y connector_uri sin hardcodear"
+    )
+
+    # ── 0a: health check del DataApp coordinator ───────────────────────────────
+    step("0a", f"GET /status — health check del Worker-{cid}")
+    status = http_get(f"{coordinator_url}/status", timeout=req_timeout)
+    ok(f"Worker-{cid} responde correctamente en {coordinator_url}")
+    field("instance",        status.get("instance", "?"))
+    field("role (actual)",   status.get("role",     "worker"))
+
+    # ── 0b: TODOS los conectores desde el broker (incluido el coordinator) ─────
+    step("0b", "GET /broker/connectors — todos los conectores del Broker Fuseki")
+    bd    = http_get(f"{coordinator_url}/broker/connectors", timeout=req_timeout)
+    raw_p = bd.get("connectors", [])
+    count = bd.get("count", len(raw_p))
+
+    ok(f"{count} conectores en el broker")
+    print()
+
+    all_entries      = {}   # wid -> entry (todos, incluyendo coordinator)
+    all_peers        = []   # solo los que NO son coordinator
+    peers            = {}
+
+    for c in raw_p:
+        uri     = c.get("connector_uri", "")
+        ep_raw  = c.get("endpoint", "")
+        ecc_url = _ecc_internal_url(ep_raw, uri)
+        label   = _ecc_label(ecc_url)
+        m       = re.search(r"worker(\d+)", uri) or re.search(r"worker(\d+)", ecc_url)
+        wid     = m.group(1) if m else "?"
+
+        entry = {
+            "connector_uri": uri,
+            "ecc_url":       ecc_url,
+            "ecc_label":     label,
+            "endpoint_raw":  ep_raw,
+        }
+        all_entries[wid] = entry
+
+        is_coord = (wid == str(cid))
+        tag = f"  {CYAN}← coordinator{RESET}" if is_coord else ""
+        print(f"    {GRAY}·  Worker-{wid}{RESET}{tag}")
+        field("  connector_uri",     uri,    indent=8)
+        field("  endpoint (broker)", ep_raw, indent=8)
+        field("  ecc_url (interno)", ecc_url, indent=8)
+        print()
+
+        if not is_coord:
+            peers[f"worker{wid}"] = entry
+            all_peers.append(entry)
+
+    if not all_entries:
+        fail(
+            "El broker no devolvio ningun conector.\n"
+            "      Comprueba que broker-core, broker-fuseki y broker-reverseproxy estan levantados\n"
+            "      y que los workers se han auto-registrado."
+        )
+
+    # ── 0c: Datos del Worker-{cid} extraidos del Broker ───────────────────────
+    step("0c", f"Datos del Worker-{cid} (coordinator) extraidos del Broker")
+
+    coord_entry = all_entries.get(str(cid))
+    if coord_entry:
+        ok(f"Worker-{cid} encontrado en el Broker — sin hardcodear")
+        field("connector_uri (broker)", coord_entry["connector_uri"])
+        field("ecc_url      (broker)", coord_entry["ecc_url"])
+        coordinator_entry = coord_entry
+    else:
+        # Fallback solo si el worker-N no se registró aún en el broker
+        warn(
+            f"Worker-{cid} no encontrado en el Broker.\n"
+            f"      Puede que aun no se haya registrado — re-intenta en unos segundos.\n"
+            f"      Usando connector_uri del /status como fallback."
+        )
+        fallback_ecc = f"https://ecc-worker{cid}:8889/data"
+        coordinator_entry = {
+            "connector_uri": status.get("connector_uri",
+                                        f"http://w3id.org/engrd/connector/worker{cid}"),
+            "ecc_url":       fallback_ecc,
+            "ecc_label":     _ecc_label(fallback_ecc),
+        }
+
+    if not all_peers:
+        fail(
+            "El broker no devolvio ningun peer (aparte del coordinator).\n"
+            "      Comprueba que los demas workers estan levantados y registrados."
+        )
+
+    return {
+        "coordinator": coordinator_entry,
+        "peers":       peers,
+        "all_peers":   all_peers,
+    }
+
+
+
+# =============================================================================
+# FASE 1 — Coordinator obtiene el algoritmo via IDS (auto-fetch)
+# =============================================================================
+
+def fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
+    """
+    El coordinator (worker-N) obtiene algorithm.py + fl_config.json
+    por si solo via IDS, sin ayuda de workers externos.
+
+    Flujo (ejecutado DENTRO del coordinator, app.py / _fetch_algorithm_from_ecc):
+      Coordinator actua como CONSUMER de su propio ECC:
+        DescriptionRequestMessage  -> propio ECC -> propio /data
+        ContractRequestMessage     -> propio ECC -> propio /data
+        ContractAgreementMessage   -> propio ECC -> propio /data
+        ArtifactRequestMessage     -> propio ECC -> propio /data (modo fuente)
+      /data sirve el algorithm.py baked y guarda en disco.
+      Coordinator activa is_coordinator = True.
+    """
+    coord_ecc   = endpoints["coordinator"]["ecc_url"]
+    coord_label = endpoints["coordinator"]["ecc_label"]
+
+    phase(
+        1,
+        f"Worker-{cid} obtiene el algoritmo via IDS  (self-fetch autonomo)",
+        f"Coordinator ECC  : {coord_label}\n"
+        f"Fuente ECC       : {coord_label}  (propio conector - sin worker externo)\n"
+        "Handshake IDS (coordinator como consumer Y provider de su propio ECC):\n"
+        "  DescriptionRequestMessage  ->  propio /data  ->  DescriptionResponseMessage\n"
+        "  ContractRequestMessage     ->  propio /data  ->  ContractAgreementMessage\n"
+        "  ContractAgreementMessage   ->  propio /data  ->  MessageProcessedNotification\n"
+        "  ArtifactRequestMessage     ->  propio /data  ->  ArtifactResponseMessage [alg+cfg]"
+    )
+
+    step("1", "POST /fl/fetch-algorithm — coordinator hace self-fetch IDS")
+    info(f"Coordinator ({coord_label}) actua como consumer Y provider de su propio ECC")
+    info(f"Fuente: {coord_ecc}  (mismo conector, sin worker externo)")
+
+    ids_arrow("out", "ids:DescriptionRequestMessage",  coord_label, coord_label)
+    ids_arrow("in",  "ids:DescriptionResponseMessage", coord_label, coord_label)
+    ids_arrow("out", "ids:ContractRequestMessage",     coord_label, coord_label)
+    ids_arrow("in",  "ids:ContractAgreementMessage",   coord_label, coord_label)
+    ids_arrow("out", "ids:ContractAgreementMessage (confirm)", coord_label, coord_label)
+    ids_arrow("in",  "ids:MessageProcessedNotificationMsg",    coord_label, coord_label)
+    ids_arrow("out", "ids:ArtifactRequestMessage",                         coord_label, coord_label)
+    ids_arrow("in",  "ids:ArtifactResponseMessage [algorithm.py + config]", coord_label, coord_label)
+
+    # Body vacio: el coordinator usa su propio ECC por defecto (self-fetch)
+    result = http_post(f"{coordinator_url}/fl/fetch-algorithm", {}, timeout=req_timeout)
+
+    status = result.get("status", "")
+    if status == "everything_received":
+        ok("algorithm.py + fl_config.json obtenidos por el coordinator via IDS (self-fetch)")
+        field("source_ecc", result.get("source_ecc", "?"))
+        cfg = result.get("fl_config") or {}
+        if cfg:
+            field("rounds",        cfg.get("rounds"))
+            field("round_timeout", f"{cfg.get('round_timeout')}s")
+            field("epochs",        cfg.get("epochs"))
+    else:
+        fail(f"El coordinator no pudo obtener el algoritmo: {result}")
+
+    print()
+    print(f"    {BOLD}{GREEN}** Worker-{cid} es ahora el COORDINATOR **{RESET}")
+
+
+# =============================================================================
+# FASE 2 — Descubrimiento de peers compatibles
+
+# =============================================================================
+
+def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
+    phase(
+        2,
+        "Descubrimiento de peers compatibles",
+        "POST /broker/discover -> coordinator consulta Fuseki + DescriptionRequest a cada peer\n"
+        "Devuelve workers con match de columnas >= 80%"
+    )
+
+    step("5b", "POST /broker/discover")
+    data       = http_post(f"{coordinator_url}/broker/discover", {}, timeout=req_timeout)
+    compatible = data.get("compatible_workers", [])
+    my_cols    = data.get("my_columns_count", "?")
+    count      = data.get("count", len(compatible))
+
+    ok(f"{count} workers compatibles encontrados")
+    field("Columnas del coordinator", my_cols)
+    print()
+
+    for w in compatible:
+        uri   = w.get("connector_uri", "?")
+        match = w.get("match_ratio", 0)
+        cols  = len(w.get("common_cols", []))
+        m     = re.search(r"worker(\d+)", uri)
+        wid   = m.group(1) if m else "?"
+        peer  = endpoints["peers"].get(f"worker{wid}", {})
+        ecc   = peer.get("ecc_url") or w.get("ecc_url", "(desconocido)")
+        print(f"    {GREEN}OK{RESET}  Worker-{wid}  match: {match:.0%}  cols comunes: {cols}")
+        field("  connector_uri", uri, indent=8)
+        field("  ecc_url",       ecc, indent=8)
+        print()
+
+    return compatible
+
+
+# =============================================================================
+# FASE 3 — Negociación IDS coordinator → cada peer
+# =============================================================================
+
+def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
+    coord_label = endpoints["coordinator"]["ecc_label"]
+
+    phase(
+        3,
+        "Negociacion IDS  coordinator -> cada peer  (paso 5c)",
+        f"Coordinator ECC: {endpoints['coordinator']['ecc_url']}\n"
+        "\n"
+        "Handshake IDS por peer:\n"
+        "  1. DescriptionRequestMessage  ->  DescriptionResponseMessage\n"
+        "  2. ContractRequestMessage     ->  ContractAgreementMessage  (acepta)\n"
+        "                                ->  RejectionMessage          (rechaza)\n"
+        "  3. ContractAgreementMessage   ->  MessageProcessedNotif.    (si acepto)\n"
+        "\n"
+        "  Worker-1: ACEPTA  (FL_OPT_OUT no definido en docker-compose)\n"
+        "  Worker-3: ACEPTA  (FL_OPT_OUT no definido en docker-compose)\n"
+        "  Worker-4: RECHAZA (FL_OPT_OUT=true en docker-compose -- soberania del dato)"
+    )
+
+    step("5c", "POST /fl/negotiate")
+    data     = http_post(f"{coordinator_url}/fl/negotiate", {}, timeout=req_timeout)
+    accepted = data.get("accepted", [])
+    rejected = data.get("rejected", [])
+
+    print(f"\n  {BOLD}Detalle de cada negociacion IDS:{RESET}\n")
+
+    for w in accepted:
+        uri  = w.get("connector_uri", "?")
+        tc   = w.get("transfer_contract", "")
+        m    = re.search(r"worker(\d+)", uri)
+        wid  = m.group(1) if m else "?"
+        peer = endpoints["peers"].get(f"worker{wid}", {})
+        pl   = peer.get("ecc_label") or f"ecc-worker{wid}:8889"
+        pe   = peer.get("ecc_url")   or f"https://ecc-worker{wid}:8889/data"
+
+        print(f"  {BOLD}Worker-{wid}{RESET}  {GRAY}{uri}{RESET}")
+        field("  ECC (broker)", pe, indent=6)
+        ids_arrow("out", "ids:DescriptionRequestMessage",        coord_label, pl)
+        ids_arrow("in",  "ids:DescriptionResponseMessage",       pl, coord_label)
+        ids_arrow("out", "ids:ContractRequestMessage",           coord_label, pl)
+        ids_arrow("in",  "ids:ContractAgreementMessage",         pl, coord_label)
+        ids_arrow("out", "ids:ContractAgreementMessage (confirm)", coord_label, pl)
+        ids_arrow("in",  "ids:MessageProcessedNotificationMsg",  pl, coord_label)
+        print(f"    {GREEN}ACEPTA -- contrato IDS establecido{RESET}")
+        if tc:
+            field("transfer_contract", tc[:72] + ("..." if len(tc) > 72 else ""))
+        print()
+
+    for w in rejected:
+        uri    = w.get("connector_uri", "?")
+        reason = w.get("reason", "?")
+        msg    = w.get("message", "")
+        m      = re.search(r"worker(\d+)", uri)
+        wid    = m.group(1) if m else "?"
+        peer   = endpoints["peers"].get(f"worker{wid}", {})
+        pl     = peer.get("ecc_label") or f"ecc-worker{wid}:8889"
+        pe     = peer.get("ecc_url")   or f"https://ecc-worker{wid}:8889/data"
+
+        reason_labels = {
+            "fl_opt_out"             : "FL_OPT_OUT=true en docker-compose (soberania del dato)",
+            "fl_participation_denied": "FL_AUTHORIZED_URIS vacio (no autorizado a participar)",
+            "unauthorized_consumer"  : "consumer URI no autorizada",
+            "error"                  : "error de comunicacion",
+        }
+        reason_text = reason_labels.get(reason, reason)
+
+        print(f"  {BOLD}Worker-{wid}{RESET}  {GRAY}{uri}{RESET}")
+        field("  ECC (broker)", pe, indent=6)
+        ids_arrow("out", "ids:DescriptionRequestMessage",  coord_label, pl)
+        ids_arrow("in",  "ids:DescriptionResponseMessage", pl, coord_label)
+        ids_arrow("out", "ids:ContractRequestMessage",     coord_label, pl)
+        ids_arrow("in",  "ids:RejectionMessage",           pl, coord_label)
+        print(f"    {RED}RECHAZA -- {reason_text}{RESET}")
+        field("reason (API)", reason)
+        if msg:
+            field("mensaje",     msg[:100])
+        print()
+
+    # ── Resumen ───────────────────────────────────────────────────────────────
+    _sep("-", color=BLUE)
+    print(f"  {BOLD}Resumen de participacion FL:{RESET}\n")
+
+    for w in accepted:
+        uri = w.get("connector_uri", "?")
+        m   = re.search(r"worker(\d+)", uri)
+        wid = m.group(1) if m else "?"
+        print(f"    {GREEN}PARTICIPA   Worker-{wid}   {GRAY}{uri}{RESET}")
+
+    for w in rejected:
+        uri    = w.get("connector_uri", "?")
+        reason = w.get("reason", "?")
+        m      = re.search(r"worker(\d+)", uri)
+        wid    = m.group(1) if m else "?"
+        print(f"    {RED}RECHAZADO   Worker-{wid}   {GRAY}{uri}  --  {reason}{RESET}")
+
+    print()
+
+    w1_ok = any("worker1" in w.get("connector_uri", "") for w in accepted)
+    w3_ok = any("worker3" in w.get("connector_uri", "") for w in accepted)
+    w4_no = any("worker4" in w.get("connector_uri", "") for w in rejected)
+
+    ok("Worker-1 acepto") if w1_ok \
+        else warn("Worker-1 no esta en aceptados -- revisar FL_OPT_OUT en docker-compose")
+    ok("Worker-3 acepto") if w3_ok \
+        else warn("Worker-3 no esta en aceptados -- revisar FL_OPT_OUT en docker-compose")
+
+    if w4_no:
+        w4r = next(
+            (w.get("reason", "?") for w in rejected if "worker4" in w.get("connector_uri", "")),
+            "?"
+        )
+        ok(f"Worker-4 rechazo -- soberania del dato demostrada correctamente")
+    else:
+        warn(
+            "Worker-4 no esta en rechazados\n"
+            "      Verifica: be-dataapp-worker4 -> FL_OPT_OUT=true en docker-compose.yml"
+        )
+
+    return {"accepted": accepted, "rejected": rejected}
+
+
+# =============================================================================
+# Verificación del coordinator
+# =============================================================================
+
+def verificar_coordinator(coordinator_url, cid, endpoints, req_timeout):
+    print()
+    _sep("-", color=BLUE)
+    print(f"{BOLD}{BLUE}  Estado del coordinator tras la negociacion{RESET}")
+    _sep("-", color=BLUE)
+
+    step("6", "GET /status")
+    data = http_get(f"{coordinator_url}/status", timeout=req_timeout)
+
+    role      = data.get("role", "?")
+    algo_ok   = data.get("algorithm_loaded", False)
+    config_ok = data.get("config_loaded", False)
+    fl_status = data.get("fl_status", "?")
+    peers     = data.get("peer_eccs", [])
+    fl_cfg    = data.get("fl_config") or {}
+
+    field("instance",         data.get("instance", "?"))
+    field("role",             role)
+    field("algorithm_loaded", "SI" if algo_ok  else "NO")
+    field("config_loaded",    "SI" if config_ok else "NO")
+    field("fl_status",        fl_status)
+
+    if fl_cfg:
+        section("FL Config")
+        for k, v in fl_cfg.items():
+            field(f"  {k}", v, indent=6)
+
+    if peers:
+        section("Peer ECCs activos (workers aceptados)")
+        for p in peers:
+            m   = re.search(r"worker(\d+)", p)
+            wid = m.group(1) if m else "?"
+            b   = endpoints["peers"].get(f"worker{wid}", {})
+            b_ecc = b.get("ecc_url", "")
+            match_tag = f"  {GREEN}(= broker){RESET}" if b_ecc == p else (
+                        f"  {YELLOW}(broker: {b_ecc}){RESET}" if b_ecc else "")
+            print(f"      {GRAY}Worker-{wid}: {p}{RESET}{match_tag}")
+
+    print()
+    if role == "coordinator" and algo_ok and config_ok:
+        ok("Coordinator listo para /fl/start")
+    else:
+        warn(f"Estado inesperado: role={role}  algo={algo_ok}  config={config_ok}")
+
+
+# =============================================================================
+# FASE 4 — Arranque del entrenamiento FL
+# =============================================================================
+
+def fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout):
+    phase(
+        4,
+        "Arranque del entrenamiento Federated Learning",
+        "POST /fl/start -- el coordinator distribuye pesos globales y arranca las rondas"
+    )
+
+    step("7", "POST /fl/start")
+    data   = http_post(f"{coordinator_url}/fl/start", {}, timeout=req_timeout)
+    status = data.get("status", "?")
+    peers  = data.get("peers", [])
+    cfg    = data.get("fl_config", {}) or {}
+
+    if status == "started":
+        ok("Entrenamiento FL arrancado correctamente")
+    else:
+        warn(f"Respuesta inesperada: status={status}")
+
+    field("coordinator", data.get("coordinator", "?"))
+    if cfg:
+        field("rounds",        cfg.get("rounds"))
+        field("round_timeout", f"{cfg.get('round_timeout')}s")
+
+    section("Workers entrenando")
+    for p in peers:
+        m   = re.search(r"worker(\d+)", p)
+        wid = m.group(1) if m else "?"
+        b   = endpoints["peers"].get(f"worker{wid}", {})
+        b_ecc = b.get("ecc_url", "")
+        note  = f"  {GREEN}(broker){RESET}" if b_ecc == p else (
+                f"  {YELLOW}(broker: {b_ecc}){RESET}" if b_ecc else "")
+        print(f"      {GREEN}Worker-{wid}: {GRAY}{p}{RESET}{note}")
+
+    print()
+    info(f"Monitoriza:  GET {coordinator_url}/fl/status")
+    info(f"Resultados:  GET {coordinator_url}/fl/results  (cuando status=completed)")
+    info(f"Modelo:      GET {coordinator_url}/fl/model")
+
+
+# =============================================================================
+# FASE 5 — Monitorización del entrenamiento en tiempo real
+# =============================================================================
+
+def _ids_log(direction, msg_type, src, dst):
+    arrow = "──▶" if direction == "out" else "◀──"
+    color = CYAN   if direction == "out" else GREEN
+    short = msg_type.replace("ids:", "").replace("Message", "Msg")
+    print(f"      {color}[IDS {arrow}]  {short:<44}{GRAY}{src}  ↔  {dst}{RESET}")
+
+
+def _print_ronda_header(rnd_num, total_rounds, cid):
+    print()
+    print(f"    {CYAN}{'═' * 54}{RESET}")
+    print(f"    {BOLD}{CYAN}  RONDA {rnd_num}/{total_rounds or '?'}  "
+          f"[coordinator-{cid}]{RESET}")
+    print(f"    {CYAN}{'═' * 54}{RESET}")
+
+
+def _print_handshake_algoritmo(rnd_num, wid, peer_lbl, cid):
+    """
+    Handshake IDS completo para distribución de algorithm.py + fl_config.json.
+    En app.py esto ocurre en _negotiate_and_send_algorithm, que se llama
+    en CADA ronda (el coordinator lo reenvía para asegurar sincronía).
+    """
+    print(f"\n      {BOLD}→ Worker-{wid}{RESET}")
+    _ids_log("out", "ids:DescriptionRequestMessage",
+             f"coordinator-{cid}", peer_lbl)
+    _ids_log("in",  "ids:DescriptionResponseMessage",
+             peer_lbl, f"coordinator-{cid}")
+    _ids_log("out", "ids:ContractRequestMessage",
+             f"coordinator-{cid}", peer_lbl)
+    _ids_log("in",  "ids:ContractAgreementMessage",
+             peer_lbl, f"coordinator-{cid}")
+    _ids_log("out", "ids:ContractAgreementMessage (confirmación)",
+             f"coordinator-{cid}", peer_lbl)
+    _ids_log("in",  "ids:MessageProcessedNotificationMessage",
+             peer_lbl, f"coordinator-{cid}")
+    print(f"      {GRAY}[ronda {rnd_num}] algorithm.py + fl_config.json "
+          f"→ {peer_lbl}  {GREEN}✅{RESET}")
+
+
+def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
+    """
+    Replica los logs de app.py durante _run_fl() via polling a /fl/status.
+
+    Clave de sincronización (fix solapamiento):
+      - La cabecera de ronda N se imprime SOLO cuando history tiene ya
+        la entrada de ronda N-1 cerrada (o es la ronda 1).
+      - Así los logs de FedAvg/cierre de ronda N-1 aparecen ANTES
+        de los logs de inicio de ronda N, igual que en el app.py real.
+
+    Handshake IDS en TODAS las rondas:
+      - _negotiate_and_send_algorithm se llama en cada ronda en app.py.
+      - Por tanto el handshake Description→Contract→Agreement→Artifact
+        aparece en ronda 1, 2, 3... siempre.
+    """
+    accepted   = nego.get("accepted", [])
+    accepted_wids = sorted(
+        m.group(1)
+        for w in accepted
+        for m in [re.search(r"worker(\d+)", w.get("connector_uri", ""))] if m
+    )
+
+    phase(
+        5,
+        "Monitorización del entrenamiento FL en tiempo real",
+        f"Polling a GET /fl/status cada 5s.\n"
+        f"Replica el flujo completo de app.py por cada ronda:\n"
+        f"  · Handshake IDS completo para distribución de algorithm.py\n"
+        f"    (Description→ContractRequest→Agreement→Artifact) en CADA ronda\n"
+        f"  · Envío de pesos globales via IDS a cada worker\n"
+        f"  · Entrenamiento local del coordinator\n"
+        f"  · Recepción de pesos locales via IDS de cada worker\n"
+        f"  · FedAvg y métricas de cierre\n"
+        f"Workers participantes: {', '.join('worker-' + w for w in accepted_wids)}"
+    )
+
+    step("monitor", "Esperando arranque del FL (status != idle)...")
+    for _ in range(30):
+        try:
+            r = SESSION.get(f"{coordinator_url}/fl/status", timeout=10, verify=False)
+            if r.ok and r.json().get("status") not in ("idle", ""):
+                ok("FL en marcha"); break
+        except Exception:
+            pass
+        time.sleep(2)
+
+    # ── Estado del monitor ────────────────────────────────────────────────────
+    #
+    # Estrategia anti-solapamiento:
+    #   next_rnd_to_announce  → próxima ronda que podemos anunciar
+    #   Para anunciar ronda N necesitamos que history tenga N-1 entradas
+    #   (es decir, la ronda N-1 ya está cerrada).
+    #   Así FedAvg de N-1 se imprime ANTES de la cabecera de N.
+    #
+    next_rnd_to_announce = 1   # primera ronda que aún no hemos anunciado
+    seen_rounds          = 0   # entradas de history ya mostradas
+    total_rounds         = None
+    weights_shown        = {}  # round_num → set de wids ya mostrados
+
+    poll_interval = 5
+    t_start       = time.time()
+
+    while True:
+        if time.time() - t_start > 3600:
+            warn("Timeout de monitorización (1h)")
+            break
+
+        try:
+            r = SESSION.get(f"{coordinator_url}/fl/status", timeout=10, verify=False)
+            r.raise_for_status()
+            fl = r.json()
+        except Exception as e:
+            warn(f"Error polling /fl/status: {e} — reintentando en {poll_interval}s")
+            time.sleep(poll_interval)
+            continue
+
+        status       = fl.get("status", "?")
+        history      = fl.get("history", [])
+        total_rounds = fl.get("total_rounds") or total_rounds
+
+        # ── 1. Primero vaciar history: imprimir rondas cerradas ───────────────
+        #    Esto garantiza que el FedAvg de ronda N-1 aparece antes
+        #    de que anunciemos el inicio de ronda N.
+        while seen_rounds < len(history):
+            entry   = history[seen_rounds]
+            rnd_num = entry.get("round", seen_rounds + 1)
+            elapsed = entry.get("elapsed_seconds", 0)
+            workers = entry.get("workers_ok", "?")
+            samples = entry.get("total_samples", 0)
+            gm      = entry.get("global_metrics", {})
+
+            def _fv(k):
+                v = gm.get(k)
+                return f"{v:.4f}" if isinstance(v, float) else (str(v) if v is not None else "—")
+
+            # Cerrar pesos pendientes de esta ronda si no se habían mostrado
+            already = weights_shown.get(rnd_num, set())
+            for wid in accepted_wids:
+                if wid not in already:
+                    already.add(wid)
+                    n_exp = len(accepted_wids) + 1
+                    total_so_far = 1 + len(already)
+                    peer_entry = endpoints["peers"].get(f"worker{wid}", {})
+                    peer_lbl   = peer_entry.get("ecc_label", f"ecc-worker{wid}:8889")
+                    print()
+                    print(f"    {BOLD}[ronda {rnd_num}] Pesos locales recibidos "
+                          f"de worker-{wid}:{RESET}")
+                    _ids_log("out",
+                             f"ids:ArtifactRequestMessage  "
+                             f"[fl_weights::worker{wid}::round{rnd_num}]",
+                             peer_lbl, f"coordinator-{cid}")
+                    _ids_log("in",
+                             "ids:ArtifactResponseMessage  [weights_received]",
+                             f"coordinator-{cid}", peer_lbl)
+                    print(f"    {GRAY}[fl_weights] ✅ Pesos de worker-{wid} "
+                          f"ronda {rnd_num} acumulados "
+                          f"({total_so_far}/{n_exp}){RESET}")
+            weights_shown[rnd_num] = already
+
+            # FedAvg + cierre de ronda
+            print()
+            print(f"    {GRAY}[ronda {rnd_num}] FedAvg sobre {workers} workers  "
+                  f"({samples:,} muestras totales){RESET}")
+            print(f"    {GREEN}Ronda {rnd_num} OK en {elapsed}s  "
+                  f"acc={_fv('accuracy')}  auc={_fv('auc')}  "
+                  f"loss={_fv('loss')}  prec={_fv('precision')}  "
+                  f"rec={_fv('recall')}{RESET}")
+
+            seen_rounds += 1
+            # Ahora que ronda seen_rounds está cerrada,
+            # podemos anunciar la siguiente si es la que toca
+            next_rnd_to_announce = seen_rounds + 1
+
+        # ── 2. Anunciar la ronda actual si ya podemos ─────────────────────────
+        #    Condición: status = round_N  AND  N-1 ya está en history
+        rnd_match = re.match(r"round_(\d+)", status)
+        if rnd_match:
+            rnd_num = int(rnd_match.group(1))
+
+            if rnd_num == next_rnd_to_announce:
+                weights_shown.setdefault(rnd_num, set())
+                next_rnd_to_announce = rnd_num + 1   # no repetir este bloque
+
+                # Cabecera de ronda
+                _print_ronda_header(rnd_num, total_rounds, cid)
+
+                # Distribución de algorithm.py + fl_config.json con handshake
+                # IDS completo — ocurre en CADA ronda en app.py
+                print()
+                print(f"    {BOLD}[ronda {rnd_num}] Distribuyendo algorithm.py + "
+                      f"fl_config.json a peers via IDS...{RESET}")
+                for w in accepted:
+                    uri = w.get("connector_uri", "")
+                    wid = re.search(r"worker(\d+)", uri)
+                    wid = wid.group(1) if wid else "?"
+                    peer_entry = endpoints["peers"].get(f"worker{wid}", {})
+                    peer_lbl   = peer_entry.get("ecc_label",
+                                               f"ecc-worker{wid}:8889")
+                    _print_handshake_algoritmo(rnd_num, wid, peer_lbl, cid)
+                print()
+
+                # Envío de pesos globales a peers
+                print(f"    {BOLD}[ronda {rnd_num}] Enviando pesos globales "
+                      f"a peers via IDS (ArtifactRequestMessage)...{RESET}")
+                for w in accepted:
+                    uri = w.get("connector_uri", "")
+                    wid = re.search(r"worker(\d+)", uri)
+                    wid = wid.group(1) if wid else "?"
+                    peer_entry = endpoints["peers"].get(f"worker{wid}", {})
+                    peer_lbl   = peer_entry.get("ecc_label",
+                                               f"ecc-worker{wid}:8889")
+                    _ids_log("out",
+                             f"ids:ArtifactRequestMessage  "
+                             f"[fl_global_weights::round{rnd_num}]",
+                             f"coordinator-{cid}", peer_lbl)
+                    _ids_log("in",
+                             "ids:ArtifactResponseMessage  [training_started]",
+                             peer_lbl, f"coordinator-{cid}")
+                    print(f"      {GRAY}Pesos globales ronda {rnd_num} "
+                          f"→ {peer_lbl}  {GREEN}✅{RESET}")
+                print()
+
+                # Entrenamiento local + espera inicial
+                print(f"    {BOLD}[ronda {rnd_num}] Entrenando localmente "
+                      f"(coordinator-{cid})...{RESET}")
+                n_exp = len(accepted_wids) + 1
+                print(f"    {GRAY}Esperando pesos... 1/{n_exp}  "
+                      f"(coordinator-{cid} local en progreso){RESET}")
+
+        # ── 3. Mostrar llegada progresiva de pesos (un worker por poll) ───────
+        if rnd_match:
+            rnd_num = int(rnd_match.group(1))
+            already = weights_shown.get(rnd_num, set())
+            pending = [w for w in accepted_wids if w not in already]
+            if pending:
+                wid = pending[0]
+                already.add(wid)
+                weights_shown[rnd_num] = already
+                n_exp        = len(accepted_wids) + 1
+                total_so_far = 1 + len(already)
+                peer_entry   = endpoints["peers"].get(f"worker{wid}", {})
+                peer_lbl     = peer_entry.get("ecc_label",
+                                             f"ecc-worker{wid}:8889")
+                print()
+                print(f"    {BOLD}[ronda {rnd_num}] Pesos locales recibidos "
+                      f"de worker-{wid}:{RESET}")
+                _ids_log("out",
+                         f"ids:ArtifactRequestMessage  "
+                         f"[fl_weights::worker{wid}::round{rnd_num}]",
+                         peer_lbl, f"coordinator-{cid}")
+                _ids_log("in",
+                         "ids:ArtifactResponseMessage  [weights_received]",
+                         f"coordinator-{cid}", peer_lbl)
+                print(f"    {GRAY}[fl_weights] ✅ Pesos de worker-{wid} "
+                      f"ronda {rnd_num} acumulados "
+                      f"({total_so_far}/{n_exp}){RESET}")
+                if total_so_far < n_exp:
+                    print(f"    {GRAY}Esperando pesos... "
+                          f"{total_so_far}/{n_exp}{RESET}")
+
+        # ── Condiciones de salida ─────────────────────────────────────────────
+        if status == "completed" and seen_rounds >= (total_rounds or 0):
+            print()
+            ok(f"✅ FL completado — {seen_rounds} rondas en "
+               f"{time.time() - t_start:.1f}s")
+            break
+        elif status == "failed":
+            print()
+            warn("❌ FL terminó con status=failed — "
+                 "workers insuficientes en alguna ronda")
+            break
+
+        time.sleep(poll_interval)
+
+    # ── Tabla resumen de métricas ─────────────────────────────────────────────
+    _sep("-", color=BLUE)
+    print(f"{BOLD}{BLUE}  Resultados finales del entrenamiento{RESET}")
+    _sep("-", color=BLUE)
+
+    try:
+        r = SESSION.get(f"{coordinator_url}/fl/results", timeout=10, verify=False)
+        if r.ok:
+            results = r.json()
+            if isinstance(results, list) and results:
+                print(f"\n  {BOLD}Tabla de métricas por ronda:{RESET}\n")
+                hdr = (f"  {'Rda':>4}  {'Accuracy':>10}  {'AUC':>10}  "
+                       f"{'Loss':>10}  {'Precision':>10}  {'Recall':>10}  "
+                       f"{'Workers':>7}  {'Samples':>9}  {'Tiempo':>8}")
+                print(f"{BOLD}{GRAY}{hdr}{RESET}")
+                print(f"  {GRAY}{'─' * 90}{RESET}")
+                for e in results:
+                    gm = e.get("global_metrics", {})
+                    def fm(k):
+                        v = gm.get(k)
+                        return f"{v:.4f}" if v is not None else "   —  "
+                    print(
+                        f"  {str(e.get('round', '?')):>4}  "
+                        f"{fm('accuracy'):>10}  {fm('auc'):>10}  "
+                        f"{fm('loss'):>10}  {fm('precision'):>10}  "
+                        f"{fm('recall'):>10}  "
+                        f"{str(e.get('workers_ok', '?')):>7}  "
+                        f"{e.get('total_samples', 0):>9,}  "
+                        f"{e.get('elapsed_seconds', 0):>7.1f}s"
+                    )
+                print(f"  {GRAY}{'─' * 90}{RESET}")
+                best = max(results,
+                           key=lambda e: (e.get("global_metrics") or {})
+                                         .get("accuracy") or 0)
+                bm = best.get("global_metrics", {})
+                print(f"\n  {BOLD}Mejor ronda: {best.get('round', '?')}  "
+                      f"acc={bm.get('accuracy', '?')}  "
+                      f"auc={bm.get('auc', '?')}  "
+                      f"loss={bm.get('loss', '?')}{RESET}")
+    except Exception as e:
+        warn(f"No se pudieron obtener resultados: {e}")
+
+    # ── Modelo final y recurso IDS ────────────────────────────────────────────
+    print()
+    _sep("-", color=BLUE)
+    print(f"{BOLD}{BLUE}  Modelo FL publicado como recurso IDS{RESET}")
+    _sep("-", color=BLUE)
+
+    try:
+        r = SESSION.get(f"{coordinator_url}/fl/model", timeout=10, verify=False)
+        if r.ok:
+            model = r.json()
+            print()
+            field("coordinator_id",    model.get("coordinator_id", "?"))
+            field("round",             model.get("round", "?"))
+            field("weights_available",
+                  "✅ sí" if model.get("weights_available") else "❌ no")
+            metrics = model.get("metrics") or {}
+            if metrics:
+                print(f"\n    {BOLD}Métricas del modelo global final:{RESET}")
+                for k, v in metrics.items():
+                    vstr = f"{v:.4f}" if isinstance(v, float) else str(v)
+                    print(f"    {MAGENTA}{k:<14}{RESET} {vstr}")
+        else:
+            info(f"GET /fl/model → {r.status_code}")
+    except Exception as e:
+        warn(f"No se pudo obtener el modelo: {e}")
+
+    try:
+        r = SESSION.get(f"{coordinator_url}/ids/self-description",
+                        timeout=10, verify=False)
+        if r.ok:
+            sd  = r.json()
+            res = (sd.get("ids:resourceCatalog") or [{}])[0].get(
+                "ids:offeredResource", [])
+            fl_res = next(
+                (x for x in res if
+                 "fl_model_coordinator" in x.get("@id", "") or
+                 "FL Global Model" in (
+                     (x.get("ids:title") or [{}])[0]).get("@value", "")),
+                None
+            )
+            if fl_res:
+                cid_val = (
+                    (fl_res.get("ids:contractOffer") or [{}])[0]
+                ).get("@id", "")
+                print()
+                field("resource IDS", fl_res.get("@id", "?"))
+                if cid_val:
+                    field("contract @id", cid_val)
+                    info("Contrato connector-restricted-policy "
+                         "(worker-4 excluido de ids:rightOperand):")
+                    info(f"  GET {coordinator_url}/ids/contract"
+                         f"?contractOffer={cid_val}")
+    except Exception:
+        pass
+
+
+# =============================================================================
+# MAIN
+# =============================================================================
+
+def parse_args():
+    p = argparse.ArgumentParser(
+        description="PFG -- Demostracion IDS + Federated Learning",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p.add_argument("--coordinator", default="2", metavar="N",
+                   help="Numero del worker coordinator (default: 2)")
+    p.add_argument("--coordinator-port", type=int, default=0, metavar="PORT",
+                   help=(
+                       "Puerto localhost del dataapp coordinator "
+                       "(default: 5000 + --coordinator, e.g. 5002 para coordinator=2)"
+                   ))
+    p.add_argument("--skip-fl", action="store_true",
+                   help="No arrancar el entrenamiento (solo fases 0-3)")
+    p.add_argument("--timeout", type=int, default=90, metavar="SEG",
+                   help="Timeout HTTP en segundos (default: 90)")
+    return p.parse_args()
+
+
+def main():
+    args = parse_args()
+    cid  = args.coordinator
+
+    try:
+        cid_int = int(cid)
+    except ValueError:
+        print(f"{RED}Coordinator ID invalido: {cid!r}. Debe ser un numero entero (p.ej. 2).{RESET}")
+        sys.exit(1)
+
+    # Puerto del coordinator: argumento explícito o convencion 5000+N
+    coordinator_port = args.coordinator_port if args.coordinator_port else 5000 + cid_int
+    coordinator_url  = f"https://localhost:{coordinator_port}"
+    req_timeout      = args.timeout
+
+    banner(
+        "PFG -- Demostracion Federated Learning sobre IDS",
+        f"Worker-{cid} como coordinator  .  Broker Fuseki + DAPS omejdn  .  endpoints dinamicos"
+    )
+    print()
+    field("Coordinator",     f"Worker-{cid}  ({coordinator_url})")
+    field("coordinator_port", coordinator_port)
+    field("Arrancar FL",     "No (--skip-fl)" if args.skip_fl else "Si")
+    field("Timeout HTTP",    f"{req_timeout}s")
+    info("El coordinator obtendra algorithm.py + fl_config.json via IDS (auto-fetch)")
+
+    # Fases
+    endpoints = fase0_resolver_endpoints(coordinator_url, cid, req_timeout)
+    time.sleep(0.5)
+
+    fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout)
+    time.sleep(1)
+
+    fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout)
+    nego = fase3_negociar(coordinator_url, cid, endpoints, req_timeout)
+    verificar_coordinator(coordinator_url, cid, endpoints, req_timeout)
+
+    if not args.skip_fl:
+        if not nego.get("accepted"):
+            warn("No hay workers aceptados -- no se arranca el FL")
+        else:
+            fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout)
+            fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout)
+
+    # Resumen final
+    print()
+    _sep("=", color=BOLD + CYAN)
+    print(f"{BOLD}{GREEN}  Demostracion completada{RESET}")
+    _sep("=", color=BOLD + CYAN)
+    print()
+
+    for w in nego.get("accepted", []):
+        uri  = w.get("connector_uri", "?")
+        m    = re.search(r"worker(\d+)", uri)
+        wid  = m.group(1) if m else "?"
+        peer = endpoints["peers"].get(f"worker{wid}", {})
+        ecc  = peer.get("ecc_url", "(desconocido)")
+        print(f"  {GREEN}PARTICIPA   Worker-{wid}   {GRAY}{ecc}{RESET}")
+
+    for w in nego.get("rejected", []):
+        uri    = w.get("connector_uri", "?")
+        reason = w.get("reason", "?")
+        m      = re.search(r"worker(\d+)", uri)
+        wid    = m.group(1) if m else "?"
+        peer   = endpoints["peers"].get(f"worker{wid}", {})
+        ecc    = peer.get("ecc_url", "(desconocido)")
+        print(f"  {RED}RECHAZADO   Worker-{wid}   {GRAY}{ecc}  --  {reason}{RESET}")
+
+    print()
+    info(f"GET {coordinator_url}/fl/status")
+    info(f"GET {coordinator_url}/fl/results")
+    info(f"GET {coordinator_url}/fl/model")
+    info(f"GET {coordinator_url}/ids/self-description")
+    info(f"GET {coordinator_url}/ids/contract?contractOffer=<fl_model_contract_id>")
+    print()
+
+
+if __name__ == "__main__":
+    main()
