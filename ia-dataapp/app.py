@@ -157,6 +157,9 @@ _fl_lock = threading.Lock()
 _round_weights: dict = {}
 _round_lock = threading.Lock()
 
+_my_selected_csv: str | None = None   # CSV elegido por el coordinator para este worker
+PEER_SELECTED_CSVS: list = []   # CSV seleccionado por cada peer (índice igual que PEER_ECC_URLS)
+
 
 # =============================================================================
 # FastAPI
@@ -303,7 +306,7 @@ def _get_self_description() -> dict:
     return resp.json()
 
 
-def _multipart_response(header_dict: dict, payload_str: str = None) -> Response:
+def _multipart_response(header_dict: dict, payload_str: str | None = None) -> Response:
     import uuid as _uuid
     boundary = _uuid.uuid4().hex
     str_header = json.dumps(header_dict)
@@ -456,7 +459,7 @@ def _infer_connector_uri(ecc_url: str) -> str:
 # =============================================================================
 
 def _build_outgoing_header(message_type: str, dest_connector_uri: str,
-                            extra: dict = None) -> dict:
+                            extra: dict | None = None) -> dict:
     h = {
         "@context"              : _ids_context(),
         "@type"                 : message_type,
@@ -483,15 +486,15 @@ def _ids_send(
     forward_to_url      : str,
     forward_to_connector: str,
     message_type        : str,
-    requested_artifact  : str  = None,
-    requested_element   : str  = None,
-    transfer_contract   : str  = None,
-    payload             : dict = None,
-    correlation_message : str  = None,
-    header_content      : str  = None,
-    header_content_type : str  = "fl_algorithm",
+    requested_artifact  : str | None = None,
+    requested_element   : str | None = None,
+    transfer_contract   : str | None = None,
+    payload             : dict | None = None,
+    correlation_message : str | None = None,
+    header_content      : str | None = None,
+    header_content_type : str = "fl_algorithm",
     peer_algorithm      : bool = False,
-    extra_header        : dict = None,
+    extra_header        : dict | None = None,
     use_local_ecc       : bool = False,
 ) -> dict:
     extra = {}
@@ -574,7 +577,8 @@ def _ids_send(
 
 def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
                                    artifact_bytes: bytes,
-                                   config_bytes: bytes) -> bool:
+                                   config_bytes: bytes,
+                                   selected_csv: str | None = None) -> bool:
     log.info(f"[coordinator] Negociación con {peer_ecc_url}")
     try:
         desc     = _ids_send(peer_ecc_url, peer_conn_uri, "ids:DescriptionRequestMessage")
@@ -635,9 +639,11 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
                 "config"          : config_b64,
                 "sender"          : f"coordinator-{INSTANCE_ID}",
                 "from_coordinator": True,
+                "selected_csv"    : selected_csv,
             },
         )
-        log.info(f"[coordinator] 4/4 algorithm.py + fl_config.json → {peer_ecc_url} ✅")
+        log.info(f"[coordinator] 4/4 algorithm.py + fl_config.json → {peer_ecc_url} ✅"
+                 + (f"  (CSV: {selected_csv})" if selected_csv else ""))
         return True
 
     except Exception as exc:
@@ -900,9 +906,11 @@ def _save_local_metrics(result: dict, round_num: int):
         log.error(f"Error guardando métricas locales: {e}")
 
 
-def _train_local(global_weights_b64: str, round_num: int) -> dict:
+def _train_local(global_weights_b64: str, round_num: int, csv_path: str | None = None) -> dict:
+    _csv = csv_path or _my_selected_csv or _csv_path()
+    log.info(f"[train] Ronda {round_num} — usando CSV: {os.path.basename(_csv)}")
     result = _load_algorithm().run(
-        _csv_path(),
+        _csv,
         global_weights_b64=global_weights_b64,
         config_path=CONFIG_PATH
     )
@@ -994,7 +1002,7 @@ def _publish_fl_model_as_ids_resource(
     global_weights_b64: str,
     global_metrics: dict,
     n_rounds: int,
-    peer_connector_uris: list = None,
+    peer_connector_uris: list | None = None,
 ):
     from requests.auth import HTTPBasicAuth
     basic_api = HTTPBasicAuth(API_USER, API_PASS)
@@ -1125,17 +1133,45 @@ def _publish_fl_model_as_ids_resource(
 # Descubrimiento de workers via Broker IDS
 # =============================================================================
 
-def _get_my_columns() -> list:
+def _get_all_local_csvs() -> list:
+    """
+    Devuelve [{filename, path, columns}] para todos los CSV disponibles en INPUT_DIR.
+    Se usa tanto en el endpoint /dataset/all-columns como en el discovery del coordinator.
+    """
     try:
         import pandas as pd
-        csv = _csv_path()
-        df = pd.read_csv(csv, nrows=0, low_memory=False)
-        cols = [c.lower().strip() for c in df.columns]
-        log.info(f"[broker-discover] Mis columnas ({len(cols)}): {cols[:5]}...")
-        return cols
+        files = sorted(f for f in os.listdir(INPUT_DIR) if f.endswith(".csv"))
+        result = []
+        for fname in files:
+            fpath = os.path.join(INPUT_DIR, fname)
+            try:
+                df   = pd.read_csv(fpath, nrows=0, low_memory=False)
+                cols = [c.lower().strip() for c in df.columns]
+                result.append({"filename": fname, "path": fpath, "columns": cols})
+                log.info(f"[dataset] {fname}: {len(cols)} columnas")
+            except Exception as e:
+                log.warning(f"[dataset] No se pudo leer {fname}: {e}")
+        return result
     except Exception as e:
-        log.error(f"[broker-discover] Error leyendo columnas locales: {e}")
+        log.error(f"[dataset] Error listando CSVs en {INPUT_DIR}: {e}")
         return []
+
+
+def _get_my_columns() -> list:
+    """
+    Devuelve las columnas del CSV local con más columnas (referencia del coordinator).
+    Si hay un único CSV, lo usa directamente.
+    """
+    csvs = _get_all_local_csvs()
+    if not csvs:
+        log.error("[broker-discover] No hay CSVs disponibles en INPUT_DIR")
+        return []
+    best = max(csvs, key=lambda x: len(x["columns"]))
+    log.info(
+        f"[broker-discover] CSV de referencia: {best['filename']} "
+        f"({len(best['columns'])} columnas): {best['columns'][:5]}..."
+    )
+    return best["columns"]
 
 
 def _get_registered_connectors() -> list:
@@ -1169,34 +1205,85 @@ def _get_registered_connectors() -> list:
         return []
 
 
-def _get_peer_columns(ecc_url: str, connector_uri: str) -> tuple:
+def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
+    """
+    Escanea TODOS los CSVs del peer via /dataset/all-columns y elige el
+    que mayor coincidencia de columnas tenga con my_set.
+
+    Devuelve (best_cols, real_uri, best_filename, best_ratio).
+    """
+    real_uri = connector_uri
     try:
-        desc = _ids_send(ecc_url, connector_uri, "ids:DescriptionRequestMessage")
-        real_uri = desc.get("@id", "") or connector_uri
-        catalogs = desc.get("ids:resourceCatalog", [])
-        for catalog in catalogs:
-            for resource in catalog.get("ids:offeredResource", []):
-                keywords = resource.get("ids:keyword", [])
-                cols = []
-                for kw in keywords:
-                    val = kw.get("@value", "") if isinstance(kw, dict) else str(kw)
-                    if val.startswith("col:"):
-                        cols.append(val[4:])
-                if cols:
-                    log.info(f"[broker-discover] {real_uri} → {len(cols)} columnas")
-                    return cols, real_uri
-        import re
-        m = re.search(r"ecc-worker(\d+)", ecc_url)
+        # ── Obtener real_uri via IDS DescriptionRequestMessage ────────────────
+        try:
+            desc     = _ids_send(ecc_url, connector_uri, "ids:DescriptionRequestMessage")
+            real_uri = desc.get("@id", "") or connector_uri
+        except Exception:
+            pass
+
+        # ── Obtener lista completa de CSVs del peer ───────────────────────────
+        import re as _re
+        all_csvs = []
+        m = _re.search(r"ecc-worker(\d+)", ecc_url)
         if m:
             wid = m.group(1)
-            dataapp_url = f"https://be-dataapp-worker{wid}:8500/dataset/columns"
-            r = requests.get(dataapp_url, verify=False, timeout=5)
-            if r.ok:
-                return r.json().get("columns", []), real_uri
-        return [], real_uri
+            try:
+                r = requests.get(
+                    f"https://be-dataapp-worker{wid}:8500/dataset/all-columns",
+                    verify=False, timeout=8,
+                )
+                if r.ok:
+                    all_csvs = r.json()  # [{filename, columns, count}]
+                    log.info(
+                        f"[broker-discover] {real_uri} — "
+                        f"{len(all_csvs)} CSV(s) disponibles para evaluar"
+                    )
+            except Exception as e:
+                log.warning(f"[broker-discover] /dataset/all-columns falló para {ecc_url}: {e}")
+
+            # Fallback: endpoint antiguo /dataset/columns (un solo CSV)
+            if not all_csvs:
+                try:
+                    r = requests.get(
+                        f"https://be-dataapp-worker{wid}:8500/dataset/columns",
+                        verify=False, timeout=5,
+                    )
+                    if r.ok:
+                        data  = r.json()
+                        cols  = data.get("columns", [])
+                        fname = data.get("filename", "dataset.csv")
+                        all_csvs = [{"filename": fname, "columns": cols}]
+                except Exception:
+                    pass
+
+        if not all_csvs:
+            log.warning(f"[broker-discover] No se pudo obtener ningún CSV de {real_uri}")
+            return [], real_uri, None, 0.0
+
+        # ── Evaluar cada CSV y elegir el de mayor match_ratio ─────────────────
+        best_cols, best_filename, best_ratio = [], None, 0.0
+        for csv_info in all_csvs:
+            fname  = csv_info.get("filename", "?")
+            cols   = [c.lower().strip() for c in csv_info.get("columns", [])]
+            p_set  = set(cols)
+            common = my_set & p_set
+            ratio  = len(common) / len(my_set) if my_set else 0.0
+            is_best = ratio > best_ratio
+            log.info(
+                f"[broker-discover]   {fname}: {len(p_set)} cols, "
+                f"{len(common)} comunes, ratio={ratio:.0%}"
+                + (" ← MEJOR" if is_best else "")
+            )
+            if is_best:
+                best_ratio    = ratio
+                best_cols     = cols
+                best_filename = fname
+
+        return best_cols, real_uri, best_filename, best_ratio
+
     except Exception as e:
-        log.warning(f"[broker-discover] No se pudieron obtener columnas de {connector_uri}: {e}")
-        return [], connector_uri
+        log.warning(f"[broker-discover] Error escaneando CSVs de {connector_uri}: {e}")
+        return [], real_uri, None, 0.0
 
 
 def _ecc_url_from_connector_uri(connector_uri: str, endpoint: str) -> str:
@@ -1210,6 +1297,9 @@ def _ecc_url_from_connector_uri(connector_uri: str, endpoint: str) -> str:
     return ""
 
 
+MATCH_THRESHOLD = 0.95  # 95% de coincidencia mínima de columnas
+
+
 def _discover_compatible_workers(my_columns: list) -> list:
     connectors = _get_registered_connectors()
     if not connectors:
@@ -1217,7 +1307,7 @@ def _discover_compatible_workers(my_columns: list) -> list:
         return []
 
     compatible = []
-    my_set = set(c.lower() for c in my_columns)
+    my_set     = set(c.lower() for c in my_columns)
     my_ecc_url = f"https://{ECC_HOSTNAME}:8889/data"
 
     for conn in connectors:
@@ -1234,28 +1324,34 @@ def _discover_compatible_workers(my_columns: list) -> list:
             log.info(f"[broker-discover] Saltando propio connector: {uri}")
             continue
 
-        peer_cols, real_uri = _get_peer_columns(ecc_url, uri)
+        log.info(f"[broker-discover] Evaluando {uri} — escaneando todos sus CSVs...")
+        best_cols, real_uri, best_filename, best_ratio = _get_peer_best_csv(
+            ecc_url, uri, my_set
+        )
         if real_uri != uri:
             log.info(f"[broker-discover] URI broker {uri!r} → URI IDS real {real_uri!r}")
-        peer_set   = set(c.lower() for c in peer_cols)
-        common     = my_set & peer_set
-        match_ratio = len(common) / len(my_set) if my_set else 0
 
+        common = my_set & set(c.lower() for c in best_cols)
         log.info(
             f"[broker-discover] {real_uri}\n"
-            f"  columnas peer: {len(peer_set)}  comunes: {len(common)}  "
-            f"match: {match_ratio:.0%}"
+            f"  mejor CSV: {best_filename!r}  comunes: {len(common)}/{len(my_set)}  "
+            f"ratio: {best_ratio:.0%}  (umbral: {MATCH_THRESHOLD:.0%})  "
+            + ("✅ COMPATIBLE" if best_ratio >= MATCH_THRESHOLD else "❌ DESCARTADO")
         )
 
-        if match_ratio >= 0.8:
+        if best_ratio >= MATCH_THRESHOLD:
             compatible.append({
-                "connector_uri": real_uri,   # URI IDS nativa, no la del broker
+                "connector_uri": real_uri,
                 "ecc_url"      : ecc_url,
                 "common_cols"  : sorted(common),
-                "match_ratio"  : round(match_ratio, 3),
+                "match_ratio"  : round(best_ratio, 3),
+                "selected_csv" : best_filename,
             })
 
-    log.info(f"[broker-discover] {len(compatible)} workers compatibles encontrados")
+    log.info(
+        f"[broker-discover] {len(compatible)} workers compatibles "
+        f"(umbral {MATCH_THRESHOLD:.0%})"
+    )
     return compatible
 
 
@@ -1300,9 +1396,11 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         if algo_bytes:
             log.info(f"[ronda {round_num}] Distribuyendo algorithm.py + fl_config.json a peers…")
             with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(PEER_ECC_URLS), 1)) as ex:
+                _peer_csvs = PEER_SELECTED_CSVS if PEER_SELECTED_CSVS else [None] * len(PEER_ECC_URLS)
                 futures = {
-                    ex.submit(_negotiate_and_send_algorithm, p, u, algo_bytes, config_bytes or b"{}"): p
-                    for p, u in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS)
+                    ex.submit(_negotiate_and_send_algorithm, p, u, algo_bytes,
+                              config_bytes or b"{}", csv): p
+                    for p, u, csv in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS, _peer_csvs)
                 }
                 for fut in concurrent.futures.as_completed(futures):
                     peer = futures[fut]
@@ -1766,7 +1864,7 @@ async def ids_data(request: Request):
                     else:
                         log.error(f"[fl_global_weights] algorithm.py no disponible tras 15s — ronda {round_num} abortada")
                         return
-                    result = _train_local(global_weights_b64, round_num)
+                    result = _train_local(global_weights_b64, round_num, _my_selected_csv)
                     _send_local_weights(result["weights_b64"], result["n_samples"],
                                         result["metrics"], round_num)
                 except Exception as exc:
@@ -1797,6 +1895,21 @@ async def ids_data(request: Request):
                 log.warning("fl_config.json no recibido — usando valores por defecto")
 
             if payload_dict.get("from_coordinator"):
+                global _my_selected_csv
+                sel_csv = payload_dict.get("selected_csv")
+                if sel_csv:
+                    full_path = os.path.join(INPUT_DIR, sel_csv)
+                    if os.path.exists(full_path):
+                        _my_selected_csv = full_path
+                        log.info(
+                            f"[fl_algorithm] CSV seleccionado por coordinator: "
+                            f"{sel_csv} → {full_path}"
+                        )
+                    else:
+                        log.warning(
+                            f"[fl_algorithm] CSV '{sel_csv}' no encontrado en {INPUT_DIR}"
+                            f" — se usará selección automática"
+                        )
                 log.info(f"✔ algorithm.py + config recibidos del coordinator — worker-{INSTANCE_ID} = WORKER")
             else:
                 is_coordinator = True
@@ -2011,15 +2124,20 @@ async def fl_start(request: Request):
         peers_to_use = list(_accepted_workers)
 
     if peers_to_use:
-        peer_urls = [w["ecc_url"]      for w in peers_to_use]
-        peer_uris = [w["connector_uri"] for w in peers_to_use]
+        peer_urls = [w["ecc_url"]          for w in peers_to_use]
+        peer_uris = [w["connector_uri"]    for w in peers_to_use]
+        peer_csvs = [w.get("selected_csv") for w in peers_to_use]
         log.info(
             f"[/fl/start] Usando {len(peers_to_use)} workers aceptados del paso /fl/negotiate:\n" +
-            "\n".join(f"  {w['connector_uri']}" for w in peers_to_use)
+            "\n".join(
+                f"  {w['connector_uri']}  (CSV: {w.get('selected_csv') or 'auto'})"
+                for w in peers_to_use
+            )
         )
     else:
         peer_urls = PEER_ECC_URLS
         peer_uris = PEER_CONNECTOR_URIS
+        peer_csvs = PEER_SELECTED_CSVS if PEER_SELECTED_CSVS else [None] * len(peer_urls)
         log.warning(
             f"[/fl/start] /fl/negotiate no fue ejecutado — usando PEER_ECC_URLS del .env: {peer_urls}"
         )
@@ -2040,9 +2158,10 @@ async def fl_start(request: Request):
     )
 
     def _launch():
-        global PEER_ECC_URLS, PEER_CONNECTOR_URIS
+        global PEER_ECC_URLS, PEER_CONNECTOR_URIS, PEER_SELECTED_CSVS
         PEER_ECC_URLS       = peer_urls
         PEER_CONNECTOR_URIS = peer_uris
+        PEER_SELECTED_CSVS  = peer_csvs
         _run_fl(rounds, round_timeout, min_workers, algo_bytes, config_bytes)
 
     threading.Thread(target=_launch, daemon=True).start()
@@ -2069,11 +2188,36 @@ def dataset_columns():
         csv = _csv_path()
         df  = pd.read_csv(csv, nrows=0, low_memory=False)
         cols = [c.lower().strip() for c in df.columns]
-        return {"instance": INSTANCE_ID, "columns": cols, "count": len(cols)}
+        return {
+            "instance" : INSTANCE_ID,
+            "filename" : os.path.basename(csv),
+            "columns"  : cols,
+            "count"    : len(cols),
+        }
     except FileNotFoundError:
         return JSONResponse(status_code=404, content={"error": "CSV no encontrado"})
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/dataset/all-columns")
+def dataset_all_columns():
+    """
+    Devuelve la lista de TODOS los CSVs disponibles en INPUT_DIR con sus columnas.
+    El coordinator usa este endpoint durante el descubrimiento (FASE 2) para
+    evaluar qué CSV del peer tiene mayor coincidencia de columnas y elegir el
+    más adecuado para federated learning (umbral 95%).
+    """
+    csvs = _get_all_local_csvs()
+    if not csvs:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"No hay CSVs en {INPUT_DIR}"}
+        )
+    return [
+        {"filename": c["filename"], "columns": c["columns"], "count": len(c["columns"])}
+        for c in csvs
+    ]
 
 
 @app.get("/dataset/info")
@@ -2129,7 +2273,7 @@ async def broker_discover_post():
 
 @app.post("/fl/negotiate")
 async def fl_negotiate():
-    global _accepted_workers, PEER_ECC_URLS, PEER_CONNECTOR_URIS
+    global _accepted_workers, PEER_ECC_URLS, PEER_CONNECTOR_URIS, PEER_SELECTED_CSVS
 
     if not is_coordinator:
         return JSONResponse(
@@ -2228,8 +2372,9 @@ async def fl_negotiate():
 
     with _negotiate_lock:
         _accepted_workers   = accepted
-        PEER_ECC_URLS       = [w["ecc_url"]      for w in accepted]
-        PEER_CONNECTOR_URIS = [w["connector_uri"] for w in accepted]
+        PEER_ECC_URLS       = [w["ecc_url"]          for w in accepted]
+        PEER_CONNECTOR_URIS = [w["connector_uri"]    for w in accepted]
+        PEER_SELECTED_CSVS  = [w.get("selected_csv") for w in accepted]
 
     log.info(
         f"[/fl/negotiate] {len(accepted)} aceptados, {len(rejected)} rechazados\n"
@@ -2256,7 +2401,7 @@ def ids_self_description():
 
 
 @app.get("/ids/contract")
-def ids_contract(contractOffer: str = None, request: Request = None):
+def ids_contract(contractOffer: str | None = None, request: Request = None):
     try:
         contract_id = contractOffer
         if not contract_id and request:

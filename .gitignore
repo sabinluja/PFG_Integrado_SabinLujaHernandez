@@ -16,15 +16,19 @@ certs/run.py
 certs/server.p12
 certs/ssl-server.jks
 certs/truststoreEcc.jks
+*.key
+*.crt
 
-# ── algorithm.py - fl_config.json en workers (generado en runtime via IDS) ────────────────────
-ia-dataapp/data/worker1/algorithm.py
-ia-dataapp/data/worker2/algorithm.py
-ia-dataapp/data/worker3/algorithm.py
+# ── Datos de ejecución de los workers (FL + algoritmos envíados por IDS) ──────
+ia-dataapp/data/worker*/algorithm.py
+ia-dataapp/data/worker*/fl_config.json
+ia-dataapp/data/worker*/output/
 
-ia-dataapp/data/worker1/fl_config.json
-ia-dataapp/data/worker2/fl_config.json
-ia-dataapp/data/worker3/fl_config.json
+# ── Bases de Datos locales y Caches (Broker / Omejdn / Linter) ───────────────
+*.db
+*.sqlite
+*.sqlite3
+.pyre/
 
 # ── Logs ─────────────────────────────────────────────────────────────────────
 ia-dataapp/log/
@@ -50,3 +54,6 @@ desktop.ini
 
 # ── Postman exports temporales ───────────────────────────────────────────────
 *_backup*.json
+
+# ── DAPS ───────────────────────────────────────────────
+omejdn/config/users.yaml

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-fl_demo.py  —  Demostración completa IDS + Federated Learning
-==============================================================
+pfg_ids_fl_flow.py  —  Demostración completa IDS + Federated Learning
+======================================================================
 
   FASE 0  Resolver endpoints
           ├─ GET /status            → ECC del coordinator (autoritativo)
@@ -12,13 +12,17 @@ fl_demo.py  —  Demostración completa IDS + Federated Learning
              El coordinator actúa como CONSUMER IDS:
                DescriptionRequestMessage → ContractRequestMessage
                → ContractAgreementMessage → ArtifactRequestMessage
-             El ECC fuente (otro worker del Broker) responde con
-             algorithm.py + fl_config.json. El coordinator los guarda
-             en disco y activa su rol de coordinator.
+             El ECC fuente responde con algorithm.py + fl_config.json.
+             El coordinator los guarda en disco y activa su rol.
              No hay intermediario externo ni lectura de ficheros locales.
 
-  FASE 2  Descubrimiento de peers (broker + match de columnas)
+  FASE 2  Descubrimiento de peers (broker + match de columnas ≥ 95%)
           └─ POST /broker/discover
+             Para cada peer registrado en el Broker, el coordinator
+             llama a GET /dataset/all-columns y escanea TODOS sus CSVs.
+             Por cada CSV calcula ratio = columnas_comunes / columnas_propias.
+             Selecciona el CSV de mayor ratio; si ratio ≥ 95% → COMPATIBLE.
+             El CSV ganador queda asignado a ese worker para el entrenamiento.
 
   FASE 3  Negociación IDS coordinator → cada peer  (TODA la lógica IDS aqui)
           └─ POST /fl/negotiate
@@ -29,12 +33,14 @@ fl_demo.py  —  Demostración completa IDS + Federated Learning
 
   FASE 4  Arranque del entrenamiento (omitir con --skip-fl)
           └─ POST /fl/start
+             El coordinator envía selected_csv a cada worker en el payload
+             IDS para que cada worker entrene con el dataset correcto.
 
 Uso:
-  python fl_demo.py
-  python fl_demo.py --skip-fl
-  python fl_demo.py --coordinator 3
-  python fl_demo.py --timeout 120
+  python pfg_ids_fl_flow.py
+  python pfg_ids_fl_flow.py --skip-fl
+  python pfg_ids_fl_flow.py --coordinator 3
+  python pfg_ids_fl_flow.py --timeout 120
 """
 
 import sys
@@ -462,9 +468,13 @@ def fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
 def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
     phase(
         2,
-        "Descubrimiento de peers compatibles",
-        "POST /broker/discover -> coordinator consulta Fuseki + DescriptionRequest a cada peer\n"
-        "Devuelve workers con match de columnas >= 80%"
+        "Descubrimiento de peers compatibles  (multi-CSV, umbral 95%)",
+        "POST /broker/discover\n"
+        "  Para cada peer registrado en el Broker:\n"
+        "    GET /dataset/all-columns  → lista de todos sus CSVs con columnas\n"
+        "    Evalúa cada CSV: ratio = columnas_comunes / columnas_coordinator\n"
+        "    Elige el CSV de mayor ratio  →  compatible si ratio ≥ 95%\n"
+        "  El CSV ganador queda asignado al worker para el entrenamiento FL."
     )
 
     step("5b", "POST /broker/discover")
@@ -473,22 +483,36 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
     my_cols    = data.get("my_columns_count", "?")
     count      = data.get("count", len(compatible))
 
-    ok(f"{count} workers compatibles encontrados")
+    ok(f"{count} workers compatibles encontrados (umbral 95%)")
     field("Columnas del coordinator", my_cols)
     print()
 
     for w in compatible:
-        uri   = w.get("connector_uri", "?")
-        match = w.get("match_ratio", 0)
-        cols  = len(w.get("common_cols", []))
-        m     = re.search(r"worker(\d+)", uri)
-        wid   = m.group(1) if m else "?"
-        peer  = endpoints["peers"].get(f"worker{wid}", {})
-        ecc   = peer.get("ecc_url") or w.get("ecc_url", "(desconocido)")
-        print(f"    {GREEN}OK{RESET}  Worker-{wid}  match: {match:.0%}  cols comunes: {cols}")
-        field("  connector_uri", uri, indent=8)
-        field("  ecc_url",       ecc, indent=8)
+        uri      = w.get("connector_uri", "?")
+        match    = w.get("match_ratio", 0)
+        cols     = len(w.get("common_cols", []))
+        sel_csv  = w.get("selected_csv") or "(auto)"
+        m        = re.search(r"worker(\d+)", uri)
+        wid      = m.group(1) if m else "?"
+        peer     = endpoints["peers"].get(f"worker{wid}", {})
+        ecc      = peer.get("ecc_url") or w.get("ecc_url", "(desconocido)")
+
+        print(f"    {GREEN}OK{RESET}  Worker-{wid}  "
+              f"match: {BOLD}{match:.0%}{RESET}  "
+              f"cols comunes: {cols}")
+        field("  connector_uri", uri,     indent=8)
+        field("  ecc_url",       ecc,     indent=8)
+        field("  CSV elegido",   sel_csv, indent=8)
+        info(f"     El coordinator usará {sel_csv!r} "
+             f"en worker-{wid} para el entrenamiento FL")
         print()
+
+    if not compatible:
+        warn(
+            "Ningún worker superó el umbral del 95% de coincidencia de columnas.\n"
+            "      Verifica que los workers tienen al menos un CSV con las mismas "
+            "columnas que el coordinator."
+        )
 
     return compatible
 
@@ -1085,6 +1109,126 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
 
 
 # =============================================================================
+# FASE 6 — Test de Acceso al Modelo Global (Soberanía de Datos)
+# =============================================================================
+
+def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout):
+    phase(
+        6,
+        "Test de Acceso al Modelo Global (Soberania de Datos IDS)",
+        "El coordinator crea el contrato del modelo limitando el acceso (\n"
+        "ids:rightOperand) unicamente a los workers participantes.\n"
+        "Se verifica el acceso dinamico de los workers (aceptados y rechazados)."
+    )
+
+    try:
+        r = SESSION.get(f"{coordinator_url}/ids/self-description", timeout=10, verify=False)
+        if not r.ok:
+            warn("No se pudo obtener self-description para probar acceso")
+            return
+            
+        sd = r.json()
+        cat = (sd.get("ids:resourceCatalog") or [{}])[0]
+        res = cat.get("ids:offeredResource", [])
+        
+        fl_res = next(
+            (x for x in res if
+             "fl_model_coordinator" in x.get("@id", "") or
+             "FL Global Model" in ((x.get("ids:title") or [{}])[0]).get("@value", "")),
+            None
+        )
+        
+        if not fl_res:
+            warn("No se encontro el recurso del modelo FL en el catálogo")
+            return
+            
+        cid_val = ((fl_res.get("ids:contractOffer") or [{}])[0]).get("@id", "")
+        if not cid_val:
+            warn("No se encontro ContractOffer en el modelo")
+            return
+            
+    except Exception as e:
+        warn(f"Error parseando IDs para la fase 6: {e}")
+        return
+
+    # Obtenemos las URLs directamente del broker sin hardcodear
+    coord_ecc = endpoints["coordinator"].get("ecc_url")
+    coord_uri = endpoints["coordinator"].get("connector_uri")
+    
+    if not coord_ecc or not coord_uri:
+        warn("No se pudo extraer la URL del coordinator desde el Broker para realizar la prueba.")
+        return
+    
+    # ── Extraer dinámicamente los workers a probar (participantes + rechazados) ──
+    workers_to_test = []
+    for w in nego.get("accepted", []) + nego.get("rejected", []):
+        m = re.search(r"worker(\d+)", w.get("connector_uri", ""))
+        if m:
+            workers_to_test.append(m.group(1))
+            
+    # Eliminar duplicados si los hubiera conservando el orden
+    workers_to_test = list(dict.fromkeys(workers_to_test))
+    
+    if not workers_to_test:
+        warn("No hay workers negociados o rechazados para probar la de Fase 6.")
+        return
+
+    # ── Ejecutar el test de acceso global ──
+    for target_wid in workers_to_test:
+        if f"worker{target_wid}" not in endpoints["peers"]:
+            continue
+            
+        w_url = f"https://localhost:{5000 + int(target_wid)}"
+        payload = {
+            "Forward-To": coord_ecc,
+            "messageType": "ContractRequestMessage",
+            "contractId": cid_val,
+            "contractProvider": coord_uri
+        }
+        
+        print()
+        step("test", f"IDS: Contract Request Message (Worker-{target_wid} al Coordinator)")
+        _ids_log("out", "ids:ContractRequestMessage", f"worker-{target_wid}", f"coordinator-{cid}")
+        
+        try:
+            raw = http_post_raw(f"{w_url}/proxy", payload, timeout=req_timeout)
+            parsed = parse_ids(raw)
+            if not parsed:
+                parsed = parse_ids(raw, "Message") or {}
+                
+            ids_type = parsed.get("@type", "")
+            
+            if "ContractAgreement" in ids_type:
+                step("result", f"IDS: Contract Agreement Message")
+                _ids_log("in", "ids:ContractAgreementMessage", f"coordinator-{cid}", f"worker-{target_wid}")
+                
+                transfer_contract = parsed.get("@id", "?")
+                ok(f"Worker-{target_wid} -- acceso PERMITIDO al modelo (Contract Agreement)")
+                field("Recurso Target", fl_res.get("@id", "?"), indent=8)
+                field("transferContract id", transfer_contract, indent=8)
+                
+            elif "Rejection" in ids_type or "ContractRejection" in ids_type:
+                step("result", f"IDS: Rejection Message")
+                _ids_log("in", "ids:RejectionMessage", f"coordinator-{cid}", f"worker-{target_wid}")
+                
+                reason = parsed.get("ids:rejectionReason", "?")
+                fail(f"Worker-{target_wid} -- acceso DENEGADO al modelo (Contract Rejection)")
+                field("Rejection Reason", str((reason if isinstance(reason, str) else reason.get("@id")) if reason else "?"), indent=8)
+                
+            else:
+                step("result", f"IDS: Firewall / Rejection")
+                _ids_log("in", "PolicyRejection", f"coordinator-{cid}", f"worker-{target_wid}")
+                fail(f"Worker-{target_wid} -- acceso DENEGADO/BLOQUEADO por que decidió no participar en el FL.")
+                warn(f"        El conector destino ha forzado un corte/HTTP error.")
+                field("raw_response", (raw[:200] + "...") if len(raw) > 200 else raw, indent=8)
+                
+        except Exception as e:
+            warn(f"Error proxy Worker-{target_wid}: {e}")
+            
+        print()
+
+
+# =============================================================================
 # MAIN
 # =============================================================================
 
@@ -1124,7 +1268,7 @@ def main():
 
     banner(
         "PFG -- Demostracion Federated Learning sobre IDS",
-        f"Worker-{cid} como coordinator  .  Broker Fuseki + DAPS omejdn  .  endpoints dinamicos"
+        f"Worker-{cid} como coordinator  .  Broker Fuseki + DAPS omejdn  .  multi-CSV discovery (95%)"
     )
     print()
     field("Coordinator",     f"Worker-{cid}  ({coordinator_url})")
@@ -1132,6 +1276,8 @@ def main():
     field("Arrancar FL",     "No (--skip-fl)" if args.skip_fl else "Si")
     field("Timeout HTTP",    f"{req_timeout}s")
     info("El coordinator obtendra algorithm.py + fl_config.json via IDS (auto-fetch)")
+    info("FASE 2: cada peer es evaluado por sus CSVs reales -- umbral coincidencia: 95%")
+    info("El CSV ganador de cada worker se comunica al worker via payload IDS en cada ronda")
 
     # Fases
     endpoints = fase0_resolver_endpoints(coordinator_url, cid, req_timeout)
@@ -1150,6 +1296,7 @@ def main():
         else:
             fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout)
             fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout)
+            fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
 
     # Resumen final
     print()
