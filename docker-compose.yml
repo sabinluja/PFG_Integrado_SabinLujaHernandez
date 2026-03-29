@@ -205,6 +205,8 @@ services:
       - ISSUER_CONNECTOR_URI=${WORKER1_ISSUER_CONNECTOR_URI}
       - BROKER_URL=${BROKER_URL}
       - TZ=Europe/Rome
+      - LLM_ENDPOINT=${LLM_ENDPOINT}
+      - LLM_MODEL=${LLM_MODEL}
     volumes:
       - ./ia-dataapp/data/worker1:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -302,6 +304,8 @@ services:
       - ISSUER_CONNECTOR_URI=${WORKER2_ISSUER_CONNECTOR_URI}
       - BROKER_URL=${BROKER_URL}
       - TZ=Europe/Rome
+      - LLM_ENDPOINT=${LLM_ENDPOINT}
+      - LLM_MODEL=${LLM_MODEL}
     volumes:
       - ./ia-dataapp/data/worker2:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -399,6 +403,8 @@ services:
       - ISSUER_CONNECTOR_URI=${WORKER3_ISSUER_CONNECTOR_URI}
       - BROKER_URL=${BROKER_URL}
       - TZ=Europe/Rome
+      - LLM_ENDPOINT=${LLM_ENDPOINT}
+      - LLM_MODEL=${LLM_MODEL}
     volumes:
       - ./ia-dataapp/data/worker3:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -503,6 +509,8 @@ services:
       - FL_OPT_OUT=true
       - BROKER_URL=${BROKER_URL}
       - TZ=Europe/Rome
+      - LLM_ENDPOINT=${LLM_ENDPOINT}
+      - LLM_MODEL=${LLM_MODEL}
     volumes:
       - ./ia-dataapp/data/worker4:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -513,6 +521,32 @@ services:
     depends_on:
       - ecc-worker4
 
+  # ===========================================================================
+  # LLM — Ollama Local
+  # Recomendación inteligente de Datasets
+  # 
+  # IMPORTANTE: El modelo de IA (llama3.2 de ~2GB) se guarda en el volumen 'ollama_data'. 
+  # Para evitar contenedores extra, hemos sobreescrito el comando de arranque
+  # para que encienda la API y descargue automáticamente el modelo si no existe.
+  # ===========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    networks:
+      - idsa
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: always
+    entrypoint: [ "/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull llama3.2 && wait" ]
+    healthcheck:
+      test: ["CMD", "ollama", "show", "llama3.2"]
+      interval: 10s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+
 networks:
   idsa: {} # red única — todos los contenedores se ven entre sí
 
@@ -522,3 +556,4 @@ volumes:
   ecc_worker3_data: {}
   ecc_worker4_data: {}
   broker_fuseki_data: {}
+  ollama_data: {}

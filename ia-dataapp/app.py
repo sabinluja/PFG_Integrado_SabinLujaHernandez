@@ -98,6 +98,13 @@ CONFIG_PATH     = os.path.join(DATA_DIR, "fl_config.json")
 os.makedirs(INPUT_DIR,  exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+# =============================================================================
+# Configuración LLM — para recomendación inteligente de datasets
+# Únicamente usando Ollama (local, air-gapped) por temas de soberanía de datos
+# =============================================================================
+LLM_ENDPOINT = os.getenv("LLM_ENDPOINT", "http://ollama:11434/api/generate")
+LLM_MODEL    = os.getenv("LLM_MODEL",    "llama3.2")
+
 
 # =============================================================================
 # Configuración FL — leída de fl_config.json (enviado desde Postman)
@@ -1157,6 +1164,125 @@ def _get_all_local_csvs() -> list:
         return []
 
 
+# =============================================================================
+# LLM — Recomendación inteligente de datasets
+# =============================================================================
+
+def _llm_recommend_dataset(
+    csvs: list,
+    context: str = "",
+    timeout: int = 30,
+) -> dict | None:
+    """
+    Interroga al LLM configurado (Ollama local o OpenAI) para que elija
+    el dataset más adecuado para un entrenamiento de Federated Learning
+    de detección de intrusiones de red.
+
+    Parámetros:
+        csvs     : lista de {filename, columns, count} — los candidatos
+        context  : texto adicional de contexto (p.ej. worker de referencia)
+        timeout  : segundos máximos de espera (default 30s)
+
+    Devuelve:
+        {"filename": str, "reasoning": str, "confidence": float}
+        o None si el LLM no está disponible (fallback a column-matching).
+    """
+    if not csvs:
+        return None
+
+    # ── Construir el prompt ───────────────────────────────────────────────────
+    csv_descriptions = []
+    for i, c in enumerate(csvs, 1):
+        cols_preview = ", ".join(c.get("columns", [])[:12])
+        n_cols = c.get("count", len(c.get("columns", [])))
+        csv_descriptions.append(
+            f"  [{i}] {c['filename']}\n"
+            f"      Columnas ({n_cols}): {cols_preview}{'...' if n_cols > 12 else ''}"
+        )
+
+    datasets_text = "\n".join(csv_descriptions)
+    context_text  = f"\nContexto adicional: {context}" if context else ""
+
+    prompt = (
+        "Eres un experto en Machine Learning y Federated Learning para ciberseguridad.\n"
+        "Tu tarea es seleccionar el dataset MÁS ADECUADO para un entrenamiento de "
+        "detección de intrusiones de red (Network Intrusion Detection) en un entorno "
+        "de Federated Learning basado en el ecosistema IDS (International Data Spaces).\n"
+        f"{context_text}\n"
+        "A continuación tienes los datasets disponibles en este worker:\n"
+        f"{datasets_text}\n\n"
+        "Responde ÚNICAMENTE con un JSON válido con este formato exacto "
+        "(sin texto adicional fuera del JSON):\n"
+        "{\"filename\": \"<nombre_exacto_del_archivo>\", "
+        "\"reasoning\": \"<explicación_breve_en_español>\", "
+        "\"confidence\": <número_entre_0_y_1>}\n"
+        "Elige el dataset que mejor se ajuste a la tarea de detección de intrusiones "
+        "de red o que tenga mayor compatibilidad temática con UNSW-NB15."
+    )
+
+    log.info(
+        f"[llm-recommend] Model={LLM_MODEL}  "
+        f"Candidatos={[c['filename'] for c in csvs]}"
+    )
+
+    try:
+        # ── Backend Ollama (local, soberanía del dato) ────────────────────────
+        resp = requests.post(
+            LLM_ENDPOINT,
+            json={"model": LLM_MODEL, "prompt": prompt, "stream": False},
+            timeout=timeout,
+            verify=False,
+        )
+        resp.raise_for_status()
+        raw_text = resp.json().get("response", "")
+
+        # ── Parsear respuesta JSON del LLM ────────────────────────────────────
+        import re as _re_llm
+        # Extraer bloque JSON aunque el LLM incluya texto alrededor
+        match = _re_llm.search(r"\{[^{}]+\}", raw_text, _re_llm.DOTALL)
+        json_str = match.group(0) if match else raw_text.strip()
+        result   = json.loads(json_str)
+
+        filename   = result.get("filename", "")
+        reasoning  = result.get("reasoning", "")
+        confidence = float(result.get("confidence", 0.0))
+
+        # Verificar que el filename devuelto existe en los candidatos
+        valid_names = {c["filename"] for c in csvs}
+        if filename not in valid_names:
+            # Intento de corrección: buscar coincidencia parcial
+            for vn in valid_names:
+                if filename.lower() in vn.lower() or vn.lower() in filename.lower():
+                    filename = vn
+                    break
+            else:
+                log.warning(
+                    f"[llm-recommend] LLM devolvió fichero desconocido: {filename!r} "
+                    f"— ignorando recomendación (candidatos: {valid_names})"
+                )
+                return None
+
+        log.info(
+            f"[llm-recommend] ✅ Recomendación: {filename!r} "
+            f"(confianza={confidence:.0%})\n"
+            f"  Razonamiento: {reasoning}"
+        )
+        return {"filename": filename, "reasoning": reasoning, "confidence": confidence}
+
+    except requests.exceptions.ConnectionError:
+        log.warning(
+            f"[llm-recommend] Error de conexión a Ollama en {LLM_ENDPOINT} "
+            f"— usando column-matching como fallback"
+        )
+        return None
+    except requests.exceptions.Timeout:
+        log.warning(f"[llm-recommend] Timeout ({timeout}s) esperando respuesta de Ollama")
+        return None
+    except Exception as e:
+        log.warning(f"[llm-recommend] Error al consultar Ollama: {e}")
+        return None
+
+
 def _get_my_columns() -> list:
     """
     Devuelve las columnas del CSV local con más columnas (referencia del coordinator).
@@ -1262,6 +1388,7 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
 
         # ── Evaluar cada CSV y elegir el de mayor match_ratio ─────────────────
         best_cols, best_filename, best_ratio = [], None, 0.0
+        all_evaluated = []
         for csv_info in all_csvs:
             fname  = csv_info.get("filename", "?")
             cols   = [c.lower().strip() for c in csv_info.get("columns", [])]
@@ -1269,6 +1396,12 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
             common = my_set & p_set
             ratio  = len(common) / len(my_set) if my_set else 0.0
             is_best = ratio > best_ratio
+            all_evaluated.append({
+                "filename": fname,
+                "ratio": ratio,
+                "common_cols_count": len(common),
+                "total_cols": len(my_set)
+            })
             log.info(
                 f"[broker-discover]   {fname}: {len(p_set)} cols, "
                 f"{len(common)} comunes, ratio={ratio:.0%}"
@@ -1279,11 +1412,51 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
                 best_cols     = cols
                 best_filename = fname
 
-        return best_cols, real_uri, best_filename, best_ratio
+        # ── Consultar LLM como capa de razonamiento adicional ─────────────────
+        # El LLM actúa como asesor semántico: si falla, el column-matching gana.
+        llm_candidates = [
+            {"filename": c.get("filename", ""),
+             "columns" : [col.lower().strip() for col in c.get("columns", [])],
+             "count"   : len(c.get("columns", []))}
+            for c in all_csvs
+        ]
+        llm_rec = _llm_recommend_dataset(
+            llm_candidates,
+            context=(
+                f"El coordinator (worker-{INSTANCE_ID}) usa como referencia el dataset "
+                f"UNSW-NB15 (tráfico de red con atributos de intrusión). "
+                f"El peer evaluado es {real_uri}."
+            ),
+        )
+        if llm_rec:
+            llm_filename   = llm_rec["filename"]
+            llm_confidence = llm_rec["confidence"]
+            llm_rec["math_filename"] = best_filename
+            
+            if llm_filename == best_filename:
+                log.info(
+                    f"[llm-recommend] ✅ LLM confirma la selección column-match: "
+                    f"{best_filename!r} (confianza={llm_confidence:.0%})"
+                )
+            else:
+                if llm_confidence >= 0.80:
+                    log.info(
+                        f"[llm-recommend] ⚠ LLM recomienda {llm_filename!r} con alta confianza ({llm_confidence:.0%} >= 80%).\n"
+                        f"  → SOBRESCRIBIENDO la selección matemática ({best_filename!r})."
+                    )
+                    best_filename = llm_filename
+                else:
+                    log.info(
+                        f"[llm-recommend] ⚠ LLM recomienda {llm_filename!r} "
+                        f"pero sin confianza suficiente ({llm_confidence:.0%} < 80%).\n"
+                        f"  → Se mantiene la selección por column-matching ({best_filename!r})."
+                    )
+
+        return best_cols, real_uri, best_filename, best_ratio, llm_rec, all_evaluated
 
     except Exception as e:
         log.warning(f"[broker-discover] Error escaneando CSVs de {connector_uri}: {e}")
-        return [], real_uri, None, 0.0
+        return [], real_uri, None, 0.0, None, []
 
 
 def _ecc_url_from_connector_uri(connector_uri: str, endpoint: str) -> str:
@@ -1325,7 +1498,7 @@ def _discover_compatible_workers(my_columns: list) -> list:
             continue
 
         log.info(f"[broker-discover] Evaluando {uri} — escaneando todos sus CSVs...")
-        best_cols, real_uri, best_filename, best_ratio = _get_peer_best_csv(
+        best_cols, real_uri, best_filename, best_ratio, llm_rec, all_evaluated = _get_peer_best_csv(
             ecc_url, uri, my_set
         )
         if real_uri != uri:
@@ -1341,11 +1514,17 @@ def _discover_compatible_workers(my_columns: list) -> list:
 
         if best_ratio >= MATCH_THRESHOLD:
             compatible.append({
-                "connector_uri": real_uri,
-                "ecc_url"      : ecc_url,
-                "common_cols"  : sorted(common),
-                "match_ratio"  : round(best_ratio, 3),
-                "selected_csv" : best_filename,
+                "connector_uri"  : real_uri,
+                "ecc_url"        : ecc_url,
+                "common_cols"    : sorted(common),
+                "match_ratio"    : round(best_ratio, 3),
+                "selected_csv"   : best_filename,
+                "math_filename"  : llm_rec.get("math_filename") if llm_rec else best_filename,
+                "llm_recommended": llm_rec.get("filename") if llm_rec else None,
+                "llm_reasoning"  : llm_rec.get("reasoning") if llm_rec else None,
+                "llm_confidence" : llm_rec.get("confidence") if llm_rec else 0.0,
+                "llm_model"      : LLM_MODEL,
+                "all_evaluated"  : all_evaluated,
             })
 
     log.info(
@@ -1606,8 +1785,7 @@ async def ids_data(request: Request):
                 "reason"  : "fl_opt_out",
                 "worker"  : INSTANCE_ID,
                 "message" : (
-                    f"Worker {INSTANCE_ID} has opted out of federated learning participation. "
-                    "This connector is registered in the broker but does not share its data (Data Sovereignty rules)."
+                    f"Worker {INSTANCE_ID} ha optado por no participar voluntariamente en el entrenamiento del FL."
                 )
             }))
 
@@ -2218,6 +2396,45 @@ def dataset_all_columns():
         {"filename": c["filename"], "columns": c["columns"], "count": len(c["columns"])}
         for c in csvs
     ]
+
+
+@app.get("/dataset/llm-recommend")
+def dataset_llm_recommend():
+    """
+    Endpoint de prueba para verificar la recomendación del LLM.
+    Devuelve la sugerencia del LLM evaluando todos los CSVs locales.
+    """
+    csvs = _get_all_local_csvs()
+    if not csvs:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"No hay CSVs en {INPUT_DIR}"}
+        )
+    
+    candidates = [
+        {"filename": c["filename"], "columns": c["columns"], "count": len(c["columns"])}
+        for c in csvs
+    ]
+    
+    rec = _llm_recommend_dataset(
+        candidates, 
+        context="El dataset de referencia ideal para este entorno es UNSW-NB15 (Intrusión de red).",
+        timeout=15,
+    )
+    
+    if not rec:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "LLM no disponible o falló la recomendación. Revisa los logs y asegúrate de que OPENAI_API_KEY esté configurada."}
+        )
+    
+    return {
+        "instance": INSTANCE_ID,
+        "recommended": rec["filename"],
+        "reasoning": rec["reasoning"],
+        "confidence": rec["confidence"],
+        "all_candidates": [c["filename"] for c in candidates]
+    }
 
 
 @app.get("/dataset/info")

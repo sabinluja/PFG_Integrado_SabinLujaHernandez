@@ -7,7 +7,7 @@ pfg_ids_fl_flow.py  —  Demostración completa IDS + Federated Learning
           ├─ GET /status            → ECC del coordinator (autoritativo)
           └─ GET /broker/connectors  → peers vía SPARQL Fuseki (owl:sameAs)
 
-  FASE 1  Coordinator obtiene el algoritmo via IDS (auto-fetch)
+  FASE 1  Coordinator obtiene el algoritmo via IDS
           └─ POST /fl/fetch-algorithm
              El coordinator actúa como CONSUMER IDS:
                DescriptionRequestMessage → ContractRequestMessage
@@ -396,7 +396,7 @@ def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
 
 
 # =============================================================================
-# FASE 1 — Coordinator obtiene el algoritmo via IDS (auto-fetch)
+# FASE 1 — Coordinator obtiene el algoritmo via IDS
 # =============================================================================
 
 def fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
@@ -418,7 +418,7 @@ def fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
 
     phase(
         1,
-        f"Worker-{cid} obtiene el algoritmo via IDS  (self-fetch autonomo)",
+        f"Worker-{cid} obtiene el algoritmo via IDS",
         f"Coordinator ECC  : {coord_label}\n"
         f"Fuente ECC       : {coord_label}  (propio conector - sin worker externo)\n"
         "Handshake IDS (coordinator como consumer Y provider de su propio ECC):\n"
@@ -428,8 +428,8 @@ def fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
         "  ArtifactRequestMessage     ->  propio /data  ->  ArtifactResponseMessage [alg+cfg]"
     )
 
-    step("1", "POST /fl/fetch-algorithm — coordinator hace self-fetch IDS")
-    info(f"Coordinator ({coord_label}) actua como consumer Y provider de su propio ECC")
+    step("1", "POST /fl/fetch-algorithm — coordinator usa IDS")
+    info(f"Coordinator ({coord_label}) solicita el algoritmo y el fichero de configuración inicial")
     info(f"Fuente: {coord_ecc}  (mismo conector, sin worker externo)")
 
     ids_arrow("out", "ids:DescriptionRequestMessage",  coord_label, coord_label)
@@ -441,12 +441,11 @@ def fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
     ids_arrow("out", "ids:ArtifactRequestMessage",                         coord_label, coord_label)
     ids_arrow("in",  "ids:ArtifactResponseMessage [algorithm.py + config]", coord_label, coord_label)
 
-    # Body vacio: el coordinator usa su propio ECC por defecto (self-fetch)
     result = http_post(f"{coordinator_url}/fl/fetch-algorithm", {}, timeout=req_timeout)
 
     status = result.get("status", "")
     if status == "everything_received":
-        ok("algorithm.py + fl_config.json obtenidos por el coordinator via IDS (self-fetch)")
+        ok("algorithm.py + fl_config.json obtenidos por el coordinator via IDS")
         field("source_ecc", result.get("source_ecc", "?"))
         cfg = result.get("fl_config") or {}
         if cfg:
@@ -462,19 +461,18 @@ def fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
 
 # =============================================================================
 # FASE 2 — Descubrimiento de peers compatibles
-
 # =============================================================================
 
 def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
     phase(
         2,
-        "Descubrimiento de peers compatibles  (multi-CSV, umbral 95%)",
+        "Descubrimiento de peers compatibles  (multi-CSV, umbral 80%)",
         "POST /broker/discover\n"
         "  Para cada peer registrado en el Broker:\n"
         "    GET /dataset/all-columns  → lista de todos sus CSVs con columnas\n"
-        "    Evalúa cada CSV: ratio = columnas_comunes / columnas_coordinator\n"
-        "    Elige el CSV de mayor ratio  →  compatible si ratio ≥ 95%\n"
-        "  El CSV ganador queda asignado al worker para el entrenamiento FL."
+        "    Ollama evalúa cada CSV para saber su similitud\n"
+        "    Elige el CSV de mayor ratio  frente a los deams comparados\n"
+        "  El CSV seleccionado queda asignado al worker para el entrenamiento FL."
     )
 
     step("5b", "POST /broker/discover")
@@ -483,7 +481,7 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
     my_cols    = data.get("my_columns_count", "?")
     count      = data.get("count", len(compatible))
 
-    ok(f"{count} workers compatibles encontrados (umbral 95%)")
+    ok(f"{count} workers compatibles encontrados")
     field("Columnas del coordinator", my_cols)
     print()
 
@@ -497,12 +495,38 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
         peer     = endpoints["peers"].get(f"worker{wid}", {})
         ecc      = peer.get("ecc_url") or w.get("ecc_url", "(desconocido)")
 
-        print(f"    {GREEN}OK{RESET}  Worker-{wid}  "
-              f"match: {BOLD}{match:.0%}{RESET}  "
-              f"cols comunes: {cols}")
+        print(f"    {GREEN}OK{RESET}  Worker-{wid}")
         field("  connector_uri", uri,     indent=8)
         field("  ecc_url",       ecc,     indent=8)
-        field("  CSV elegido",   sel_csv, indent=8)
+
+        print(f"        {GRAY}Datasets evaluados:{RESET}")
+        for ev in w.get("all_evaluated", []):
+            fname_ev = ev["filename"]
+            ratio_ev = ev["ratio"]
+            common_c = ev.get("common_cols_count", 0)
+            total_c  = ev.get("total_cols", 0)
+            print(f"          - {fname_ev:<30} (match: {ratio_ev:.0%} - {common_c}/{total_c} cols)")
+
+        llm_rec  = w.get("llm_recommended")
+        sel_csv  = w.get("selected_csv") or "(auto)"
+        math_csv = w.get("math_filename") or sel_csv
+        
+        if llm_rec:
+            llm_conf = w.get("llm_confidence", 0)
+            llm_mod  = w.get("llm_model", "Ollama")
+            
+            field(f"  CSV (Sugerido por IA {llm_mod})", f"{CYAN}{llm_rec} (confianza: {llm_conf:.0%}){RESET}", indent=8)
+
+            if llm_conf >= 0.80:
+                field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
+            else:
+                print(f"        {YELLOW}⚠ Confianza de IA < 80%. Fallback a emparejamiento matemático.{RESET}")
+                field("  CSV (Seleccionado por columnas)", math_csv, indent=8)
+                field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
+        else:
+            field("  CSV (Seleccionado por columnas)", math_csv, indent=8)
+            field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
+                
         info(f"     El coordinator usará {sel_csv!r} "
              f"en worker-{wid} para el entrenamiento FL")
         print()
@@ -617,27 +641,6 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
         print(f"    {RED}RECHAZADO   Worker-{wid}   {GRAY}{uri}  --  {reason}{RESET}")
 
     print()
-
-    w1_ok = any("worker1" in w.get("connector_uri", "") for w in accepted)
-    w3_ok = any("worker3" in w.get("connector_uri", "") for w in accepted)
-    w4_no = any("worker4" in w.get("connector_uri", "") for w in rejected)
-
-    ok("Worker-1 acepto") if w1_ok \
-        else warn("Worker-1 no esta en aceptados -- revisar FL_OPT_OUT en docker-compose")
-    ok("Worker-3 acepto") if w3_ok \
-        else warn("Worker-3 no esta en aceptados -- revisar FL_OPT_OUT en docker-compose")
-
-    if w4_no:
-        w4r = next(
-            (w.get("reason", "?") for w in rejected if "worker4" in w.get("connector_uri", "")),
-            "?"
-        )
-        ok(f"Worker-4 rechazo -- soberania del dato demostrada correctamente")
-    else:
-        warn(
-            "Worker-4 no esta en rechazados\n"
-            "      Verifica: be-dataapp-worker4 -> FL_OPT_OUT=true en docker-compose.yml"
-        )
 
     return {"accepted": accepted, "rejected": rejected}
 
@@ -1268,14 +1271,14 @@ def main():
 
     banner(
         "PFG -- Demostracion Federated Learning sobre IDS",
-        f"Worker-{cid} como coordinator  .  Broker Fuseki + DAPS omejdn  .  multi-CSV discovery (95%)"
+        f"Worker-{cid} como coordinator  .  Broker Fuseki + DAPS omejdn  .  multi-CSV discovery"
     )
     print()
     field("Coordinator",     f"Worker-{cid}  ({coordinator_url})")
     field("coordinator_port", coordinator_port)
     field("Arrancar FL",     "No (--skip-fl)" if args.skip_fl else "Si")
     field("Timeout HTTP",    f"{req_timeout}s")
-    info("El coordinator obtendra algorithm.py + fl_config.json via IDS (auto-fetch)")
+    info("El coordinator obtendra algorithm.py + fl_config.json via IDS")
     info("FASE 2: cada peer es evaluado por sus CSVs reales -- umbral coincidencia: 95%")
     info("El CSV ganador de cada worker se comunica al worker via payload IDS en cada ronda")
 

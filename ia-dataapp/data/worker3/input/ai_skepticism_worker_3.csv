@@ -1,0 +1,334 @@
+ai_model_name,query_category,ai_confidence_percentage,response_character_count,has_cited_sources,contains_hedging_words,includes_disclaimer,answer_detail_level,respondent_age_bracket,education_level,digital_literacy_score,ai_familiarity_level,decision_importance,urgency_level,belief_alignment_status,subject_matter_expertise,trust_score_out_of_10,performed_fact_check,fact_check_method_used,verification_duration_mins,answer_accuracy_percentage,trust_calibration_valid,user_skepticism_category
+Mistral,scientific_facts,87.5,214,FALSE,TRUE,TRUE,Moderate,35-44,Masters,Low,Expert,Medium,None,,FALSE,9,FALSE,,0,82.12,TRUE,Blind Trust
+Mistral,current_events,75.36,495,TRUE,FALSE,FALSE,Vague,35-44,High School,High,Intermediate,Critical,High,FALSE,TRUE,6.6,TRUE,Academic Paper,28.5,52.54,TRUE,Skeptical
+Llama,current_events,75.51,772,TRUE,FALSE,FALSE,Specific,45-54,Professional,High,Beginner,High,Medium,,TRUE,8.7,FALSE,,0,53.06,FALSE,Blind Trust
+Claude,technical_coding,88.09,463,FALSE,FALSE,FALSE,Vague,35-44,Masters,Expert,First Time,Critical,High,,FALSE,8.4,TRUE,Google Search,20.6,77.59,TRUE,Moderate Trust
+ChatGPT-3.5,general_knowledge,72.31,71,FALSE,FALSE,TRUE,Specific,65+,PhD,Low,Beginner,High,Medium,,FALSE,7.6,TRUE,Google Search,2.2,78.68,TRUE,Skeptical
+Mistral,math_calculation,95.28,549,FALSE,FALSE,TRUE,Moderate,45-54,High School,Medium,Beginner,Medium,Low,FALSE,FALSE,10,FALSE,,0,97.67,TRUE,Blind Trust
+Mistral,legal_advice,67.43,299,TRUE,FALSE,FALSE,Moderate,35-44,High School,Expert,Intermediate,Low,High,,FALSE,8.4,FALSE,,0,56.49,FALSE,Blind Trust
+Llama,financial_advice,41.7,639,FALSE,FALSE,TRUE,Very Specific,18-24,PhD,Expert,Beginner,Critical,None,,FALSE,4.3,TRUE,Asked Colleague,27.1,49.97,TRUE,Highly Skeptical
+Claude,financial_advice,59.39,439,TRUE,TRUE,TRUE,Moderate,55-64,Professional,Low,Expert,Critical,None,TRUE,FALSE,8.3,TRUE,Personal Testing,22.5,61.71,FALSE,Moderate Trust
+Gemini,scientific_facts,72.1,572,FALSE,TRUE,TRUE,Specific,45-54,PhD,Medium,Advanced,Low,None,FALSE,FALSE,6.5,FALSE,,0,71.18,TRUE,Moderate Trust
+Gemini,general_knowledge,80.69,227,TRUE,FALSE,TRUE,Very Specific,55-64,Masters,Low,Intermediate,Critical,High,TRUE,FALSE,10,FALSE,,0,75.48,FALSE,Blind Trust
+Mistral,math_calculation,98.39,721,FALSE,TRUE,TRUE,Very Specific,65+,Masters,Medium,Expert,Critical,Low,TRUE,FALSE,10,FALSE,,0,100,TRUE,Blind Trust
+Mistral,scientific_facts,70.92,184,FALSE,FALSE,TRUE,Vague,55-64,Bachelors,High,Expert,High,None,,FALSE,6.6,TRUE,Academic Paper,11.4,63.06,TRUE,Skeptical
+Llama,recipe_cooking,85.83,478,TRUE,TRUE,FALSE,Vague,55-64,PhD,Medium,Beginner,Critical,Low,FALSE,TRUE,8.4,TRUE,Checked Official Source,17,76.23,TRUE,Moderate Trust
+ChatGPT-3.5,scientific_facts,87.88,660,TRUE,TRUE,FALSE,Very Specific,45-54,Bachelors,Medium,Advanced,Low,Medium,TRUE,TRUE,10,FALSE,,0,82.38,TRUE,Blind Trust
+ChatGPT-3.5,factual_historical,75.75,338,FALSE,FALSE,FALSE,Specific,35-44,Bachelors,Medium,Intermediate,Critical,None,TRUE,FALSE,9.3,TRUE,Asked Expert,24.4,66.71,FALSE,Moderate Trust
+Llama,general_knowledge,73.57,400,FALSE,TRUE,FALSE,Moderate,65+,High School,Expert,First Time,Low,High,TRUE,FALSE,9.9,FALSE,,0,87.26,TRUE,Blind Trust
+Claude,technical_coding,92.66,621,TRUE,TRUE,TRUE,Very Specific,65+,High School,Low,Beginner,Medium,None,FALSE,FALSE,9.7,FALSE,,0,85.98,TRUE,Blind Trust
+Llama,math_calculation,87.81,401,TRUE,FALSE,FALSE,Specific,25-34,Professional,Medium,First Time,Low,None,TRUE,TRUE,10,FALSE,,0,88.09,TRUE,Blind Trust
+Claude,recipe_cooking,86.76,707,TRUE,FALSE,TRUE,Very Specific,45-54,Masters,Medium,Beginner,Medium,Medium,FALSE,FALSE,10,FALSE,,0,74.48,FALSE,Blind Trust
+GPT-4,recipe_cooking,85.95,750,FALSE,FALSE,FALSE,Very Specific,35-44,Professional,Low,Advanced,High,High,TRUE,TRUE,9.6,FALSE,,0,81.68,TRUE,Blind Trust
+Gemini,legal_advice,61.69,411,TRUE,TRUE,TRUE,Vague,18-24,Professional,Low,Intermediate,Medium,None,FALSE,TRUE,6.7,TRUE,Checked Official Source,24.1,48.87,TRUE,Skeptical
+Claude,legal_advice,69.98,298,TRUE,FALSE,TRUE,Moderate,55-64,Masters,Expert,First Time,High,Low,FALSE,TRUE,6.7,TRUE,Academic Paper,37.9,64.99,TRUE,Skeptical
+GPT-4,financial_advice,46.04,513,FALSE,FALSE,TRUE,Moderate,45-54,Bachelors,Expert,Advanced,Low,High,,TRUE,5.1,FALSE,,0,50.97,TRUE,Skeptical
+Claude,recipe_cooking,83.28,157,FALSE,TRUE,TRUE,Specific,18-24,Bachelors,Low,Expert,High,Low,,TRUE,7.6,TRUE,Asked Colleague,40.5,71.92,TRUE,Skeptical
+ChatGPT-3.5,medical_advice,56.84,127,FALSE,FALSE,TRUE,Specific,18-24,Bachelors,Low,Advanced,Medium,Medium,TRUE,FALSE,8.3,TRUE,Cross-referenced Multiple AIs,34,43.79,FALSE,Moderate Trust
+Gemini,opinion_based,48.63,417,TRUE,FALSE,TRUE,Specific,35-44,High School,Low,Beginner,Low,Low,FALSE,FALSE,7.2,FALSE,,0,29.53,FALSE,Moderate Trust
+Gemini,recipe_cooking,89.42,279,FALSE,FALSE,TRUE,Very Specific,55-64,Masters,High,Intermediate,Medium,Medium,FALSE,TRUE,8.4,FALSE,,0,84.86,TRUE,Blind Trust
+Claude,medical_advice,74.66,579,FALSE,FALSE,TRUE,Moderate,25-34,PhD,Medium,Beginner,Low,None,,FALSE,9.1,TRUE,Academic Paper,29.1,83.64,TRUE,Moderate Trust
+Llama,legal_advice,45.19,586,TRUE,TRUE,TRUE,Vague,35-44,Masters,Low,Expert,Medium,None,TRUE,FALSE,7.6,TRUE,Google Search,44.1,41.67,FALSE,Skeptical
+Llama,medical_advice,74.73,325,FALSE,FALSE,TRUE,Specific,25-34,PhD,Expert,Expert,Critical,Low,FALSE,FALSE,5.2,TRUE,Consulted Documentation,10.2,77.76,FALSE,Skeptical
+Llama,legal_advice,47.95,442,TRUE,TRUE,TRUE,Moderate,55-64,High School,High,First Time,Medium,Medium,,FALSE,5.6,TRUE,Consulted Documentation,3.3,57.92,TRUE,Skeptical
+Mistral,scientific_facts,77.57,761,FALSE,TRUE,TRUE,Very Specific,25-34,Professional,Expert,Intermediate,Medium,Medium,,TRUE,7.1,FALSE,,0,66.85,TRUE,Moderate Trust
+Claude,financial_advice,62.73,716,FALSE,FALSE,TRUE,Vague,35-44,Bachelors,Expert,Intermediate,High,Medium,FALSE,FALSE,5.2,TRUE,Asked Colleague,23.7,76.41,FALSE,Skeptical
+GPT-4,factual_historical,74.74,470,FALSE,TRUE,FALSE,Moderate,55-64,Bachelors,Medium,Advanced,High,High,TRUE,TRUE,8.2,FALSE,,0,70.49,TRUE,Blind Trust
+GPT-4,general_knowledge,79.43,543,FALSE,FALSE,TRUE,Moderate,35-44,PhD,Medium,Intermediate,Low,Low,TRUE,FALSE,10,TRUE,Cross-referenced Multiple AIs,29.1,90.1,TRUE,Moderate Trust
+GPT-4,math_calculation,96.38,670,FALSE,FALSE,FALSE,Vague,25-34,Masters,High,Beginner,High,Medium,FALSE,TRUE,8.8,TRUE,Consulted Documentation,41,100,TRUE,Moderate Trust
+GPT-4,factual_historical,74.7,194,TRUE,FALSE,TRUE,Specific,18-24,PhD,High,First Time,Critical,None,,FALSE,8,TRUE,Cross-referenced Multiple AIs,13.5,74.76,TRUE,Moderate Trust
+Llama,factual_historical,80.4,313,TRUE,TRUE,TRUE,Very Specific,25-34,Professional,Low,Intermediate,High,High,,FALSE,8.8,TRUE,Asked Expert,19.5,65.8,FALSE,Moderate Trust
+Claude,scientific_facts,75.05,173,TRUE,FALSE,TRUE,Moderate,55-64,Bachelors,High,Beginner,Low,Medium,,FALSE,9.6,FALSE,,0,88.77,TRUE,Blind Trust
+ChatGPT-3.5,medical_advice,67.83,423,FALSE,TRUE,TRUE,Moderate,18-24,Masters,High,Intermediate,Critical,Medium,FALSE,TRUE,4.4,TRUE,Consulted Documentation,25.8,72.56,FALSE,Highly Skeptical
+Mistral,legal_advice,54.51,784,TRUE,FALSE,TRUE,Specific,18-24,High School,Low,Intermediate,Low,None,TRUE,TRUE,9.5,TRUE,Personal Testing,10.2,46.58,FALSE,Moderate Trust
+Mistral,legal_advice,54.19,176,FALSE,TRUE,FALSE,Very Specific,65+,Professional,Low,First Time,Low,Low,FALSE,FALSE,6.1,TRUE,Google Search,29.4,58.57,TRUE,Skeptical
+Mistral,financial_advice,40.52,65,TRUE,FALSE,FALSE,Vague,55-64,PhD,High,First Time,Low,Medium,TRUE,TRUE,8.9,TRUE,Academic Paper,31.2,34.38,FALSE,Moderate Trust
+Claude,math_calculation,91.75,200,TRUE,TRUE,FALSE,Very Specific,35-44,PhD,Expert,Beginner,Critical,High,TRUE,TRUE,10,TRUE,Personal Testing,34.9,100,TRUE,Moderate Trust
+Mistral,general_knowledge,81.03,641,TRUE,TRUE,FALSE,Moderate,35-44,High School,High,First Time,Critical,Medium,FALSE,FALSE,7.5,TRUE,Checked Official Source,30.5,72.08,TRUE,Skeptical
+ChatGPT-3.5,technical_coding,84.95,304,TRUE,FALSE,TRUE,Vague,65+,High School,High,First Time,Medium,High,,FALSE,10,FALSE,,0,88.9,TRUE,Blind Trust
+Mistral,scientific_facts,86.72,501,FALSE,FALSE,TRUE,Vague,35-44,Masters,Low,Expert,Medium,Medium,FALSE,FALSE,8.3,TRUE,Checked Official Source,10.5,76.21,TRUE,Moderate Trust
+GPT-4,scientific_facts,73.53,289,TRUE,TRUE,FALSE,Very Specific,18-24,Bachelors,Low,Expert,Critical,Medium,TRUE,TRUE,8.3,TRUE,Cross-referenced Multiple AIs,23.7,69.3,TRUE,Moderate Trust
+GPT-4,medical_advice,72.54,725,TRUE,TRUE,FALSE,Vague,35-44,Professional,High,Advanced,Low,High,TRUE,FALSE,10,FALSE,,0,69.25,FALSE,Blind Trust
+Gemini,scientific_facts,73.87,477,FALSE,TRUE,TRUE,Specific,45-54,High School,Expert,Expert,Critical,Medium,FALSE,TRUE,5.3,TRUE,Asked Colleague,17.4,63.03,TRUE,Skeptical
+GPT-4,medical_advice,68.25,671,TRUE,FALSE,TRUE,Specific,65+,Bachelors,Expert,First Time,High,None,TRUE,TRUE,8.8,TRUE,Google Search,19.7,58.49,FALSE,Moderate Trust
+Llama,math_calculation,93.55,327,FALSE,TRUE,FALSE,Moderate,25-34,High School,Expert,Advanced,High,High,TRUE,TRUE,10,FALSE,,0,81.82,TRUE,Blind Trust
+Gemini,legal_advice,68.31,152,TRUE,FALSE,TRUE,Moderate,55-64,Masters,Medium,Advanced,Critical,Medium,FALSE,TRUE,6.2,TRUE,Asked Expert,28.4,83.15,FALSE,Skeptical
+GPT-4,creative_writing,64.17,54,TRUE,TRUE,TRUE,Very Specific,65+,Bachelors,Low,Beginner,High,None,TRUE,TRUE,9.7,FALSE,,0,73.5,FALSE,Blind Trust
+Mistral,legal_advice,63.95,307,TRUE,TRUE,FALSE,Specific,25-34,PhD,High,Expert,Critical,Low,TRUE,TRUE,7.4,TRUE,Asked Expert,25.5,66.03,TRUE,Skeptical
+Gemini,technical_coding,94.89,256,FALSE,FALSE,FALSE,Specific,35-44,PhD,Low,Advanced,Low,High,,FALSE,10,FALSE,,0,100,TRUE,Blind Trust
+GPT-4,medical_advice,64.15,107,TRUE,TRUE,TRUE,Vague,65+,PhD,Low,Beginner,Low,None,FALSE,FALSE,7.3,TRUE,Academic Paper,35.6,59.25,TRUE,Skeptical
+Mistral,financial_advice,55.79,292,FALSE,TRUE,FALSE,Vague,35-44,PhD,Expert,Beginner,Critical,None,,FALSE,4.7,TRUE,Cross-referenced Multiple AIs,18.1,62.62,TRUE,Highly Skeptical
+Llama,general_knowledge,77.74,552,TRUE,TRUE,TRUE,Very Specific,45-54,Bachelors,Expert,Advanced,Critical,None,TRUE,TRUE,8.2,TRUE,Personal Testing,43.2,73.28,TRUE,Moderate Trust
+Llama,legal_advice,55.47,687,TRUE,FALSE,TRUE,Vague,55-64,Professional,High,Advanced,Low,None,TRUE,TRUE,9.1,FALSE,,0,64.33,FALSE,Blind Trust
+Mistral,recipe_cooking,86.47,583,TRUE,FALSE,TRUE,Very Specific,45-54,Professional,High,Beginner,Critical,Low,TRUE,TRUE,10,TRUE,Asked Expert,8.9,79.61,FALSE,Moderate Trust
+Claude,opinion_based,44.53,344,TRUE,FALSE,TRUE,Moderate,18-24,Bachelors,High,Expert,Medium,High,,FALSE,5.8,TRUE,Cross-referenced Multiple AIs,22.1,24.15,FALSE,Skeptical
+Mistral,medical_advice,61.28,228,TRUE,TRUE,TRUE,Vague,45-54,Bachelors,Medium,Expert,High,None,,TRUE,6.4,TRUE,Academic Paper,5.6,65.08,TRUE,Skeptical
+Llama,technical_coding,93.52,374,TRUE,TRUE,TRUE,Moderate,18-24,High School,Expert,First Time,High,High,,TRUE,10,FALSE,,0,91.74,TRUE,Blind Trust
+Claude,factual_historical,87.07,89,FALSE,TRUE,TRUE,Moderate,18-24,Bachelors,Expert,Expert,Critical,Medium,TRUE,FALSE,9.2,FALSE,,0,86.98,TRUE,Blind Trust
+Gemini,scientific_facts,75.86,93,FALSE,FALSE,TRUE,Specific,35-44,PhD,Expert,First Time,Medium,Low,TRUE,FALSE,10,TRUE,Asked Colleague,17.6,70.62,FALSE,Moderate Trust
+Claude,math_calculation,92.71,471,TRUE,TRUE,FALSE,Specific,65+,PhD,Expert,Expert,Medium,High,TRUE,FALSE,10,TRUE,Consulted Documentation,40.3,79.2,FALSE,Moderate Trust
+GPT-4,opinion_based,52.74,515,TRUE,FALSE,FALSE,Moderate,35-44,Masters,Medium,Beginner,High,None,FALSE,FALSE,5.5,TRUE,Asked Expert,29.3,46.58,TRUE,Skeptical
+Gemini,legal_advice,50.69,298,FALSE,TRUE,FALSE,Vague,55-64,Bachelors,High,First Time,High,High,,FALSE,5.1,TRUE,Asked Expert,40.6,47.91,TRUE,Skeptical
+Mistral,scientific_facts,85.03,132,TRUE,FALSE,FALSE,Vague,55-64,High School,Medium,Advanced,Medium,Medium,FALSE,FALSE,9.3,FALSE,,0,87.57,TRUE,Blind Trust
+ChatGPT-3.5,factual_historical,94.61,373,FALSE,TRUE,FALSE,Very Specific,25-34,Bachelors,Medium,First Time,Critical,Medium,,FALSE,9.1,FALSE,,0,80.91,TRUE,Blind Trust
+Gemini,financial_advice,42.25,516,TRUE,TRUE,TRUE,Moderate,35-44,PhD,Expert,First Time,High,None,TRUE,TRUE,6,TRUE,Consulted Documentation,2.7,35.84,FALSE,Skeptical
+Gemini,current_events,78.52,773,FALSE,FALSE,FALSE,Moderate,25-34,Bachelors,Low,Intermediate,Low,Medium,FALSE,FALSE,8,FALSE,,0,79.36,TRUE,Blind Trust
+Mistral,recipe_cooking,79.39,404,TRUE,TRUE,TRUE,Moderate,25-34,PhD,Low,Beginner,Critical,High,,TRUE,8.7,TRUE,Cross-referenced Multiple AIs,22.8,83.62,TRUE,Moderate Trust
+ChatGPT-3.5,general_knowledge,79.83,372,FALSE,TRUE,TRUE,Specific,65+,Masters,High,Intermediate,Medium,Low,TRUE,FALSE,9,TRUE,Cross-referenced Multiple AIs,44.1,76.65,TRUE,Moderate Trust
+Llama,financial_advice,61.02,62,TRUE,FALSE,TRUE,Vague,18-24,PhD,Expert,Intermediate,Low,High,TRUE,FALSE,9,TRUE,Consulted Documentation,13.7,68.87,FALSE,Moderate Trust
+Claude,opinion_based,57.46,623,FALSE,FALSE,TRUE,Specific,35-44,Bachelors,High,Expert,High,Medium,,TRUE,5.2,TRUE,Personal Testing,7.3,56.22,TRUE,Skeptical
+Llama,financial_advice,63.19,462,TRUE,FALSE,FALSE,Specific,65+,Masters,Medium,Expert,High,None,FALSE,FALSE,6.2,TRUE,Asked Colleague,8.5,53.13,TRUE,Skeptical
+Claude,recipe_cooking,83.79,478,TRUE,TRUE,TRUE,Specific,35-44,PhD,Expert,Intermediate,High,Medium,,FALSE,8.6,FALSE,,0,92.94,TRUE,Blind Trust
+Claude,general_knowledge,70.61,215,TRUE,FALSE,TRUE,Moderate,35-44,PhD,Low,Intermediate,Low,Medium,FALSE,TRUE,7.8,TRUE,Cross-referenced Multiple AIs,37.6,65.82,TRUE,Skeptical
+Llama,opinion_based,59.39,599,TRUE,TRUE,TRUE,Specific,25-34,Masters,Low,Advanced,Medium,None,TRUE,TRUE,8.1,FALSE,,0,56.53,FALSE,Blind Trust
+GPT-4,current_events,67.7,254,FALSE,FALSE,FALSE,Vague,35-44,Bachelors,Low,Advanced,Low,None,TRUE,TRUE,9.5,FALSE,,0,67.69,FALSE,Blind Trust
+Claude,financial_advice,49.49,458,TRUE,FALSE,FALSE,Very Specific,45-54,Masters,High,Intermediate,Low,High,FALSE,FALSE,6.3,TRUE,Google Search,2.1,59.44,TRUE,Skeptical
+Mistral,factual_historical,74.19,756,TRUE,TRUE,TRUE,Moderate,18-24,Masters,Medium,First Time,Low,High,TRUE,FALSE,10,FALSE,,0,74.65,FALSE,Blind Trust
+Gemini,current_events,74.54,664,TRUE,TRUE,TRUE,Vague,55-64,Professional,Expert,Expert,Low,Low,FALSE,FALSE,7.1,TRUE,Academic Paper,20.4,50.2,FALSE,Skeptical
+Mistral,factual_historical,72.97,228,FALSE,FALSE,TRUE,Very Specific,65+,Bachelors,High,Expert,Low,Medium,TRUE,TRUE,8.9,FALSE,,0,84.67,TRUE,Blind Trust
+Llama,factual_historical,94.41,359,FALSE,TRUE,TRUE,Moderate,18-24,Professional,Expert,Expert,Critical,None,TRUE,TRUE,8.9,TRUE,Checked Official Source,27.7,93.62,TRUE,Moderate Trust
+Mistral,creative_writing,64.17,580,TRUE,TRUE,TRUE,Moderate,55-64,High School,High,First Time,High,High,FALSE,FALSE,6.5,FALSE,,0,68.52,TRUE,Moderate Trust
+GPT-4,legal_advice,64.11,617,FALSE,FALSE,FALSE,Moderate,35-44,Masters,Low,Intermediate,High,High,TRUE,TRUE,8.1,TRUE,Personal Testing,27,75.42,TRUE,Moderate Trust
+ChatGPT-3.5,technical_coding,79.69,558,TRUE,FALSE,TRUE,Vague,25-34,Bachelors,High,Expert,Low,None,,FALSE,9.9,TRUE,Cross-referenced Multiple AIs,43.1,82.2,TRUE,Moderate Trust
+Gemini,legal_advice,50.91,218,TRUE,TRUE,TRUE,Very Specific,65+,PhD,Expert,Advanced,High,Low,,TRUE,5.3,TRUE,Asked Colleague,29.7,43.49,TRUE,Skeptical
+Claude,opinion_based,54.67,283,TRUE,FALSE,TRUE,Very Specific,18-24,Bachelors,Medium,First Time,Low,Low,FALSE,FALSE,7.4,FALSE,,0,46.76,FALSE,Moderate Trust
+Gemini,opinion_based,57.6,89,TRUE,TRUE,FALSE,Specific,35-44,High School,Expert,First Time,High,High,FALSE,FALSE,5.1,FALSE,,0,46.63,TRUE,Skeptical
+GPT-4,general_knowledge,81.05,123,TRUE,TRUE,TRUE,Very Specific,25-34,Bachelors,Low,First Time,Low,Low,FALSE,TRUE,9.3,TRUE,Checked Official Source,41,92.23,TRUE,Moderate Trust
+Mistral,current_events,60.3,281,TRUE,FALSE,FALSE,Moderate,35-44,PhD,Medium,Beginner,High,Medium,,TRUE,8.1,TRUE,Consulted Documentation,8.8,56.11,FALSE,Moderate Trust
+ChatGPT-3.5,scientific_facts,74.98,253,TRUE,FALSE,FALSE,Moderate,55-64,Professional,High,Advanced,Critical,Medium,TRUE,FALSE,9.2,TRUE,Checked Official Source,38.5,76.61,TRUE,Moderate Trust
+ChatGPT-3.5,scientific_facts,85.68,435,TRUE,FALSE,TRUE,Very Specific,55-64,Masters,High,First Time,High,Low,TRUE,FALSE,10,TRUE,Google Search,11.5,91.07,TRUE,Moderate Trust
+Llama,legal_advice,64.8,340,TRUE,TRUE,FALSE,Moderate,65+,Professional,High,Advanced,Critical,None,FALSE,TRUE,5.3,TRUE,Checked Official Source,10.3,52.55,TRUE,Skeptical
+GPT-4,math_calculation,86.3,305,FALSE,TRUE,FALSE,Moderate,35-44,PhD,Expert,Beginner,Low,High,TRUE,FALSE,10,FALSE,,0,99.83,TRUE,Blind Trust
+ChatGPT-3.5,factual_historical,85.04,797,FALSE,TRUE,TRUE,Very Specific,18-24,High School,Expert,Beginner,Low,Low,FALSE,TRUE,8.4,FALSE,,0,88.94,TRUE,Blind Trust
+Gemini,medical_advice,65.44,703,TRUE,FALSE,FALSE,Moderate,45-54,Bachelors,Medium,Expert,Low,Low,TRUE,FALSE,9.8,FALSE,,0,56.25,FALSE,Blind Trust
+Mistral,factual_historical,76.45,628,TRUE,TRUE,FALSE,Very Specific,45-54,Masters,Medium,First Time,Low,Medium,,TRUE,10,FALSE,,0,68.21,FALSE,Blind Trust
+Llama,general_knowledge,83.87,310,FALSE,TRUE,FALSE,Specific,55-64,High School,High,Advanced,Critical,None,,TRUE,7.1,TRUE,Google Search,29.4,95.4,FALSE,Skeptical
+GPT-4,technical_coding,79.03,625,FALSE,TRUE,TRUE,Specific,25-34,Masters,High,Advanced,Critical,High,TRUE,FALSE,8,FALSE,,0,74.68,TRUE,Blind Trust
+GPT-4,financial_advice,59.18,596,TRUE,FALSE,FALSE,Moderate,18-24,High School,High,First Time,Low,Low,TRUE,TRUE,9.6,FALSE,,0,44.83,FALSE,Blind Trust
+Claude,factual_historical,76.02,152,FALSE,TRUE,FALSE,Vague,65+,Masters,Low,Expert,Low,High,,FALSE,7.8,TRUE,Cross-referenced Multiple AIs,30.4,76.02,TRUE,Skeptical
+Gemini,technical_coding,76.6,263,FALSE,TRUE,TRUE,Vague,35-44,Bachelors,Medium,Intermediate,Low,Medium,TRUE,FALSE,9.6,TRUE,Cross-referenced Multiple AIs,4.2,79.06,TRUE,Moderate Trust
+Gemini,opinion_based,49.87,728,FALSE,TRUE,FALSE,Moderate,45-54,PhD,Medium,First Time,Medium,None,FALSE,TRUE,4.7,TRUE,Academic Paper,12.7,38.28,TRUE,Highly Skeptical
+Gemini,technical_coding,92.18,670,TRUE,TRUE,FALSE,Very Specific,55-64,Masters,High,Beginner,Critical,None,,TRUE,9.3,FALSE,,0,90.9,TRUE,Blind Trust
+Gemini,opinion_based,58.19,643,TRUE,TRUE,FALSE,Very Specific,45-54,High School,Low,Expert,Critical,Medium,FALSE,TRUE,4.6,TRUE,Personal Testing,32.7,51.73,TRUE,Highly Skeptical
+ChatGPT-3.5,general_knowledge,74.47,83,FALSE,FALSE,TRUE,Vague,25-34,PhD,Medium,Advanced,High,Low,,TRUE,7.3,TRUE,Checked Official Source,3.2,85.22,TRUE,Skeptical
+GPT-4,math_calculation,92.53,417,TRUE,TRUE,TRUE,Vague,18-24,Bachelors,Medium,Beginner,High,Low,,TRUE,10,FALSE,,0,84.11,TRUE,Blind Trust
+GPT-4,opinion_based,48.21,720,FALSE,TRUE,TRUE,Very Specific,25-34,Professional,High,Intermediate,Critical,Low,,FALSE,3.3,TRUE,Cross-referenced Multiple AIs,13.2,49.33,TRUE,Highly Skeptical
+Gemini,medical_advice,74.76,698,TRUE,FALSE,FALSE,Specific,65+,Masters,Medium,Beginner,Critical,High,FALSE,FALSE,8.8,TRUE,Asked Expert,43.6,84.8,TRUE,Moderate Trust
+Mistral,scientific_facts,74.07,728,TRUE,TRUE,FALSE,Vague,18-24,Bachelors,High,Intermediate,Medium,None,FALSE,FALSE,7.3,TRUE,Personal Testing,11.1,65.53,TRUE,Skeptical
+ChatGPT-3.5,creative_writing,78.95,297,TRUE,FALSE,FALSE,Specific,65+,Masters,Low,First Time,Medium,High,TRUE,FALSE,10,FALSE,,0,92.56,TRUE,Blind Trust
+Gemini,financial_advice,57.61,285,TRUE,FALSE,FALSE,Moderate,65+,Bachelors,High,First Time,Medium,None,,FALSE,7.5,FALSE,,0,71.36,TRUE,Moderate Trust
+Gemini,current_events,59.87,600,TRUE,TRUE,FALSE,Specific,65+,Professional,High,Beginner,Medium,Low,TRUE,FALSE,8.8,FALSE,,0,44.38,FALSE,Blind Trust
+GPT-4,creative_writing,76.75,630,TRUE,FALSE,TRUE,Vague,35-44,High School,Medium,Intermediate,Medium,Low,TRUE,TRUE,10,FALSE,,0,85.95,TRUE,Blind Trust
+ChatGPT-3.5,scientific_facts,73.88,340,FALSE,FALSE,TRUE,Vague,45-54,Masters,Expert,Beginner,High,High,TRUE,TRUE,9.1,TRUE,Checked Official Source,35.9,65.22,FALSE,Moderate Trust
+Mistral,recipe_cooking,77.31,672,TRUE,TRUE,FALSE,Moderate,35-44,Bachelors,High,Expert,Low,Low,TRUE,TRUE,10,FALSE,,0,63.18,FALSE,Blind Trust
+Gemini,general_knowledge,76.02,750,FALSE,TRUE,FALSE,Specific,25-34,Bachelors,Low,Advanced,High,None,,FALSE,7.2,TRUE,Academic Paper,12.8,88.41,TRUE,Skeptical
+ChatGPT-3.5,medical_advice,69.74,65,TRUE,FALSE,FALSE,Very Specific,35-44,PhD,High,Intermediate,Low,None,TRUE,TRUE,10,TRUE,Cross-referenced Multiple AIs,8.2,58.93,FALSE,Moderate Trust
+Llama,math_calculation,93.21,95,FALSE,FALSE,FALSE,Specific,55-64,Bachelors,Medium,Expert,Medium,Low,,TRUE,9.6,FALSE,,0,90.67,TRUE,Blind Trust
+Mistral,recipe_cooking,75.27,230,FALSE,FALSE,TRUE,Specific,25-34,Masters,Low,Expert,High,High,,TRUE,7.4,FALSE,,0,71.01,TRUE,Moderate Trust
+Mistral,scientific_facts,70.06,710,TRUE,TRUE,TRUE,Specific,55-64,Masters,Medium,Beginner,Critical,Low,FALSE,TRUE,6.7,TRUE,Asked Colleague,10,60.85,TRUE,Skeptical
+Llama,scientific_facts,71.83,660,FALSE,FALSE,FALSE,Moderate,55-64,Bachelors,Expert,First Time,Low,High,TRUE,TRUE,10,TRUE,Asked Colleague,12.7,66.3,FALSE,Moderate Trust
+GPT-4,math_calculation,88.49,789,FALSE,FALSE,FALSE,Specific,65+,PhD,Medium,Expert,High,High,FALSE,TRUE,7.9,FALSE,,0,73.78,TRUE,Moderate Trust
+Claude,recipe_cooking,80.6,291,FALSE,TRUE,FALSE,Moderate,18-24,Masters,Low,Expert,High,Low,TRUE,TRUE,9.5,FALSE,,0,93.68,TRUE,Blind Trust
+Mistral,technical_coding,94.17,637,TRUE,TRUE,TRUE,Very Specific,55-64,Professional,Low,First Time,Low,Medium,TRUE,TRUE,10,TRUE,Personal Testing,34.8,96.63,TRUE,Moderate Trust
+Llama,math_calculation,94.45,519,TRUE,FALSE,TRUE,Specific,18-24,PhD,Medium,Intermediate,Low,Medium,,FALSE,10,FALSE,,0,100,TRUE,Blind Trust
+ChatGPT-3.5,medical_advice,67.56,424,FALSE,FALSE,FALSE,Vague,55-64,Bachelors,High,Intermediate,Low,Medium,FALSE,FALSE,6.3,FALSE,,0,81.41,TRUE,Moderate Trust
+Llama,general_knowledge,75.72,465,TRUE,FALSE,FALSE,Moderate,35-44,Professional,Low,Advanced,Critical,Low,FALSE,TRUE,7,TRUE,Asked Expert,29.5,73.18,TRUE,Skeptical
+ChatGPT-3.5,financial_advice,43.33,538,TRUE,FALSE,FALSE,Vague,65+,PhD,Expert,Advanced,High,Low,,FALSE,5.1,TRUE,Academic Paper,36.9,30.33,FALSE,Skeptical
+ChatGPT-3.5,recipe_cooking,78.13,700,FALSE,FALSE,FALSE,Vague,35-44,Professional,High,Beginner,Critical,None,TRUE,FALSE,9.5,TRUE,Asked Colleague,4.2,68.69,FALSE,Moderate Trust
+Llama,scientific_facts,88.26,324,FALSE,TRUE,TRUE,Specific,35-44,Bachelors,Expert,Intermediate,High,High,,FALSE,7.9,FALSE,,0,82.94,TRUE,Moderate Trust
+Gemini,technical_coding,90.06,478,FALSE,TRUE,TRUE,Vague,45-54,Masters,Expert,First Time,Low,Low,TRUE,TRUE,10,TRUE,Personal Testing,41.3,92.8,TRUE,Moderate Trust
+ChatGPT-3.5,medical_advice,50.1,427,TRUE,FALSE,FALSE,Very Specific,25-34,High School,Low,Beginner,Critical,None,FALSE,TRUE,5.4,TRUE,Google Search,24.9,57.02,TRUE,Skeptical
+Claude,general_knowledge,65.78,405,FALSE,FALSE,TRUE,Moderate,45-54,High School,Low,Intermediate,Medium,Medium,,TRUE,7.2,FALSE,,0,70.7,TRUE,Moderate Trust
+Mistral,general_knowledge,73.71,172,FALSE,FALSE,FALSE,Specific,65+,Professional,Low,Beginner,Critical,Medium,,TRUE,8.3,TRUE,Cross-referenced Multiple AIs,13.9,64.86,TRUE,Moderate Trust
+Gemini,legal_advice,52.26,107,TRUE,TRUE,FALSE,Moderate,55-64,High School,Expert,First Time,Low,Medium,TRUE,TRUE,8.3,FALSE,,0,41.46,FALSE,Blind Trust
+Llama,factual_historical,74,425,FALSE,FALSE,FALSE,Moderate,45-54,Bachelors,Expert,Advanced,High,High,,TRUE,6.9,FALSE,,0,66.71,TRUE,Moderate Trust
+Gemini,recipe_cooking,89.47,102,TRUE,FALSE,TRUE,Moderate,65+,Masters,Low,Intermediate,Low,High,,TRUE,10,FALSE,,0,74.94,FALSE,Blind Trust
+Llama,creative_writing,66.53,76,FALSE,TRUE,FALSE,Moderate,25-34,Bachelors,High,Advanced,High,Medium,,TRUE,5.9,FALSE,,0,60.82,TRUE,Skeptical
+Gemini,scientific_facts,80.72,550,TRUE,FALSE,FALSE,Moderate,18-24,PhD,Low,Beginner,Medium,Low,TRUE,FALSE,10,TRUE,Checked Official Source,20,88.02,TRUE,Moderate Trust
+Mistral,recipe_cooking,89.5,100,TRUE,FALSE,TRUE,Vague,65+,Bachelors,High,Expert,Critical,None,,TRUE,8.9,FALSE,,0,94.86,TRUE,Blind Trust
+Mistral,financial_advice,41.35,247,FALSE,FALSE,TRUE,Moderate,18-24,Bachelors,High,Beginner,Critical,High,FALSE,FALSE,2.9,TRUE,Google Search,39.5,31.16,TRUE,Highly Skeptical
+Claude,creative_writing,71.6,748,FALSE,TRUE,FALSE,Specific,55-64,High School,Expert,Intermediate,High,None,TRUE,FALSE,7.6,TRUE,Personal Testing,42.4,77.82,TRUE,Skeptical
+Claude,math_calculation,88.21,661,FALSE,TRUE,TRUE,Vague,55-64,PhD,Expert,Advanced,Medium,Low,FALSE,TRUE,7,TRUE,Personal Testing,14.6,76.31,TRUE,Skeptical
+ChatGPT-3.5,scientific_facts,72.09,770,TRUE,TRUE,TRUE,Specific,18-24,High School,Low,Intermediate,Low,High,TRUE,TRUE,9.9,FALSE,,0,70.5,FALSE,Blind Trust
+ChatGPT-3.5,opinion_based,52.4,437,TRUE,FALSE,TRUE,Very Specific,55-64,Professional,Low,First Time,Low,High,FALSE,TRUE,7.4,FALSE,,0,48.39,FALSE,Moderate Trust
+Claude,recipe_cooking,84.1,473,TRUE,FALSE,TRUE,Very Specific,35-44,Bachelors,Medium,Beginner,Critical,Medium,FALSE,FALSE,8.9,TRUE,Academic Paper,37.7,92.89,TRUE,Moderate Trust
+Gemini,factual_historical,75.21,180,FALSE,TRUE,FALSE,Specific,25-34,Professional,Medium,Expert,Medium,Medium,,FALSE,7.5,TRUE,Personal Testing,22,74.07,TRUE,Skeptical
+GPT-4,factual_historical,88.69,101,TRUE,FALSE,TRUE,Very Specific,35-44,Bachelors,Low,Beginner,Medium,High,FALSE,FALSE,10,FALSE,,0,88.9,TRUE,Blind Trust
+Gemini,medical_advice,72.12,345,TRUE,TRUE,TRUE,Moderate,25-34,PhD,High,Intermediate,Critical,None,FALSE,TRUE,6,TRUE,Google Search,43.1,77.57,TRUE,Skeptical
+Gemini,recipe_cooking,85.75,180,TRUE,FALSE,FALSE,Very Specific,18-24,PhD,High,Beginner,High,High,,TRUE,10,TRUE,Asked Colleague,41.8,94.56,TRUE,Moderate Trust
+Claude,legal_advice,62.51,377,FALSE,TRUE,TRUE,Specific,55-64,PhD,Medium,First Time,Low,Low,,FALSE,7.6,TRUE,Asked Colleague,15.6,76.48,TRUE,Skeptical
+GPT-4,creative_writing,67.11,653,TRUE,TRUE,FALSE,Moderate,35-44,High School,Low,Intermediate,High,Low,TRUE,FALSE,8.4,FALSE,,0,82.11,TRUE,Blind Trust
+Llama,math_calculation,94.14,767,TRUE,TRUE,TRUE,Specific,18-24,PhD,High,Beginner,Low,None,TRUE,FALSE,10,TRUE,Academic Paper,38.6,80.93,TRUE,Moderate Trust
+GPT-4,current_events,74.85,664,FALSE,TRUE,TRUE,Moderate,55-64,High School,Low,Advanced,Medium,Medium,TRUE,FALSE,9.1,FALSE,,0,55.61,FALSE,Blind Trust
+ChatGPT-3.5,general_knowledge,70.92,532,TRUE,FALSE,FALSE,Vague,35-44,High School,Expert,First Time,High,None,TRUE,TRUE,9.3,FALSE,,0,84.48,TRUE,Blind Trust
+GPT-4,math_calculation,95.07,540,TRUE,FALSE,TRUE,Specific,65+,Bachelors,Low,First Time,Low,Low,TRUE,FALSE,10,FALSE,,0,94.86,TRUE,Blind Trust
+Gemini,technical_coding,87.83,532,FALSE,TRUE,TRUE,Specific,18-24,PhD,High,Intermediate,High,Low,TRUE,FALSE,9.2,TRUE,Asked Colleague,33.9,98.06,TRUE,Moderate Trust
+ChatGPT-3.5,financial_advice,40.96,56,TRUE,FALSE,TRUE,Vague,18-24,PhD,High,Advanced,High,Medium,TRUE,TRUE,5.4,TRUE,Academic Paper,30.7,27.51,FALSE,Skeptical
+GPT-4,current_events,78.08,530,FALSE,FALSE,FALSE,Vague,45-54,Bachelors,High,Expert,High,Medium,TRUE,FALSE,9.1,TRUE,Academic Paper,21.8,77.35,TRUE,Moderate Trust
+ChatGPT-3.5,opinion_based,43.74,581,TRUE,TRUE,TRUE,Specific,35-44,High School,Low,Expert,Low,None,,FALSE,5.7,TRUE,Personal Testing,20.5,39.21,TRUE,Skeptical
+Mistral,scientific_facts,70.74,363,FALSE,FALSE,TRUE,Specific,55-64,Professional,Expert,Advanced,Critical,Medium,,TRUE,6.1,TRUE,Asked Expert,43.9,62.62,TRUE,Skeptical
+ChatGPT-3.5,medical_advice,62.68,407,FALSE,FALSE,FALSE,Vague,35-44,PhD,Expert,Expert,Critical,High,TRUE,TRUE,6.9,TRUE,Asked Colleague,21.8,59.41,TRUE,Skeptical
+GPT-4,scientific_facts,89.61,780,TRUE,FALSE,FALSE,Moderate,55-64,PhD,Low,Expert,Medium,Low,FALSE,TRUE,9.5,TRUE,Asked Colleague,29.5,80.5,TRUE,Moderate Trust
+Mistral,scientific_facts,78.69,211,TRUE,FALSE,TRUE,Vague,35-44,High School,Medium,Intermediate,Medium,High,TRUE,TRUE,10,FALSE,,0,91.86,TRUE,Blind Trust
+Gemini,legal_advice,55.46,249,FALSE,FALSE,TRUE,Vague,45-54,Professional,High,First Time,High,High,TRUE,FALSE,7.4,TRUE,Checked Official Source,30.3,56.58,TRUE,Skeptical
+Mistral,math_calculation,87.84,753,TRUE,TRUE,TRUE,Specific,18-24,PhD,Medium,Intermediate,Low,Medium,TRUE,FALSE,10,FALSE,,0,73.02,FALSE,Blind Trust
+Claude,medical_advice,71.73,750,TRUE,TRUE,TRUE,Moderate,65+,Professional,Medium,Beginner,Critical,Low,TRUE,TRUE,9.8,TRUE,Google Search,28.8,59.76,FALSE,Moderate Trust
+Llama,opinion_based,49.26,510,TRUE,FALSE,FALSE,Moderate,35-44,Masters,Expert,First Time,Critical,Medium,TRUE,FALSE,7.7,TRUE,Academic Paper,18.4,25.18,FALSE,Skeptical
+GPT-4,opinion_based,40.66,797,FALSE,TRUE,TRUE,Vague,25-34,Masters,Low,Expert,High,Low,FALSE,TRUE,2.7,TRUE,Personal Testing,36.7,21.7,TRUE,Highly Skeptical
+Claude,math_calculation,93.72,498,TRUE,FALSE,TRUE,Vague,55-64,Bachelors,Medium,Advanced,Low,Medium,FALSE,TRUE,10,TRUE,Checked Official Source,14.5,84.93,TRUE,Moderate Trust
+Gemini,current_events,60.62,122,TRUE,FALSE,TRUE,Vague,55-64,Bachelors,High,First Time,High,Low,,TRUE,7.4,FALSE,,0,41.7,FALSE,Moderate Trust
+Mistral,current_events,60.03,773,FALSE,TRUE,FALSE,Very Specific,18-24,PhD,High,Intermediate,Medium,High,,TRUE,5.8,FALSE,,0,53.96,TRUE,Skeptical
+Llama,recipe_cooking,88.13,371,TRUE,TRUE,TRUE,Specific,65+,High School,Low,First Time,Low,Low,TRUE,TRUE,10,FALSE,,0,81.65,TRUE,Blind Trust
+ChatGPT-3.5,general_knowledge,79.46,749,FALSE,FALSE,FALSE,Very Specific,18-24,Bachelors,High,First Time,High,None,FALSE,TRUE,7.2,TRUE,Checked Official Source,13.5,85.81,TRUE,Skeptical
+Llama,current_events,73.11,261,TRUE,TRUE,FALSE,Vague,65+,Bachelors,Medium,Beginner,Low,None,TRUE,TRUE,10,FALSE,,0,57.98,FALSE,Blind Trust
+GPT-4,technical_coding,90.86,708,FALSE,TRUE,FALSE,Moderate,35-44,Professional,High,Beginner,Low,Low,FALSE,FALSE,8.8,TRUE,Personal Testing,29.8,90.28,TRUE,Moderate Trust
+Gemini,creative_writing,72.59,551,TRUE,FALSE,FALSE,Very Specific,25-34,High School,Medium,Intermediate,Medium,Low,TRUE,FALSE,10,FALSE,,0,64.4,FALSE,Blind Trust
+Claude,creative_writing,78.98,769,TRUE,TRUE,TRUE,Vague,25-34,High School,Medium,Intermediate,High,Low,FALSE,FALSE,7.9,TRUE,Checked Official Source,20.1,76.12,TRUE,Skeptical
+Mistral,technical_coding,91.2,209,FALSE,TRUE,TRUE,Very Specific,18-24,High School,Medium,Intermediate,High,Low,FALSE,FALSE,8.4,FALSE,,0,94.93,TRUE,Blind Trust
+ChatGPT-3.5,math_calculation,88.33,66,FALSE,TRUE,TRUE,Moderate,25-34,High School,Medium,Advanced,High,Low,FALSE,TRUE,7.6,FALSE,,0,96.34,FALSE,Moderate Trust
+Claude,creative_writing,65.74,84,FALSE,TRUE,TRUE,Very Specific,25-34,High School,Medium,Expert,Low,Medium,FALSE,FALSE,5.7,TRUE,Academic Paper,44.5,73.33,TRUE,Skeptical
+Claude,recipe_cooking,77.58,108,TRUE,FALSE,FALSE,Specific,35-44,Bachelors,High,Intermediate,High,High,,FALSE,8.2,TRUE,Google Search,13.1,62.7,TRUE,Moderate Trust
+Claude,factual_historical,94.5,549,FALSE,TRUE,FALSE,Specific,35-44,Bachelors,Expert,Beginner,High,High,TRUE,TRUE,10,FALSE,,0,100,TRUE,Blind Trust
+Mistral,financial_advice,40.85,735,TRUE,FALSE,FALSE,Moderate,35-44,Professional,Expert,First Time,Medium,Medium,TRUE,FALSE,8,FALSE,,0,42.37,FALSE,Blind Trust
+GPT-4,medical_advice,74.77,472,TRUE,TRUE,TRUE,Specific,45-54,Masters,Expert,First Time,Critical,High,FALSE,TRUE,6.3,FALSE,,0,76.68,TRUE,Moderate Trust
+Claude,current_events,58.96,366,FALSE,TRUE,TRUE,Vague,55-64,PhD,Expert,Expert,Critical,Low,FALSE,TRUE,3.4,TRUE,Google Search,28.6,34.86,TRUE,Highly Skeptical
+Gemini,factual_historical,92,286,FALSE,FALSE,TRUE,Moderate,25-34,PhD,Low,Advanced,Medium,None,,FALSE,9.6,TRUE,Asked Expert,2.1,86.29,TRUE,Moderate Trust
+ChatGPT-3.5,creative_writing,79.12,306,FALSE,TRUE,TRUE,Very Specific,65+,Masters,Low,Expert,Critical,Medium,,FALSE,6.8,TRUE,Consulted Documentation,32.1,71.99,TRUE,Skeptical
+ChatGPT-3.5,math_calculation,87.83,601,TRUE,TRUE,FALSE,Moderate,35-44,High School,Medium,Intermediate,High,High,FALSE,TRUE,7.3,FALSE,,0,89.17,TRUE,Moderate Trust
+Llama,recipe_cooking,76.97,479,TRUE,TRUE,FALSE,Vague,55-64,Bachelors,Expert,First Time,Medium,Medium,,FALSE,8.6,FALSE,,0,81.5,TRUE,Blind Trust
+ChatGPT-3.5,scientific_facts,89.02,70,TRUE,TRUE,TRUE,Specific,55-64,Masters,High,Intermediate,High,Medium,TRUE,FALSE,10,TRUE,Personal Testing,14.1,80.1,TRUE,Moderate Trust
+Mistral,current_events,62.35,568,TRUE,TRUE,TRUE,Specific,25-34,PhD,Low,First Time,Medium,None,TRUE,TRUE,10,TRUE,Personal Testing,44.6,62.61,FALSE,Moderate Trust
+ChatGPT-3.5,legal_advice,45.88,389,FALSE,FALSE,TRUE,Specific,55-64,High School,High,Expert,Critical,Low,FALSE,TRUE,2.7,TRUE,Personal Testing,7.8,48.15,FALSE,Highly Skeptical
+Mistral,technical_coding,93.94,162,TRUE,TRUE,TRUE,Specific,35-44,Masters,High,Expert,Critical,Medium,,FALSE,9.5,TRUE,Asked Colleague,14.6,100,TRUE,Moderate Trust
+Llama,opinion_based,42.39,365,TRUE,FALSE,TRUE,Very Specific,35-44,Bachelors,Medium,Advanced,Critical,Low,,TRUE,5,TRUE,Checked Official Source,11.3,32.16,TRUE,Skeptical
+GPT-4,financial_advice,48.21,215,TRUE,TRUE,FALSE,Very Specific,35-44,Professional,Expert,Beginner,Medium,High,TRUE,FALSE,7.3,FALSE,,0,57.08,TRUE,Moderate Trust
+Llama,opinion_based,53.59,322,TRUE,FALSE,TRUE,Vague,45-54,Masters,Low,Beginner,High,High,FALSE,TRUE,6.6,FALSE,,0,36.29,FALSE,Moderate Trust
+Gemini,technical_coding,77.34,688,FALSE,TRUE,TRUE,Vague,45-54,Professional,Medium,Expert,High,Low,TRUE,FALSE,8.3,TRUE,Asked Colleague,14,85.9,TRUE,Moderate Trust
+ChatGPT-3.5,creative_writing,64.7,638,TRUE,FALSE,TRUE,Specific,55-64,Masters,Expert,Expert,Low,Low,TRUE,TRUE,8.6,TRUE,Asked Expert,2.5,77.89,TRUE,Moderate Trust
+Llama,technical_coding,89.59,427,TRUE,TRUE,FALSE,Vague,55-64,Professional,Medium,Advanced,Low,None,,TRUE,10,FALSE,,0,89.37,TRUE,Blind Trust
+Llama,recipe_cooking,88.7,797,TRUE,TRUE,TRUE,Very Specific,65+,Masters,Medium,Advanced,Low,None,,TRUE,10,TRUE,Asked Expert,38.8,89.05,TRUE,Moderate Trust
+Claude,recipe_cooking,87.01,307,FALSE,TRUE,FALSE,Very Specific,45-54,High School,Low,Advanced,Critical,None,FALSE,TRUE,6.4,TRUE,Academic Paper,30.3,72.08,TRUE,Skeptical
+Mistral,creative_writing,66.35,322,TRUE,TRUE,TRUE,Very Specific,25-34,Professional,Medium,Expert,Low,High,,TRUE,8.2,FALSE,,0,60.35,FALSE,Blind Trust
+Gemini,general_knowledge,77.52,357,FALSE,FALSE,TRUE,Vague,65+,PhD,High,First Time,Low,Low,FALSE,TRUE,8,FALSE,,0,79.26,TRUE,Blind Trust
+Claude,technical_coding,94.76,595,FALSE,FALSE,TRUE,Very Specific,25-34,Masters,Low,Expert,Low,Medium,TRUE,FALSE,10,FALSE,,0,93.69,TRUE,Blind Trust
+ChatGPT-3.5,factual_historical,80.42,422,TRUE,FALSE,FALSE,Very Specific,25-34,Professional,Expert,Intermediate,High,High,FALSE,TRUE,7.1,TRUE,Asked Colleague,43.5,73.44,TRUE,Skeptical
+Claude,legal_advice,69.66,233,TRUE,FALSE,TRUE,Moderate,25-34,High School,Low,Intermediate,Critical,High,,FALSE,7.6,TRUE,Personal Testing,32.8,83.54,TRUE,Skeptical
+Llama,opinion_based,49.78,453,FALSE,FALSE,FALSE,Specific,18-24,Professional,Low,Beginner,Low,Low,TRUE,TRUE,8.8,TRUE,Asked Colleague,21.6,29.97,FALSE,Moderate Trust
+Gemini,general_knowledge,83.74,186,TRUE,TRUE,TRUE,Very Specific,65+,Masters,Expert,Advanced,Low,Low,TRUE,FALSE,10,FALSE,,0,82.74,TRUE,Blind Trust
+Mistral,scientific_facts,87.25,441,TRUE,TRUE,FALSE,Very Specific,45-54,Professional,Expert,Expert,Low,Low,FALSE,TRUE,8.5,TRUE,Asked Colleague,3.3,80.27,TRUE,Moderate Trust
+Gemini,general_knowledge,83.45,124,FALSE,TRUE,FALSE,Moderate,55-64,PhD,High,First Time,Medium,High,,TRUE,8.8,FALSE,,0,96.22,TRUE,Blind Trust
+GPT-4,recipe_cooking,75.46,740,FALSE,FALSE,TRUE,Very Specific,18-24,Masters,Expert,Advanced,Medium,Medium,,TRUE,7.5,TRUE,Consulted Documentation,20.8,75.04,TRUE,Skeptical
+Llama,medical_advice,64.79,155,FALSE,TRUE,TRUE,Specific,35-44,Professional,Medium,Advanced,Critical,Low,,FALSE,5.6,TRUE,Personal Testing,8.3,50.55,TRUE,Skeptical
+GPT-4,scientific_facts,78.76,317,FALSE,FALSE,FALSE,Specific,65+,Bachelors,Expert,Intermediate,High,Low,,TRUE,7.4,TRUE,Personal Testing,19.2,67.91,TRUE,Skeptical
+ChatGPT-3.5,math_calculation,86.3,108,FALSE,TRUE,TRUE,Moderate,45-54,Professional,Expert,Intermediate,Low,Low,,FALSE,8.7,FALSE,,0,82.08,TRUE,Blind Trust
+GPT-4,recipe_cooking,78.74,749,FALSE,FALSE,FALSE,Very Specific,55-64,Bachelors,Medium,First Time,Critical,High,FALSE,FALSE,7.1,TRUE,Checked Official Source,26.8,81.27,TRUE,Skeptical
+Mistral,technical_coding,80.85,474,TRUE,FALSE,FALSE,Vague,65+,Bachelors,High,Advanced,Low,Low,FALSE,TRUE,8.7,TRUE,Checked Official Source,38,94.29,TRUE,Moderate Trust
+Gemini,recipe_cooking,78.42,791,TRUE,TRUE,TRUE,Very Specific,55-64,PhD,Expert,Beginner,Low,None,FALSE,TRUE,9.1,TRUE,Google Search,11.5,68.02,FALSE,Moderate Trust
+Llama,general_knowledge,82.62,92,FALSE,TRUE,FALSE,Moderate,55-64,Professional,Expert,Beginner,High,Low,,TRUE,8.1,TRUE,Checked Official Source,7.5,93.63,TRUE,Moderate Trust
+Gemini,financial_advice,44.99,660,TRUE,TRUE,FALSE,Very Specific,65+,PhD,High,First Time,Critical,Medium,FALSE,FALSE,4.4,TRUE,Checked Official Source,9.2,34.99,TRUE,Highly Skeptical
+Mistral,factual_historical,88.79,234,FALSE,FALSE,FALSE,Moderate,25-34,High School,Expert,Expert,Medium,Medium,,FALSE,8.9,FALSE,,0,79.5,TRUE,Blind Trust
+Gemini,factual_historical,92.76,204,FALSE,FALSE,TRUE,Vague,45-54,PhD,High,Expert,High,High,TRUE,TRUE,10,FALSE,,0,100,TRUE,Blind Trust
+Llama,medical_advice,63.01,298,TRUE,TRUE,TRUE,Specific,45-54,Masters,Low,Intermediate,Critical,Low,FALSE,FALSE,5.8,TRUE,Checked Official Source,5,72,TRUE,Skeptical
+Mistral,financial_advice,51.8,261,TRUE,FALSE,TRUE,Vague,55-64,Bachelors,Medium,Intermediate,Medium,High,FALSE,FALSE,6.4,TRUE,Asked Expert,35.8,57.82,TRUE,Skeptical
+Claude,factual_historical,93.17,682,TRUE,FALSE,FALSE,Moderate,35-44,Masters,Expert,Intermediate,Critical,Medium,TRUE,TRUE,10,TRUE,Asked Colleague,40.9,85.61,TRUE,Moderate Trust
+Gemini,general_knowledge,74.26,91,TRUE,FALSE,FALSE,Moderate,45-54,Professional,Medium,First Time,Low,High,,FALSE,10,FALSE,,0,69.98,FALSE,Blind Trust
+Llama,legal_advice,67.67,720,TRUE,FALSE,TRUE,Very Specific,55-64,PhD,High,Intermediate,Critical,High,TRUE,TRUE,8,TRUE,Personal Testing,11.5,57.18,FALSE,Moderate Trust
+ChatGPT-3.5,financial_advice,51.26,53,FALSE,FALSE,FALSE,Moderate,45-54,Professional,Low,First Time,High,Low,TRUE,TRUE,7.9,TRUE,Personal Testing,33.1,42.22,FALSE,Skeptical
+Gemini,scientific_facts,79.38,563,FALSE,FALSE,TRUE,Vague,65+,Professional,Medium,Intermediate,Medium,None,,TRUE,8.4,TRUE,Asked Expert,40.4,66.59,TRUE,Moderate Trust
+GPT-4,technical_coding,79.2,626,TRUE,FALSE,FALSE,Moderate,35-44,Bachelors,Expert,Intermediate,Low,High,TRUE,TRUE,10,FALSE,,0,91.28,TRUE,Blind Trust
+ChatGPT-3.5,opinion_based,42.99,360,TRUE,TRUE,FALSE,Moderate,18-24,Professional,Expert,Expert,Low,None,TRUE,TRUE,7,TRUE,Academic Paper,21.3,46.79,FALSE,Skeptical
+Gemini,opinion_based,42.16,264,FALSE,TRUE,FALSE,Moderate,25-34,PhD,Medium,First Time,High,None,,FALSE,5.2,TRUE,Google Search,16.1,28.78,FALSE,Skeptical
+Gemini,math_calculation,95.97,613,FALSE,FALSE,TRUE,Vague,18-24,Bachelors,Expert,Advanced,Low,None,TRUE,TRUE,10,TRUE,Academic Paper,11.9,95.69,TRUE,Moderate Trust
+Mistral,creative_writing,64.4,347,TRUE,TRUE,TRUE,Very Specific,35-44,High School,Expert,Advanced,Medium,High,,TRUE,7.4,FALSE,,0,57.29,TRUE,Moderate Trust
+Gemini,current_events,79.98,342,TRUE,TRUE,TRUE,Specific,65+,Bachelors,Expert,First Time,Low,Low,,TRUE,10,FALSE,,0,59.5,FALSE,Blind Trust
+Mistral,factual_historical,81.59,337,FALSE,FALSE,TRUE,Vague,25-34,High School,Medium,First Time,Low,Medium,FALSE,TRUE,8.6,FALSE,,0,78.37,TRUE,Blind Trust
+Mistral,factual_historical,90.34,301,FALSE,TRUE,FALSE,Specific,35-44,High School,Low,First Time,Critical,Low,TRUE,TRUE,10,FALSE,,0,98.94,TRUE,Blind Trust
+Llama,factual_historical,80.63,639,TRUE,TRUE,FALSE,Specific,18-24,Bachelors,Low,Intermediate,Critical,Low,,FALSE,8.3,TRUE,Cross-referenced Multiple AIs,14.6,81.36,TRUE,Moderate Trust
+GPT-4,financial_advice,43.78,231,TRUE,FALSE,FALSE,Very Specific,65+,Professional,High,Expert,Critical,Low,TRUE,TRUE,6.3,TRUE,Asked Colleague,40.3,46.21,TRUE,Skeptical
+Gemini,medical_advice,68.39,749,FALSE,TRUE,TRUE,Moderate,25-34,High School,Low,Advanced,Medium,Low,TRUE,TRUE,8.5,FALSE,,0,79.58,TRUE,Blind Trust
+Llama,recipe_cooking,79.84,539,FALSE,TRUE,FALSE,Vague,35-44,PhD,Medium,Beginner,High,Low,,FALSE,8.6,FALSE,,0,72.56,TRUE,Blind Trust
+Mistral,scientific_facts,77.35,119,FALSE,TRUE,TRUE,Moderate,35-44,PhD,Low,First Time,Medium,Low,FALSE,FALSE,8,TRUE,Academic Paper,32.1,62.63,TRUE,Moderate Trust
+Gemini,recipe_cooking,83.24,380,FALSE,TRUE,FALSE,Moderate,45-54,PhD,Expert,Beginner,Critical,Low,FALSE,FALSE,5.7,TRUE,Consulted Documentation,22.4,79.5,FALSE,Skeptical
+Mistral,financial_advice,47.15,128,TRUE,FALSE,FALSE,Specific,35-44,Professional,Medium,Advanced,High,High,,TRUE,5.7,TRUE,Asked Expert,18.2,56.05,TRUE,Skeptical
+ChatGPT-3.5,opinion_based,57.76,435,FALSE,FALSE,TRUE,Very Specific,55-64,High School,Expert,Intermediate,Medium,High,TRUE,TRUE,7.5,FALSE,,0,56.14,TRUE,Moderate Trust
+Gemini,medical_advice,74.84,301,FALSE,TRUE,TRUE,Moderate,55-64,High School,Low,Intermediate,High,Medium,FALSE,TRUE,5.6,TRUE,Asked Expert,17.7,71.53,TRUE,Skeptical
+ChatGPT-3.5,factual_historical,88.1,135,TRUE,TRUE,FALSE,Specific,25-34,Bachelors,Expert,First Time,High,None,TRUE,TRUE,10,FALSE,,0,97.81,TRUE,Blind Trust
+Gemini,math_calculation,92.99,394,FALSE,FALSE,FALSE,Vague,45-54,Masters,Expert,Intermediate,Medium,None,FALSE,TRUE,8.7,TRUE,Cross-referenced Multiple AIs,13.8,95.21,TRUE,Moderate Trust
+GPT-4,medical_advice,68.32,641,TRUE,TRUE,FALSE,Moderate,18-24,Masters,High,Expert,High,High,,TRUE,6.8,TRUE,Cross-referenced Multiple AIs,22.9,71.34,TRUE,Skeptical
+Claude,technical_coding,82.97,235,TRUE,FALSE,TRUE,Vague,25-34,Bachelors,Expert,Beginner,Low,Medium,FALSE,TRUE,9.7,TRUE,Google Search,16.6,77.31,TRUE,Moderate Trust
+Mistral,opinion_based,54.6,763,TRUE,TRUE,FALSE,Vague,35-44,Bachelors,Low,Expert,Medium,Medium,FALSE,FALSE,6.1,FALSE,,0,42.94,TRUE,Moderate Trust
+Claude,financial_advice,60.6,728,FALSE,FALSE,TRUE,Moderate,18-24,High School,Medium,Beginner,Medium,None,,TRUE,7.8,FALSE,,0,53.07,FALSE,Moderate Trust
+ChatGPT-3.5,math_calculation,94.7,154,FALSE,TRUE,FALSE,Moderate,25-34,PhD,Medium,Advanced,High,High,,FALSE,9.2,TRUE,Asked Expert,3.4,99.72,TRUE,Moderate Trust
+Claude,general_knowledge,70.55,719,TRUE,TRUE,TRUE,Very Specific,25-34,Masters,Medium,Beginner,Critical,Medium,TRUE,FALSE,10,FALSE,,0,73.17,FALSE,Blind Trust
+Gemini,current_events,75.35,451,TRUE,TRUE,TRUE,Moderate,45-54,High School,High,Advanced,High,None,FALSE,FALSE,6.3,TRUE,Academic Paper,20.6,64.33,TRUE,Skeptical
+Llama,general_knowledge,71.71,683,FALSE,TRUE,TRUE,Specific,25-34,Professional,Expert,Expert,Medium,Low,,FALSE,6.8,FALSE,,0,81.83,TRUE,Moderate Trust
+ChatGPT-3.5,scientific_facts,70.86,581,FALSE,TRUE,FALSE,Very Specific,55-64,PhD,Low,Advanced,Low,Medium,FALSE,TRUE,6.4,TRUE,Checked Official Source,11.2,72.54,TRUE,Skeptical
+Llama,math_calculation,90.19,624,FALSE,TRUE,TRUE,Very Specific,45-54,Professional,Low,Expert,Medium,Low,,FALSE,9,TRUE,Asked Expert,20.3,96.9,TRUE,Moderate Trust
+ChatGPT-3.5,recipe_cooking,77.43,734,TRUE,TRUE,TRUE,Vague,45-54,Masters,High,Intermediate,High,None,,TRUE,7.8,TRUE,Consulted Documentation,2.5,91.09,TRUE,Skeptical
+GPT-4,recipe_cooking,85.73,278,TRUE,TRUE,TRUE,Vague,45-54,PhD,High,Beginner,Critical,None,FALSE,FALSE,7.1,TRUE,Consulted Documentation,33.3,86.39,TRUE,Skeptical
+Gemini,recipe_cooking,89.89,292,TRUE,TRUE,TRUE,Moderate,18-24,Professional,Medium,Beginner,Critical,Low,FALSE,TRUE,8.3,TRUE,Asked Colleague,6.1,87.71,TRUE,Moderate Trust
+Claude,scientific_facts,82.32,268,FALSE,FALSE,TRUE,Specific,55-64,Bachelors,Expert,Intermediate,High,Low,,FALSE,7.7,TRUE,Academic Paper,44.5,90.16,TRUE,Skeptical
+Mistral,technical_coding,94.61,310,FALSE,FALSE,FALSE,Vague,55-64,Professional,Expert,Beginner,High,Low,TRUE,TRUE,10,TRUE,Personal Testing,4.9,80.12,TRUE,Moderate Trust
+Llama,creative_writing,61.32,142,FALSE,TRUE,FALSE,Specific,55-64,High School,Expert,Expert,Low,Low,TRUE,FALSE,7.6,TRUE,Academic Paper,14,73.94,TRUE,Skeptical
+Gemini,technical_coding,89.36,341,TRUE,FALSE,FALSE,Specific,65+,High School,Expert,Beginner,Medium,Low,FALSE,FALSE,9.6,FALSE,,0,100,TRUE,Blind Trust
+Llama,opinion_based,55.87,728,FALSE,TRUE,FALSE,Very Specific,25-34,High School,High,First Time,Low,High,FALSE,TRUE,5.5,FALSE,,0,49.36,TRUE,Skeptical
+ChatGPT-3.5,math_calculation,90.42,642,FALSE,TRUE,FALSE,Very Specific,35-44,PhD,Low,Advanced,Low,Medium,,FALSE,9.8,TRUE,Asked Expert,21.5,82.06,TRUE,Moderate Trust
+Gemini,recipe_cooking,86.18,468,FALSE,FALSE,TRUE,Specific,55-64,High School,Low,Advanced,Critical,Low,,FALSE,8.5,TRUE,Academic Paper,31.9,97.51,TRUE,Moderate Trust
+Llama,opinion_based,44.19,192,FALSE,FALSE,TRUE,Moderate,45-54,Masters,Low,Intermediate,Medium,Medium,TRUE,FALSE,6,TRUE,Consulted Documentation,36,25.54,FALSE,Skeptical
+Gemini,scientific_facts,83.61,197,FALSE,FALSE,FALSE,Very Specific,25-34,Bachelors,Low,Intermediate,High,None,FALSE,TRUE,8,TRUE,Asked Colleague,41.8,69.38,TRUE,Moderate Trust
+Claude,current_events,58.28,378,TRUE,TRUE,FALSE,Very Specific,35-44,Professional,Low,First Time,Critical,None,FALSE,FALSE,6.3,TRUE,Asked Expert,43.8,53.43,TRUE,Skeptical
+Mistral,math_calculation,98.54,783,TRUE,FALSE,FALSE,Very Specific,65+,High School,Low,Beginner,Medium,High,,TRUE,10,FALSE,,0,88.36,TRUE,Blind Trust
+Llama,scientific_facts,73.22,497,TRUE,TRUE,TRUE,Specific,25-34,High School,Low,Advanced,High,High,,FALSE,8.1,FALSE,,0,70.57,TRUE,Blind Trust
+Llama,current_events,63.42,681,TRUE,TRUE,TRUE,Moderate,45-54,Professional,Low,Intermediate,Critical,Low,,TRUE,6.3,TRUE,Cross-referenced Multiple AIs,9.8,57.42,TRUE,Skeptical
+Claude,factual_historical,74.16,137,FALSE,TRUE,FALSE,Very Specific,18-24,PhD,Medium,Beginner,Critical,Medium,,FALSE,7.8,TRUE,Personal Testing,38.7,62.91,TRUE,Skeptical
+ChatGPT-3.5,medical_advice,52.75,255,TRUE,FALSE,FALSE,Moderate,35-44,High School,High,Expert,High,Low,FALSE,FALSE,4.6,TRUE,Checked Official Source,41.8,58.78,TRUE,Highly Skeptical
+GPT-4,medical_advice,69.21,281,TRUE,TRUE,FALSE,Moderate,35-44,High School,Expert,Beginner,High,High,TRUE,FALSE,8.7,FALSE,,0,54.56,FALSE,Blind Trust
+Mistral,financial_advice,41.63,584,FALSE,TRUE,TRUE,Specific,25-34,High School,Low,Advanced,Medium,High,,FALSE,4,FALSE,,0,42.69,TRUE,Skeptical
+GPT-4,scientific_facts,81.53,504,FALSE,FALSE,FALSE,Vague,65+,Bachelors,Low,Intermediate,Critical,Medium,FALSE,FALSE,6.6,TRUE,Asked Colleague,21.4,94.86,FALSE,Skeptical
+Mistral,technical_coding,90.4,685,TRUE,FALSE,TRUE,Specific,18-24,High School,Medium,Beginner,Medium,Medium,FALSE,FALSE,10,FALSE,,0,94.36,TRUE,Blind Trust
+Mistral,general_knowledge,69.41,190,FALSE,FALSE,TRUE,Moderate,25-34,PhD,Low,Beginner,High,High,TRUE,FALSE,9.1,TRUE,Academic Paper,4.6,75.85,TRUE,Moderate Trust
+Llama,recipe_cooking,81.43,413,TRUE,FALSE,TRUE,Moderate,55-64,Masters,Medium,Advanced,High,Low,FALSE,TRUE,7.8,TRUE,Personal Testing,8.6,88.34,TRUE,Skeptical
+GPT-4,current_events,59.65,739,FALSE,FALSE,FALSE,Very Specific,35-44,Professional,Medium,Beginner,Low,None,,FALSE,8.1,TRUE,Asked Colleague,7.8,42.37,FALSE,Moderate Trust
+Claude,factual_historical,85.95,490,TRUE,FALSE,FALSE,Moderate,25-34,Masters,Medium,Intermediate,Critical,Low,FALSE,TRUE,8.1,TRUE,Academic Paper,15.4,84.26,TRUE,Moderate Trust
+GPT-4,general_knowledge,74.71,554,TRUE,TRUE,TRUE,Specific,45-54,High School,Low,Expert,Medium,Medium,,TRUE,9.1,FALSE,,0,77.03,TRUE,Blind Trust
+Gemini,scientific_facts,75.99,77,FALSE,TRUE,FALSE,Vague,65+,Bachelors,High,Beginner,Critical,Low,TRUE,FALSE,8.7,FALSE,,0,79.18,TRUE,Blind Trust
+Claude,general_knowledge,83.64,263,TRUE,TRUE,FALSE,Very Specific,25-34,PhD,Low,Expert,High,Low,FALSE,TRUE,7.2,TRUE,Checked Official Source,2.1,80.25,TRUE,Skeptical
+GPT-4,opinion_based,57.05,123,FALSE,TRUE,TRUE,Very Specific,18-24,Professional,Expert,First Time,Medium,High,FALSE,TRUE,4.8,TRUE,Google Search,44.4,36.28,TRUE,Highly Skeptical
+Gemini,recipe_cooking,84.59,336,FALSE,FALSE,FALSE,Vague,25-34,Bachelors,Expert,First Time,Medium,Medium,,FALSE,9.5,TRUE,Asked Expert,40.7,75.82,TRUE,Moderate Trust
+Mistral,recipe_cooking,81.15,738,TRUE,FALSE,TRUE,Vague,35-44,Bachelors,High,First Time,Low,High,,TRUE,10,FALSE,,0,95.23,TRUE,Blind Trust
+ChatGPT-3.5,scientific_facts,82.92,764,FALSE,TRUE,TRUE,Very Specific,65+,Masters,Low,Advanced,Medium,Medium,FALSE,FALSE,7.9,FALSE,,0,84.96,TRUE,Moderate Trust
+GPT-4,factual_historical,86.93,559,TRUE,TRUE,FALSE,Vague,35-44,Professional,Low,Advanced,Medium,Low,FALSE,FALSE,8.8,FALSE,,0,95.92,TRUE,Blind Trust
+Mistral,math_calculation,89.22,795,TRUE,TRUE,TRUE,Moderate,65+,Masters,High,First Time,High,None,,FALSE,9.9,FALSE,,0,100,TRUE,Blind Trust
+Gemini,financial_advice,44.28,529,TRUE,FALSE,FALSE,Very Specific,55-64,PhD,High,Expert,Low,Low,FALSE,TRUE,4.9,TRUE,Google Search,13.9,33.8,TRUE,Highly Skeptical
+Gemini,financial_advice,58.49,355,TRUE,TRUE,TRUE,Specific,25-34,Bachelors,Low,First Time,Critical,Low,FALSE,FALSE,6.8,TRUE,Google Search,33,66.97,TRUE,Skeptical
+Gemini,creative_writing,65.2,609,FALSE,FALSE,FALSE,Specific,55-64,PhD,Expert,Advanced,Medium,Medium,,FALSE,6.5,FALSE,,0,70.18,TRUE,Moderate Trust
+ChatGPT-3.5,math_calculation,85.55,163,TRUE,TRUE,TRUE,Vague,55-64,Masters,Expert,Expert,Medium,High,,FALSE,8.4,TRUE,Google Search,44.8,84.62,TRUE,Moderate Trust
+ChatGPT-3.5,scientific_facts,86,80,TRUE,FALSE,TRUE,Moderate,18-24,Bachelors,Medium,First Time,High,None,FALSE,TRUE,9.8,FALSE,,0,79.96,TRUE,Blind Trust
+Llama,creative_writing,78.18,114,FALSE,TRUE,TRUE,Vague,55-64,Bachelors,Expert,Intermediate,Medium,Medium,,TRUE,7.5,FALSE,,0,82.65,TRUE,Moderate Trust
+Llama,opinion_based,54.8,241,FALSE,TRUE,FALSE,Vague,25-34,PhD,Expert,Expert,High,Low,,TRUE,4.3,TRUE,Google Search,7.3,48.15,TRUE,Highly Skeptical
+Claude,math_calculation,86.88,217,TRUE,FALSE,FALSE,Vague,35-44,Bachelors,Medium,Beginner,Critical,Medium,FALSE,FALSE,8.9,TRUE,Asked Colleague,3.9,75.18,TRUE,Moderate Trust
+Claude,opinion_based,52.43,396,TRUE,TRUE,TRUE,Moderate,35-44,Masters,Expert,Advanced,Medium,Low,TRUE,FALSE,7.2,TRUE,Google Search,35.9,47.14,FALSE,Skeptical
+Claude,technical_coding,94.22,163,TRUE,FALSE,FALSE,Vague,65+,PhD,High,Beginner,Medium,Medium,,FALSE,10,FALSE,,0,95.96,TRUE,Blind Trust
+Mistral,medical_advice,70.93,577,FALSE,FALSE,TRUE,Vague,25-34,High School,High,Beginner,Medium,None,FALSE,TRUE,6.9,FALSE,,0,75.6,TRUE,Moderate Trust
+GPT-4,general_knowledge,82.44,347,TRUE,FALSE,FALSE,Specific,55-64,Professional,High,Expert,Critical,Low,TRUE,FALSE,10,TRUE,Cross-referenced Multiple AIs,11.4,95.46,TRUE,Moderate Trust
+ChatGPT-3.5,opinion_based,53.88,696,FALSE,FALSE,TRUE,Specific,65+,Masters,Medium,Advanced,High,High,TRUE,TRUE,6.5,TRUE,Asked Colleague,23.4,31.73,FALSE,Skeptical
+Mistral,medical_advice,55.75,240,TRUE,FALSE,TRUE,Vague,65+,High School,Low,Advanced,Medium,Medium,,FALSE,7.1,FALSE,,0,42.98,FALSE,Moderate Trust
+Llama,factual_historical,70.47,441,TRUE,TRUE,TRUE,Moderate,25-34,Professional,High,Expert,Low,Medium,FALSE,TRUE,6.8,FALSE,,0,83.14,TRUE,Moderate Trust
+Gemini,medical_advice,62.75,503,FALSE,TRUE,TRUE,Vague,55-64,High School,Medium,Advanced,Low,Medium,,TRUE,7.1,FALSE,,0,66.3,TRUE,Moderate Trust
+Mistral,scientific_facts,72.67,738,TRUE,FALSE,TRUE,Specific,65+,Bachelors,Expert,Advanced,Critical,Low,FALSE,TRUE,6.8,TRUE,Cross-referenced Multiple AIs,32.1,74.55,TRUE,Skeptical
+GPT-4,financial_advice,59.17,604,TRUE,FALSE,FALSE,Specific,65+,Bachelors,Low,Beginner,Medium,High,FALSE,FALSE,8,FALSE,,0,63.38,TRUE,Blind Trust
+ChatGPT-3.5,math_calculation,91.96,148,TRUE,FALSE,FALSE,Very Specific,18-24,Professional,Medium,Beginner,Low,None,,FALSE,10,FALSE,,0,90.13,TRUE,Blind Trust
+Claude,opinion_based,46.8,192,FALSE,TRUE,FALSE,Moderate,65+,PhD,Expert,Intermediate,Medium,None,FALSE,FALSE,3.6,TRUE,Cross-referenced Multiple AIs,15.1,30.87,TRUE,Highly Skeptical
+Gemini,recipe_cooking,89.44,66,TRUE,TRUE,TRUE,Moderate,25-34,Bachelors,Expert,Expert,High,Medium,TRUE,TRUE,10,TRUE,Checked Official Source,20.4,83.57,TRUE,Moderate Trust
+Gemini,technical_coding,79.84,381,TRUE,TRUE,TRUE,Specific,65+,PhD,High,Intermediate,High,Medium,,TRUE,8.3,FALSE,,0,70.69,TRUE,Blind Trust
+ChatGPT-3.5,opinion_based,55.92,602,FALSE,FALSE,FALSE,Moderate,35-44,High School,High,Intermediate,Medium,Medium,FALSE,FALSE,4.4,FALSE,,0,31.19,TRUE,Skeptical
+Claude,legal_advice,57.18,603,FALSE,TRUE,TRUE,Specific,35-44,Masters,Medium,Beginner,Low,Low,,TRUE,7.5,FALSE,,0,60.06,TRUE,Moderate Trust
+Llama,factual_historical,84.67,664,TRUE,TRUE,TRUE,Moderate,45-54,High School,Expert,Beginner,High,Medium,TRUE,FALSE,10,FALSE,,0,84.87,TRUE,Blind Trust
+Gemini,factual_historical,85.75,728,FALSE,FALSE,FALSE,Vague,35-44,Masters,Low,Intermediate,Medium,Medium,TRUE,FALSE,10,TRUE,Academic Paper,44,97.23,TRUE,Moderate Trust
+Gemini,medical_advice,50.03,309,FALSE,FALSE,TRUE,Very Specific,35-44,PhD,High,Expert,Critical,High,TRUE,TRUE,5.6,TRUE,Asked Expert,35.2,57.39,TRUE,Skeptical
+ChatGPT-3.5,technical_coding,87.78,443,FALSE,TRUE,FALSE,Vague,18-24,PhD,Medium,Expert,Low,None,FALSE,TRUE,7.6,TRUE,Academic Paper,42.5,100,FALSE,Skeptical
+Llama,medical_advice,65.77,559,FALSE,FALSE,FALSE,Specific,35-44,Bachelors,Expert,Advanced,Medium,Low,FALSE,TRUE,5.9,TRUE,Cross-referenced Multiple AIs,3.9,78.56,TRUE,Skeptical
+Llama,medical_advice,57.21,641,TRUE,TRUE,TRUE,Vague,18-24,Professional,Medium,Expert,Critical,High,,TRUE,5.2,TRUE,Personal Testing,34.6,59.12,TRUE,Skeptical
+ChatGPT-3.5,creative_writing,73.56,556,TRUE,FALSE,FALSE,Specific,65+,Bachelors,Low,Intermediate,Low,Medium,,FALSE,9.5,TRUE,Asked Colleague,26.5,87.03,TRUE,Moderate Trust
+Gemini,financial_advice,48.51,71,TRUE,TRUE,FALSE,Specific,55-64,High School,High,First Time,High,High,TRUE,TRUE,7.9,TRUE,Google Search,8.2,40.53,FALSE,Skeptical
+Gemini,math_calculation,94.38,427,TRUE,TRUE,FALSE,Moderate,55-64,PhD,Expert,Beginner,Low,High,TRUE,FALSE,10,TRUE,Cross-referenced Multiple AIs,22.9,83.39,TRUE,Moderate Trust
