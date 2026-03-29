@@ -25,6 +25,9 @@ ia-dataapp/data/worker*/fl_config.json
 ia-dataapp/data/worker*/output/
 ia-dataapp/data/raw/phising_url_detection_dataset.csv
 ia-dataapp/data/worker1/input/phising_url_detection_worker_1.csv
+ia-dataapp/data/worker2/input/phising_url_detection_worker_2.csv
+ia-dataapp/data/worker3/input/phising_url_detection_worker_3.csv
+ia-dataapp/data/worker4/input/phising_url_detection_worker_4.csv
 
 # ── Bases de Datos locales y Caches (Broker / Omejdn / Linter) ───────────────
 *.db
