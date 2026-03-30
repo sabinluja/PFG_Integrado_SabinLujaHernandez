@@ -524,10 +524,6 @@ services:
   # ===========================================================================
   # LLM — Ollama Local
   # Recomendación inteligente de Datasets
-  # 
-  # IMPORTANTE: El modelo de IA (llama3.2 de ~2GB) se guarda en el volumen 'ollama_data'. 
-  # Para evitar contenedores extra, hemos sobreescrito el comando de arranque
-  # para que encienda la API y descargue automáticamente el modelo si no existe.
   # ===========================================================================
   ollama:
     image: ollama/ollama:latest

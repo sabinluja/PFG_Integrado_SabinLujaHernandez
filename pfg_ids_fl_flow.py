@@ -21,7 +21,7 @@ pfg_ids_fl_flow.py  —  Demostración completa IDS + Federated Learning
              Para cada peer registrado en el Broker, el coordinator
              llama a GET /dataset/all-columns y escanea TODOS sus CSVs.
              Por cada CSV calcula ratio = columnas_comunes / columnas_propias.
-             Selecciona el CSV de mayor ratio; si ratio ≥ 95% → COMPATIBLE.
+             Selecciona el CSV de mayor ratio; si ratio ≥ 80% → COMPATIBLE.
              El CSV ganador queda asignado a ese worker para el entrenamiento.
 
   FASE 3  Negociación IDS coordinator → cada peer  (TODA la lógica IDS aqui)
@@ -401,52 +401,28 @@ def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
 
 def fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
     """
-    El coordinator (worker-N) obtiene algorithm.py + fl_config.json
-    por si solo via IDS, sin ayuda de workers externos.
-
-    Flujo (ejecutado DENTRO del coordinator, app.py / _fetch_algorithm_from_ecc):
-      Coordinator actua como CONSUMER de su propio ECC:
-        DescriptionRequestMessage  -> propio ECC -> propio /data
-        ContractRequestMessage     -> propio ECC -> propio /data
-        ContractAgreementMessage   -> propio ECC -> propio /data
-        ArtifactRequestMessage     -> propio ECC -> propio /data (modo fuente)
-      /data sirve el algorithm.py baked y guarda en disco.
-      Coordinator activa is_coordinator = True.
+    El coordinator (worker-N) asume su rol nativo e inicializa el modelo localmente.
+    No requiere IDS self-fetch ya que los archivos residen en su propio disco (DataApp).
     """
     coord_ecc   = endpoints["coordinator"]["ecc_url"]
     coord_label = endpoints["coordinator"]["ecc_label"]
 
     phase(
         1,
-        f"Worker-{cid} obtiene el algoritmo via IDS",
-        f"Coordinator ECC  : {coord_label}\n"
-        f"Fuente ECC       : {coord_label}  (propio conector - sin worker externo)\n"
-        "Handshake IDS (coordinator como consumer Y provider de su propio ECC):\n"
-        "  DescriptionRequestMessage  ->  propio /data  ->  DescriptionResponseMessage\n"
-        "  ContractRequestMessage     ->  propio /data  ->  ContractAgreementMessage\n"
-        "  ContractAgreementMessage   ->  propio /data  ->  MessageProcessedNotification\n"
-        "  ArtifactRequestMessage     ->  propio /data  ->  ArtifactResponseMessage [alg+cfg]"
+        f"Worker-{cid} obtiene el algoritmo y el fichero de configuración",
+        "El DataApp tiene la soberanía del algoritmo y configuración localmente\n"
+        "sin necesidad de peticiones IDS contra su propio conector."
     )
 
-    step("1", "POST /fl/fetch-algorithm — coordinator usa IDS")
-    info(f"Coordinator ({coord_label}) solicita el algoritmo y el fichero de configuración inicial")
-    info(f"Fuente: {coord_ecc}  (mismo conector, sin worker externo)")
-
-    ids_arrow("out", "ids:DescriptionRequestMessage",  coord_label, coord_label)
-    ids_arrow("in",  "ids:DescriptionResponseMessage", coord_label, coord_label)
-    ids_arrow("out", "ids:ContractRequestMessage",     coord_label, coord_label)
-    ids_arrow("in",  "ids:ContractAgreementMessage",   coord_label, coord_label)
-    ids_arrow("out", "ids:ContractAgreementMessage (confirm)", coord_label, coord_label)
-    ids_arrow("in",  "ids:MessageProcessedNotificationMsg",    coord_label, coord_label)
-    ids_arrow("out", "ids:ArtifactRequestMessage",                         coord_label, coord_label)
-    ids_arrow("in",  "ids:ArtifactResponseMessage [algorithm.py + config]", coord_label, coord_label)
+    step("1", "POST /fl/fetch-algorithm — init coordinator")
+    info(f"Coordinator ({coord_label}) carga algorithm.py y fl_config.json desde su entorno local")
 
     result = http_post(f"{coordinator_url}/fl/fetch-algorithm", {}, timeout=req_timeout)
 
     status = result.get("status", "")
     if status == "everything_received":
-        ok("algorithm.py + fl_config.json obtenidos por el coordinator via IDS")
-        field("source_ecc", result.get("source_ecc", "?"))
+        ok("algorithm.py + fl_config.json leídos nativamente por el coordinator")
+        field("source", result.get("source_ecc", "local_filesystem"))
         cfg = result.get("fl_config") or {}
         if cfg:
             field("rounds",        cfg.get("rounds"))
@@ -464,6 +440,8 @@ def fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
 # =============================================================================
 
 def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
+    coord_label = endpoints["coordinator"]["ecc_label"]
+
     phase(
         2,
         "Descubrimiento de peers compatibles  (multi-CSV, umbral 80%)",
@@ -471,7 +449,7 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
         "  Para cada peer registrado en el Broker:\n"
         "    GET /dataset/all-columns  → lista de todos sus CSVs con columnas\n"
         "    Ollama evalúa cada CSV para saber su similitud\n"
-        "    Elige el CSV de mayor ratio  frente a los deams comparados\n"
+        "    Elige el CSV de mayor ratio  frente a los demas comparados\n"
         "  El CSV seleccionado queda asignado al worker para el entrenamiento FL."
     )
 
@@ -494,18 +472,22 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
         wid      = m.group(1) if m else "?"
         peer     = endpoints["peers"].get(f"worker{wid}", {})
         ecc      = peer.get("ecc_url") or w.get("ecc_url", "(desconocido)")
+        pl       = peer.get("ecc_label") or f"ecc-worker{wid}:8889"
 
-        print(f"    {GREEN}OK{RESET}  Worker-{wid}")
-        field("  connector_uri", uri,     indent=8)
-        field("  ecc_url",       ecc,     indent=8)
+        print(f"    {GREEN}OK{RESET}  Worker-{wid}  {GRAY}{uri}{RESET}")
+        field("  ECC (broker)", ecc, indent=8)
 
-        print(f"        {GRAY}Datasets evaluados:{RESET}")
+        # Handshake de metadatos (IDS Catalog fetch)
+        ids_arrow("out", "ids:DescriptionRequestMessage",  coord_label, pl)
+        ids_arrow("in",  "ids:DescriptionResponseMessage", pl, coord_label)
+
+        print(f"\n        {GRAY}Descubrimiento dinámico — Consultando Catálogo IDS del peer (Self-Description):{RESET}")
         for ev in w.get("all_evaluated", []):
             fname_ev = ev["filename"]
             ratio_ev = ev["ratio"]
             common_c = ev.get("common_cols_count", 0)
             total_c  = ev.get("total_cols", 0)
-            print(f"          - {fname_ev:<30} (match: {ratio_ev:.0%} - {common_c}/{total_c} cols)")
+            print(f"          - Recurso en catálogo: {fname_ev:<30} (match: {ratio_ev:.0%} - {common_c}/{total_c} cols)")
 
         llm_rec  = w.get("llm_recommended")
         sel_csv  = w.get("selected_csv") or "(auto)"
@@ -514,8 +496,12 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
         if llm_rec:
             llm_conf = w.get("llm_confidence", 0)
             llm_mod  = w.get("llm_model", "Ollama")
+            llm_rsn  = w.get("llm_reasoning", "Decisión basada en esquema semántico.")
             
-            field(f"  CSV (Sugerido por IA {llm_mod})", f"{CYAN}{llm_rec} (confianza: {llm_conf:.0%}){RESET}", indent=8)
+            print(f"\n        {MAGENTA}→ Buscando el mejor CSV mediante IA Local ({llm_mod})...{RESET}")
+            print(f"          {GRAY}(Análisis semántico de columnas sin acceso a datos reales){RESET}")
+            field(f"  IA ({llm_mod}) Sugerencia", f"{CYAN}{llm_rec} (confianza: {llm_conf:.0%}){RESET}", indent=8)
+            field(f"  IA ({llm_mod}) Razonamiento", f"{GRAY}{llm_rsn}{RESET}", indent=8)
 
             if llm_conf >= 0.80:
                 field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
@@ -533,7 +519,7 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
 
     if not compatible:
         warn(
-            "Ningún worker superó el umbral del 95% de coincidencia de columnas.\n"
+            "Ningún worker superó el umbral del 80% de coincidencia de columnas.\n"
             "      Verifica que los workers tienen al menos un CSV con las mismas "
             "columnas que el coordinator."
         )
@@ -1279,7 +1265,7 @@ def main():
     field("Arrancar FL",     "No (--skip-fl)" if args.skip_fl else "Si")
     field("Timeout HTTP",    f"{req_timeout}s")
     info("El coordinator obtendra algorithm.py + fl_config.json via IDS")
-    info("FASE 2: cada peer es evaluado por sus CSVs reales -- umbral coincidencia: 95%")
+    info("FASE 2: cada peer es evaluado por sus CSVs reales -- umbral coincidencia: 80%")
     info("El CSV ganador de cada worker se comunica al worker via payload IDS en cada ronda")
 
     # Fases

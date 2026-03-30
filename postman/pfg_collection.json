@@ -7,6 +7,276 @@
   },
   "item": [
     {
+      "name": "Dataset Registration on Catalog (Manual)",
+      "description": "Permite registrar manualmente un dataset en el cat\u00e1logo del worker. En esta versi\u00f3n de app.py, esto se hace autom\u00e1ticamente al arrancar, pero se deja aqu\u00ed para testing de los 4 pasos IDS.",
+      "item": [
+        {
+          "name": "1. Offered Resource",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.environment.set(\"resourceCatalog\", pm.request.headers.get(\"catalog\"));",
+                  "var resourceId = pm.request.url.toString() + \"/\" + jsonData[\"@id\"].split(\"/\").pop();",
+                  "// Extracci\u00f3n si fuera necesario de la location header o del cuerpo",
+                  "pm.environment.set(\"offeredResource\", jsonData[\"@id\"] || pm.response.headers.get(\"Location\"));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "var sdUrl = pm.environment.get(\"ECC_Base_URL\") + \"api/selfDescription/\";",
+                  "pm.sendRequest({",
+                  "    url: sdUrl,",
+                  "    method: 'GET',",
+                  "    header: { 'Authorization': 'Basic YXBpVXNlcjpwYXNzd29yZEFwaVVzZXI=' }",
+                  "}, function (err, res) {",
+                  "    if (!err && res.code === 200) {",
+                  "        var sd = res.json();",
+                  "        var catalogs = sd[\"ids:resourceCatalog\"];",
+                  "        if (catalogs && catalogs.length > 0) {",
+                  "            pm.environment.set(\"resourceCatalog\", catalogs[0][\"@id\"]);",
+                  "            console.log(\"Auto-extracted catalog:\", catalogs[0][\"@id\"]);",
+                  "        }",
+                  "    }",
+                  "});",
+                  "pm.variables.set(\"uuid_resource\", pm.variables.replaceIn('{{$guid}}'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "catalog",
+                "value": "{{resourceCatalog}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"@context\": {\"ids\": \"https://w3id.org/idsa/core/\", \"idsc\": \"https://w3id.org/idsa/code/\"},\n    \"@id\": \"https://w3id.org/idsa/autogen/textResource/dataset_{{uuid_resource}}\",\n    \"@type\": \"ids:TextResource\",\n    \"ids:title\": [{\"@value\": \"Dataset Manual Postman\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n    \"ids:description\": [{\"@value\": \"Dataset subido manualmente.\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n    \"ids:keyword\": [{\"@value\": \"dataset\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n    \"ids:language\": [{\"@id\": \"https://w3id.org/idsa/code/EN\"}],\n    \"ids:version\": \"1.0.0\",\n    \"ids:contentType\": {\"@id\": \"https://w3id.org/idsa/code/SCHEMA_DEFINITION\"}\n}"
+            },
+            "url": {
+              "raw": "{{ECC_Base_URL}}api/offeredResource/",
+              "host": [
+                "{{ECC_Base_URL}}api"
+              ],
+              "path": [
+                "offeredResource",
+                ""
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "apiUser",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "passwordApiUser",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2. Metadata Representation",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set(\"uuid_meta\", pm.variables.replaceIn('{{$guid}}'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "resource",
+                "value": "{{offeredResource}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"@context\": {\"ids\": \"https://w3id.org/idsa/core/\", \"idsc\": \"https://w3id.org/idsa/code/\"},\n    \"@id\": \"https://w3id.org/idsa/autogen/representation/meta_{{uuid_meta}}\",\n    \"@type\": \"ids:TextRepresentation\",\n    \"ids:title\": [{\"@value\": \"Metadata Representation\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n    \"ids:description\": [{\"@value\": \"Metadata for Ollama reasoning. Columns: srcip, dstip, proto, state, dur, sbytes, dbytes...\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n    \"ids:mediaType\": {\"@id\": \"https://w3id.org/idsa/code/JSON\"},\n    \"ids:instance\": [{\n        \"@type\": \"ids:Artifact\",\n        \"@id\": \"http://w3id.org/engrd/connector/artifact/metadata_{{uuid_meta}}\",\n        \"ids:fileName\": \"metadata.json\",\n        \"ids:creationDate\": {\"@value\": \"2026-01-01T00:00:00Z\", \"@type\": \"http://www.w3.org/2001/XMLSchema#dateTimeStamp\"}\n    }]\n}"
+            },
+            "url": {
+              "raw": "{{ECC_Base_URL}}api/representation/",
+              "host": [
+                "{{ECC_Base_URL}}api"
+              ],
+              "path": [
+                "representation",
+                ""
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "apiUser",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "passwordApiUser",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "3. Execution Representation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var reqBody = JSON.parse(pm.request.body.raw);",
+                  "var artifactId = reqBody[\"ids:instance\"][0][\"@id\"];",
+                  "pm.environment.set(\"datasetArtifact\", artifactId);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set(\"uuid_exec\", pm.variables.replaceIn('{{$guid}}'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "resource",
+                "value": "{{offeredResource}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"@context\": {\"ids\": \"https://w3id.org/idsa/core/\", \"idsc\": \"https://w3id.org/idsa/code/\"},\n    \"@id\": \"https://w3id.org/idsa/autogen/representation/exec_{{uuid_exec}}\",\n    \"@type\": \"ids:TextRepresentation\",\n    \"ids:title\": [{\"@value\": \"Execution Representation\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n    \"ids:description\": [{\"@value\": \"Instancia del dataset en s\u00ed para entrenamiento FL\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n    \"ids:mediaType\": {\"@id\": \"https://w3id.org/idsa/code/CSV\"},\n    \"ids:instance\": [{\n        \"@type\": \"ids:Artifact\",\n        \"@id\": \"http://w3id.org/engrd/connector/artifact/dataset_{{uuid_exec}}\",\n        \"ids:fileName\": \"unsw_nb15.csv\",\n        \"ids:creationDate\": {\"@value\": \"2026-01-01T00:00:00Z\", \"@type\": \"http://www.w3.org/2001/XMLSchema#dateTimeStamp\"}\n    }]\n}"
+            },
+            "url": {
+              "raw": "{{ECC_Base_URL}}api/representation/",
+              "host": [
+                "{{ECC_Base_URL}}api"
+              ],
+              "path": [
+                "representation",
+                ""
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "apiUser",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "passwordApiUser",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "4. Contract Offer",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set(\"uuid_contract\", pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.variables.set(\"uuid_perm\", pm.variables.replaceIn('{{$guid}}'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "resource",
+                "value": "{{offeredResource}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"@id\": \"https://w3id.org/idsa/autogen/contractOffer/dataset_{{uuid_contract}}\",\n    \"@type\": \"ids:ContractOffer\",\n    \"ids:provider\": {\"@id\": \"http://w3id.org/engrd/connector/worker1\"},\n    \"ids:permission\": [{\n        \"@type\": \"ids:Permission\",\n        \"@id\": \"https://w3id.org/idsa/autogen/permission/{{uuid_perm}}\",\n        \"ids:action\": [{\"@id\": \"https://w3id.org/idsa/code/USE\"}],\n        \"ids:title\": [{\"@value\": \"Local FL Training Only\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n        \"ids:description\": [{\"@value\": \"Data strictly restricted for Federated Learning algorithms. No raw data access or transfer allowed.\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n        \"ids:target\": {\"@id\": \"{{datasetArtifact}}\"},\n        \"ids:constraint\": [{\n            \"@type\": \"ids:Constraint\",\n            \"@id\": \"https://w3id.org/idsa/autogen/constraint/local_only\",\n            \"ids:leftOperand\": {\"@id\": \"https://w3id.org/idsa/code/PURPOSE\"},\n            \"ids:operator\": {\"@id\": \"https://w3id.org/idsa/code/SAME_AS\"},\n            \"ids:rightOperand\": {\"@value\": \"Federated_Learning_Local_Only\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}\n        }]\n    }],\n    \"ids:prohibition\": [{\n        \"@type\": \"ids:Prohibition\",\n        \"@id\": \"https://w3id.org/idsa/autogen/prohibition/no_distribute\",\n        \"ids:action\": [{\"@id\": \"https://w3id.org/idsa/code/DISTRIBUTE\"}],\n        \"ids:target\": {\"@id\": \"{{datasetArtifact}}\"}\n    }]\n}"
+            },
+            "url": {
+              "raw": "{{ECC_Base_URL}}api/contractOffer/",
+              "host": [
+                "{{ECC_Base_URL}}api"
+              ],
+              "path": [
+                "contractOffer",
+                ""
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "apiUser",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "passwordApiUser",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": " FL Algorithm Deployment Flow",
       "item": [
         {
@@ -18,14 +288,14 @@
                 "exec": [
                   "pm.test('Status 200', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('Self-description válida con resourceCatalog', () => {",
+                  "pm.test('Self-description v\u00e1lida con resourceCatalog', () => {",
                   "    const raw = pm.response.text();",
                   "",
                   "    // Intentar parsear como JSON puro primero",
                   "    let sd = null;",
                   "    try { sd = JSON.parse(raw); } catch(e) {}",
                   "",
-                  "    // Si no, buscar el bloque JSON más grande dentro del multipart",
+                  "    // Si no, buscar el bloque JSON m\u00e1s grande dentro del multipart",
                   "    if (!sd) {",
                   "        const matches = raw.match(/\\{[\\s\\S]+\\}/g);",
                   "        if (matches) {",
@@ -42,13 +312,13 @@
                   "    pm.expect(catalog).to.be.an('array').with.length.above(0);",
                   "",
                   "    const resources = catalog[0]['ids:offeredResource'] || [];",
-                  "    pm.expect(resources.length).to.be.above(0, 'No hay offeredResource en el catálogo');",
+                  "    pm.expect(resources.length).to.be.above(0, 'No hay offeredResource en el cat\u00e1logo');",
                   "",
                   "    const resource = resources[0];",
                   "    pm.environment.set('offered_resource', resource['@id'] || '');",
-                  "    console.log('✅ offered_resource:', resource['@id']);",
+                  "    console.log('\u2705 offered_resource:', resource['@id']);",
                   "",
-                  "    // ── Contrato ─────────────────────────────────────────────────────────",
+                  "    // \u2500\u2500 Contrato \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
                   "    const contracts = resource['ids:contractOffer'] || [];",
                   "    pm.expect(contracts.length).to.be.above(0, 'No hay contractOffer en el recurso');",
                   "    const c = contracts[0];",
@@ -57,24 +327,24 @@
                   "    pm.environment.set('contract_provider', (c['ids:provider'] || {'@id':''})['@id'] || '');",
                   "    const perms = c['ids:permission'] || [];",
                   "    pm.environment.set('contract_permission', perms.length > 0 ? JSON.stringify(perms[0]) : '{}');",
-                  "    console.log('✅ contract_id:', cid);",
-                  "    console.log('✅ contract_provider:', (c['ids:provider'] || {'@id':''})['@id']);",
+                  "    console.log('\u2705 contract_id:', cid);",
+                  "    console.log('\u2705 contract_provider:', (c['ids:provider'] || {'@id':''})['@id']);",
                   "",
-                  "    // ── Artifact ─────────────────────────────────────────────────────────",
+                  "    // \u2500\u2500 Artifact \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
                   "    const reprs = resource['ids:representation'] || [];",
                   "    if (reprs.length > 0) {",
                   "        const inst = (reprs[0]['ids:instance'] || [])[0];",
                   "        if (inst && inst['@id']) {",
                   "            pm.environment.set('contract_artifact', inst['@id']);",
-                  "            console.log('✅ contract_artifact:', inst['@id']);",
+                  "            console.log('\u2705 contract_artifact:', inst['@id']);",
                   "        } else {",
-                  "            console.log('⚠️  ids:instance no encontrado — contract_artifact NO actualizado');",
+                  "            console.log('\u26a0\ufe0f  ids:instance no encontrado \u2014 contract_artifact NO actualizado');",
                   "        }",
                   "    } else {",
-                  "        console.log('⚠️  ids:representation vacío — contract_artifact NO actualizado');",
+                  "        console.log('\u26a0\ufe0f  ids:representation vac\u00edo \u2014 contract_artifact NO actualizado');",
                   "    }",
                   "",
-                  "    // ── Guardar la self-description completa para debug ───────────────────",
+                  "    // \u2500\u2500 Guardar la self-description completa para debug \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
                   "    pm.environment.set('_sd_raw', JSON.stringify(sd).substring(0, 2000));",
                   "});"
                 ],
@@ -115,7 +385,7 @@
                 "{{Proxy_Endpoint}}"
               ]
             },
-            "description": "Obtiene la Self-Description del worker destino (ecc-worker2). Extrae automáticamente offered_resource, contract_id, contract_provider, contract_permission, contract_artifact."
+            "description": "Obtiene la Self-Description del worker destino (ecc-worker2). Extrae autom\u00e1ticamente offered_resource, contract_id, contract_provider, contract_permission, contract_artifact."
           },
           "response": []
         },
@@ -168,7 +438,7 @@
                 "{{Proxy_Endpoint}}"
               ]
             },
-            "description": "Obtiene información detallada sobre el recurso específico (offered_resource). Opcional pero útil para confirmar el artifact ID y las condiciones del contrato."
+            "description": "Obtiene informaci\u00f3n detallada sobre el recurso espec\u00edfico (offered_resource). Opcional pero \u00fatil para confirmar el artifact ID y las condiciones del contrato."
           },
           "response": []
         },
@@ -186,7 +456,7 @@
                   "    pm.expect(body).to.satisfy(b => b.includes('ContractAgreement') || b.includes('@id'));",
                   "});",
                   "",
-                  "// ── Extracción robusta del @id del ContractAgreement ─────────────────────",
+                  "// \u2500\u2500 Extracci\u00f3n robusta del @id del ContractAgreement \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
                   "// La respuesta puede llegar como JSON puro O dentro de un multipart.",
                   "// Probamos ambas formas para asegurarnos de guardar transfer_contract.",
                   "(function extractAgreement() {",
@@ -199,11 +469,11 @@
                   "        if (j['@id']) { agreement = j; }",
                   "    } catch(e) {}",
                   "",
-                  "    // Intento 2: multipart — buscar todos los bloques JSON y quedarnos",
+                  "    // Intento 2: multipart \u2014 buscar todos los bloques JSON y quedarnos",
                   "    // con el que tenga @type ContractAgreement",
                   "    if (!agreement) {",
                   "        const blocks = raw.match(/\\{[\\s\\S]*?\\}/g) || [];",
-                  "        // de mayor a menor longitud para coger el más completo",
+                  "        // de mayor a menor longitud para coger el m\u00e1s completo",
                   "        blocks.sort((a, b) => b.length - a.length);",
                   "        for (const b of blocks) {",
                   "            try {",
@@ -230,11 +500,11 @@
                   "    if (agreement && agreement['@id']) {",
                   "        pm.environment.set('transfer_contract', agreement['@id']);",
                   "        pm.environment.set('contract_agreement', JSON.stringify(agreement));",
-                  "        console.log('✅ transfer_contract guardado:', agreement['@id']);",
+                  "        console.log('\u2705 transfer_contract guardado:', agreement['@id']);",
                   "    } else {",
-                  "        console.log('❌ No se encontró @id en la respuesta. Body (500 chars):');",
+                  "        console.log('\u274c No se encontr\u00f3 @id en la respuesta. Body (500 chars):');",
                   "        console.log(raw.substring(0, 500));",
-                  "        pm.test('transfer_contract extraído', () => pm.expect.fail('No se pudo extraer @id del ContractAgreement'));",
+                  "        pm.test('transfer_contract extra\u00eddo', () => pm.expect.fail('No se pudo extraer @id del ContractAgreement'));",
                   "    }",
                   "})();"
                 ],
@@ -280,7 +550,7 @@
                 "{{Proxy_Endpoint}}"
               ]
             },
-            "description": "Negocia el contrato con el worker destino. El payload incluye el objeto ids:ContractRequest con los permisos extraídos del paso 1. La respuesta será el ContractAgreement — se guarda automáticamente en contract_agreement y transfer_contract."
+            "description": "Negocia el contrato con el worker destino. El payload incluye el objeto ids:ContractRequest con los permisos extra\u00eddos del paso 1. La respuesta ser\u00e1 el ContractAgreement \u2014 se guarda autom\u00e1ticamente en contract_agreement y transfer_contract."
           },
           "response": []
         },
@@ -341,12 +611,12 @@
                 "{{Proxy_Endpoint}}"
               ]
             },
-            "description": "Confirma la aceptación del contrato. Envía el ContractAgreement recibido en el paso 3. El worker responderá con MessageProcessedNotificationMessage."
+            "description": "Confirma la aceptaci\u00f3n del contrato. Env\u00eda el ContractAgreement recibido en el paso 3. El worker responder\u00e1 con MessageProcessedNotificationMessage."
           },
           "response": []
         },
         {
-          "name": "5 - IDS: Envío de algorithm.py al Worker (ArtifactRequest)",
+          "name": "5 - IDS: Env\u00edo de algorithm.py al Worker (ArtifactRequest)",
           "event": [
             {
               "listen": "test",
@@ -362,7 +632,7 @@
                   "try {",
                   "    const json = pm.response.json();",
                   "    if (json.status === \"everything_received\") {",
-                  "        console.log(\"✅ Coordinator:\", json.coordinator, \"— FL config:\", JSON.stringify(json.fl_config));",
+                  "        console.log(\"\u2705 Coordinator:\", json.coordinator, \"\u2014 FL config:\", JSON.stringify(json.fl_config));",
                   "    }",
                   "} catch(e) {}"
                 ],
@@ -408,7 +678,7 @@
                 "{{Proxy_Endpoint}}"
               ]
             },
-            "description": "PASO CRÍTICO: envía algorithm.py + fl_config.json (ambos en base64) al worker destino.\nEl worker se convierte en coordinator, guarda la configuración, la distribuye a los peers y arranca el FL.\n\n⚠️ ANTES de ejecutar:\n1. Rellena algorithm_b64:\n   PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\algorithm.py'))\n\n2. Rellena config_b64:\n   PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\fl_config.json'))\n\nEstructura de fl_config.json:\n{\n  \"rounds\": 5,\n  \"round_timeout\": 180,\n  \"min_workers\": 2,\n  \"epochs\": 3,\n  \"batch_size\": 32,\n  \"learning_rate\": 0.001,\n  \"test_split\": 0.2\n}"
+            "description": "PASO CR\u00cdTICO: env\u00eda algorithm.py + fl_config.json (ambos en base64) al worker destino.\nEl worker se convierte en coordinator, guarda la configuraci\u00f3n, la distribuye a los peers y arranca el FL.\n\n\u26a0\ufe0f ANTES de ejecutar:\n1. Rellena algorithm_b64:\n   PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\algorithm.py'))\n\n2. Rellena config_b64:\n   PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\fl_config.json'))\n\nEstructura de fl_config.json:\n{\n  \"rounds\": 5,\n  \"round_timeout\": 180,\n  \"min_workers\": 2,\n  \"epochs\": 3,\n  \"batch_size\": 32,\n  \"learning_rate\": 0.001,\n  \"test_split\": 0.2\n}"
           },
           "response": []
         },
@@ -428,7 +698,7 @@
               ],
               "query": []
             },
-            "description": "Consulta el broker Fuseki via SPARQL y lista todos los connectors registrados. Ejecutar antes del paso 5b para confirmar que los workers están en el broker. El coordinator se excluye de la lista (solo devuelve peers)."
+            "description": "Consulta el broker Fuseki via SPARQL y lista todos los connectors registrados. Ejecutar antes del paso 5b para confirmar que los workers est\u00e1n en el broker. El coordinator se excluye de la lista (solo devuelve peers)."
           },
           "event": [
             {
@@ -449,10 +719,10 @@
                   "        console.log(`       Endpoint: ${c.endpoint || '(sin endpoint)'}`);",
                   "    });",
                   "    if (json.count === 0) {",
-                  "        console.log('⚠️  No hay conectores en el broker — los workers pueden tardar en registrarse.');",
+                  "        console.log('\u26a0\ufe0f  No hay conectores en el broker \u2014 los workers pueden tardar en registrarse.');",
                   "        console.log('   Espera 30s y repite esta llamada.');",
                   "    } else {",
-                  "        console.log('✅ Broker activo con', json.count, 'conector(es) registrado(s)');",
+                  "        console.log('\u2705 Broker activo con', json.count, 'conector(es) registrado(s)');",
                   "    }",
                   "});"
                 ]
@@ -582,7 +852,7 @@
               ],
               "query": []
             },
-            "description": "El coordinator negocia contratos IDS con los workers compatibles descubiertos en el paso 5b. Worker1 y Worker3 aceptan. Worker4 rechaza porque FL_AUTHORIZED_URIS esta vacio — soberania del dato IDS."
+            "description": "El coordinator negocia contratos IDS con los workers compatibles descubiertos en el paso 5b. Worker1 y Worker3 aceptan. Worker4 rechaza porque FL_AUTHORIZED_URIS esta vacio \u2014 soberania del dato IDS."
           },
           "response": []
         },
@@ -598,7 +868,7 @@
                   "pm.test(\"Es coordinator y tiene algorithm.py\", () => {",
                   "    pm.expect(json.role).to.equal(\"coordinator\");",
                   "    pm.expect(json.algorithm_loaded).to.be.true;",
-                  "    console.log(\"✅ Worker\", json.instance, \"| role:\", json.role, \"| algorithm_loaded:\", json.algorithm_loaded);",
+                  "    console.log(\"\u2705 Worker\", json.instance, \"| role:\", json.role, \"| algorithm_loaded:\", json.algorithm_loaded);",
                   "    console.log(\"   FL status:\", json.fl_status, \"| CSV:\", json.csv_selected);",
                   "    console.log(\"   Peers:\", json.peer_eccs);",
                   "});"
@@ -621,7 +891,7 @@
               "query": []
             }
           },
-          "description": "Verifica en un solo paso que el coordinator (worker-2) está activo, tiene el rol correcto y algorithm.py cargado y listo para arrancar el FL.",
+          "description": "Verifica en un solo paso que el coordinator (worker-2) est\u00e1 activo, tiene el rol correcto y algorithm.py cargado y listo para arrancar el FL.",
           "response": []
         },
         {
@@ -635,7 +905,7 @@
                   "pm.test('FL arrancado con workers aceptados', () => {",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.status).to.equal('started');",
-                  "    console.log('FL arrancado — coordinator:', json.coordinator);",
+                  "    console.log('FL arrancado \u2014 coordinator:', json.coordinator);",
                   "    console.log('Peers seleccionados:', JSON.stringify(json.peers));",
                   "    console.log('Rondas:', json.fl_config?.rounds);",
                   "});"
@@ -672,13 +942,13 @@
               ],
               "query": []
             },
-            "description": "Arranca el ciclo FL completo en el coordinator.\nLos parámetros (rounds, round_timeout, etc.) se leen automáticamente de fl_config.json\nrecibido en el paso 5. No es necesario pasar ningún parámetro en el body."
+            "description": "Arranca el ciclo FL completo en el coordinator.\nLos par\u00e1metros (rounds, round_timeout, etc.) se leen autom\u00e1ticamente de fl_config.json\nrecibido en el paso 5. No es necesario pasar ning\u00fan par\u00e1metro en el body."
           },
           "description": "Arranca el ciclo FL. Usa los workers aceptados en el paso 5c (/fl/negotiate). Envia algorithm.py + fl_config.json a los workers aceptados (worker1, worker3) y arranca FedAvg. Worker4 ya fue excluido en el paso anterior.",
           "response": []
         },
         {
-          "name": "8 - Verify: FL arrancó y en curso (repetir hasta completed)",
+          "name": "8 - Verify: FL arranc\u00f3 y en curso (repetir hasta completed)",
           "event": [
             {
               "listen": "test",
@@ -686,7 +956,7 @@
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
                   "const json = pm.response.json();",
-                  "pm.test(\"FL no está idle (arrancó correctamente)\", () => {",
+                  "pm.test(\"FL no est\u00e1 idle (arranc\u00f3 correctamente)\", () => {",
                   "    pm.expect(json.status).to.not.equal(\"idle\");",
                   "    console.log(\"FL status:\", json.status, \"| ronda:\", json.current_round, \"/\", json.total_rounds);",
                   "});",
@@ -697,10 +967,10 @@
                   "});",
                   "if (json.status === \"completed\") {",
                   "    const last = json.history[json.history.length - 1];",
-                  "    console.log(\"✅ FL completado —\", json.total_rounds, \"rondas\");",
+                  "    console.log(\"\u2705 FL completado \u2014\", json.total_rounds, \"rondas\");",
                   "    console.log(\"   acc=\", last?.global_metrics?.accuracy, \"| auc=\", last?.global_metrics?.auc);",
                   "} else {",
-                  "    console.log(\"FL status:\", json.status, \"— ronda\", json.current_round, \"/\", json.total_rounds);",
+                  "    console.log(\"FL status:\", json.status, \"\u2014 ronda\", json.current_round, \"/\", json.total_rounds);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -722,7 +992,7 @@
               "query": []
             }
           },
-          "description": "Ejecutar justo tras arrancar FL para confirmar que no está idle, y repetir periódicamente hasta ver status=completed. Muestra ronda actual y métricas finales al completarse.",
+          "description": "Ejecutar justo tras arrancar FL para confirmar que no est\u00e1 idle, y repetir peri\u00f3dicamente hasta ver status=completed. Muestra ronda actual y m\u00e9tricas finales al completarse.",
           "response": []
         },
         {
@@ -733,7 +1003,7 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Modelo disponible con métricas\", () => {",
+                  "pm.test(\"Modelo disponible con m\u00e9tricas\", () => {",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.metrics).to.exist;",
                   "    pm.expect(json.weights_available).to.be.true;",
@@ -775,12 +1045,12 @@
                   "    pm.expect(json.status).to.equal('ok');",
                   "    pm.expect(json.instance).to.exist;",
                   "    pm.expect(json.role).to.exist;",
-                  "    console.log('✅ Worker', json.instance, '| status:', json.status, '| role:', json.role);",
+                  "    console.log('\u2705 Worker', json.instance, '| status:', json.status, '| role:', json.role);",
                   "});",
                   "",
-                  "// INSTRUCCIÓN: Para verificar todos los workers cambia Coordinator_URL:",
+                  "// INSTRUCCI\u00d3N: Para verificar todos los workers cambia Coordinator_URL:",
                   "console.log('');",
-                  "console.log('ℹ️  Para verificar todos los workers:');",
+                  "console.log('\u2139\ufe0f  Para verificar todos los workers:');",
                   "console.log('   Worker-1: cambiar Coordinator_URL=https://localhost:5001');",
                   "console.log('   Worker-2: cambiar Coordinator_URL=https://localhost:5002');",
                   "console.log('   Worker-3: cambiar Coordinator_URL=https://localhost:5003');",
@@ -823,9 +1093,9 @@
                   "    pm.expect(sd).to.exist;",
                   "",
                   "    const resources = (sd['ids:resourceCatalog'] || [{}])[0]['ids:offeredResource'] || [];",
-                  "    console.log('Total recursos en catálogo:', resources.length);",
+                  "    console.log('Total recursos en cat\u00e1logo:', resources.length);",
                   "    resources.forEach((r, i) => {",
-                  "        const title = ((r['ids:title'] || [{}])[0]['@value'] || '(sin título)');",
+                  "        const title = ((r['ids:title'] || [{}])[0]['@value'] || '(sin t\u00edtulo)');",
                   "        console.log('  Recurso', i+1, ':', title, '|', r['@id']);",
                   "    });",
                   "",
@@ -835,7 +1105,7 @@
                   "        return title.includes('FL Global Model') || id.includes('fl_model_coordinator');",
                   "    });",
                   "    pm.expect(flResource).to.exist;",
-                  "    console.log('✅ Recurso FL encontrado:', flResource['@id']);",
+                  "    console.log('\u2705 Recurso FL encontrado:', flResource['@id']);",
                   "",
                   "    // Contrato existe en la self-description",
                   "    const contract = (flResource['ids:contractOffer'] || [{}])[0];",
@@ -843,13 +1113,13 @@
                   "    pm.expect(contract['@id']).to.include('contractOffer');",
                   "    console.log('   Contrato :', contract['@id']);",
                   "",
-                  "    // Representación existe",
+                  "    // Representaci\u00f3n existe",
                   "    const repr = (flResource['ids:representation'] || [{}])[0];",
                   "    pm.expect(repr['@id']).to.exist;",
                   "    console.log('   Repr     :', repr['@id']);",
                   "",
                   "    // Extraer lista de connector URIs autorizados del constraint del contrato",
-                  "    // (publicados por _publish_fl_model_as_ids_resource con política connector-restricted-policy)",
+                  "    // (publicados por _publish_fl_model_as_ids_resource con pol\u00edtica connector-restricted-policy)",
                   "    const perm        = (contract['ids:permission'] || [{}])[0] || {};",
                   "    const constraint  = (perm['ids:constraint']    || [{}])[0] || {};",
                   "    const authorised  = (constraint['ids:rightOperand'] || []).map(v => v['@value'] || v['@id'] || String(v));",
@@ -859,10 +1129,10 @@
                   "    pm.environment.set('fl_model_resource_id', flResource['@id']);",
                   "    pm.environment.set('fl_model_contract_id', contract['@id']);",
                   "    pm.environment.set('fl_model_authorised_peers', JSON.stringify(authorised));",
-                  "    console.log('✅ IDs guardados en environment para pasos 14-16');",
+                  "    console.log('\u2705 IDs guardados en environment para pasos 14-16');",
                   "});",
                   "",
-                  "pm.test('Catálogo tiene al menos 2 recursos (original + FL model)', () => {",
+                  "pm.test('Cat\u00e1logo tiene al menos 2 recursos (original + FL model)', () => {",
                   "    const sd = pm.response.json();",
                   "    const resources = (sd['ids:resourceCatalog'] || [{}])[0]['ids:offeredResource'] || [];",
                   "    pm.expect(resources.length).to.be.at.least(2);",
@@ -887,7 +1157,7 @@
               "query": []
             }
           },
-          "description": "Verifica que el modelo FL se publicó correctamente como recurso IDS en el ECC del coordinator.\n\nLlama a GET /ids/self-description del DataApp del coordinator — un endpoint que consulta internamente la self-description del ECC local (puerto 8449) y la devuelve directamente.\n\nEsto evita el timeout que ocurría cuando /proxy intentaba que el coordinator se preguntara a sí mismo vía IDS, creando un bucle interno.\n\nComprueba:\n- Existe un recurso 'FL Global Model' en el catálogo IDS\n- El contrato tiene ids:assignee (acceso restringido a los peers participantes)\n- Tiene representación con artifact (los pesos finales)\n- El catálogo tiene al menos 4 recursos (3 originales + 1 FL)\n\nGuarda en environment: fl_model_resource_id, fl_model_artifact_id, fl_model_contract_id",
+          "description": "Verifica que el modelo FL se public\u00f3 correctamente como recurso IDS en el ECC del coordinator.\n\nLlama a GET /ids/self-description del DataApp del coordinator \u2014 un endpoint que consulta internamente la self-description del ECC local (puerto 8449) y la devuelve directamente.\n\nEsto evita el timeout que ocurr\u00eda cuando /proxy intentaba que el coordinator se preguntara a s\u00ed mismo v\u00eda IDS, creando un bucle interno.\n\nComprueba:\n- Existe un recurso 'FL Global Model' en el cat\u00e1logo IDS\n- El contrato tiene ids:assignee (acceso restringido a los peers participantes)\n- Tiene representaci\u00f3n con artifact (los pesos finales)\n- El cat\u00e1logo tiene al menos 4 recursos (3 originales + 1 FL)\n\nGuarda en environment: fl_model_resource_id, fl_model_artifact_id, fl_model_contract_id",
           "response": []
         },
         {
@@ -926,7 +1196,7 @@
                   "    pm.expect(contract).to.exist;",
                   "    pm.expect(contract['@id']).to.exist;",
                   "    pm.expect(contract['@type']).to.include('ContractOffer');",
-                  "    console.log('✅ Contrato recibido:', contract['@id']);",
+                  "    console.log('\u2705 Contrato recibido:', contract['@id']);",
                   "});",
                   "",
                   "pm.test('Contrato FL usa connector-restricted-policy', () => {",
@@ -937,22 +1207,22 @@
                   "",
                   "    const desc = ((perm['ids:description'] || [{}])[0]['@value'] || '');",
                   "    pm.expect(desc).to.equal('connector-restricted-policy',",
-                  "        'La política debe ser connector-restricted-policy');",
-                  "    console.log('✅ Política:', desc);",
+                  "        'La pol\u00edtica debe ser connector-restricted-policy');",
+                  "    console.log('\u2705 Pol\u00edtica:', desc);",
                   "",
                   "    const constraint = (perm['ids:constraint'] || [{}])[0] || {};",
                   "    const operator   = (constraint['ids:operator'] || {})['@id'] || '';",
                   "    pm.expect(operator).to.include('IN', 'El operador del constraint debe ser IN');",
-                  "    console.log('✅ Operador constraint:', operator);",
+                  "    console.log('\u2705 Operador constraint:', operator);",
                   "",
                   "    const allowed = (constraint['ids:rightOperand'] || [])",
                   "        .map(v => v['@value'] || v['@id'] || String(v));",
                   "    pm.expect(allowed.length).to.be.above(0, 'Sin conectores permitidos en constraint');",
-                  "    console.log('✅ Conectores autorizados:', allowed.join(', '));",
+                  "    console.log('\u2705 Conectores autorizados:', allowed.join(', '));",
                   "",
                   "    const hasWorker4 = allowed.some(u => u.toLowerCase().includes('worker4'));",
                   "    pm.expect(hasWorker4).to.be.false;",
-                  "    console.log('✅ Worker4 NO está en la lista autorizada — correcto');",
+                  "    console.log('\u2705 Worker4 NO est\u00e1 en la lista autorizada \u2014 correcto');",
                   "",
                   "    // Guardar allowed para cruce con paso 5c",
                   "    pm.environment.set('fl_model_authorised_peers', JSON.stringify(allowed));",
@@ -970,7 +1240,7 @@
                   "    const acceptedUris = acceptedWorkers.map(w => w.connector_uri || '');",
                   "",
                   "    if (acceptedUris.length === 0) {",
-                  "        console.log('⚠️  accepted_workers no encontrado — ejecuta paso 5c primero');",
+                  "        console.log('\u26a0\ufe0f  accepted_workers no encontrado \u2014 ejecuta paso 5c primero');",
                   "        return;",
                   "    }",
                   "",
@@ -979,7 +1249,7 @@
                   "",
                   "    acceptedUris.forEach(uri => {",
                   "        const present = allowed.some(a => a === uri || uri.includes(a) || a.includes(uri));",
-                  "        console.log(present ? '  ✅' : '  ⚠️ ', uri, present ? '→ presente' : '→ NO encontrado');",
+                  "        console.log(present ? '  \u2705' : '  \u26a0\ufe0f ', uri, present ? '\u2192 presente' : '\u2192 NO encontrado');",
                   "    });",
                   "",
                   "    pm.expect(allowed.length).to.be.at.least(acceptedUris.length,",
@@ -1010,7 +1280,7 @@
                 "{{Worker4_Proxy_Endpoint}}"
               ]
             },
-            "description": "Worker4 solicita la self-description del coordinator a través de IDS.\nEl catálogo es público (cualquier connector puede verlo), pero el contrato\ndel modelo FL tiene una constraint que excluye a worker4.\nEste paso guarda el recurso FL encontrado para el paso 16."
+            "description": "Worker4 solicita la self-description del coordinator a trav\u00e9s de IDS.\nEl cat\u00e1logo es p\u00fablico (cualquier connector puede verlo), pero el contrato\ndel modelo FL tiene una constraint que excluye a worker4.\nEste paso guarda el recurso FL encontrado para el paso 16."
           },
           "event": [
             {
@@ -1019,7 +1289,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "// Derivar el ECC del coordinator desde Coordinator_URL",
-                  "// Coordinator_URL = https://localhost:PORT → ecc-workerX:8889/data",
+                  "// Coordinator_URL = https://localhost:PORT \u2192 ecc-workerX:8889/data",
                   "const coordUrl = pm.environment.get('Coordinator_URL') || 'https://localhost:5002';",
                   "const portMatch = coordUrl.match(/(\\d+)$/);",
                   "const port = portMatch ? portMatch[1] : '5002';",
@@ -1027,7 +1297,7 @@
                   "const eccHost = portMap[port] || 'ecc-worker2';",
                   "const eccUrl  = `https://${eccHost}:8889/data`;",
                   "pm.environment.set('Worker4_ECC_Forward_To', eccUrl);",
-                  "console.log('[pre] Worker4 → coordinator ECC:', eccUrl);"
+                  "console.log('[pre] Worker4 \u2192 coordinator ECC:', eccUrl);"
                 ]
               }
             },
@@ -1038,34 +1308,34 @@
                 "exec": [
                   "pm.test('Status 200', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('Worker4 recibe self-description pública del coordinator', () => {",
+                  "pm.test('Worker4 recibe self-description p\u00fablica del coordinator', () => {",
                   "    const raw = pm.response.text();",
                   "    pm.expect(raw).to.satisfy(b => b.includes('resourceCatalog') || b.includes('@type'),",
-                  "        'La respuesta debe contener una self-description IDS válida');",
-                  "    console.log('✅ Self-description recibida — catálogo público visible para worker4');",
+                  "        'La respuesta debe contener una self-description IDS v\u00e1lida');",
+                  "    console.log('\u2705 Self-description recibida \u2014 cat\u00e1logo p\u00fablico visible para worker4');",
                   "    console.log('   (worker4 puede VER que existe el recurso FL, pero el contrato lo excluye)');",
                   "});",
                   "",
-                  "pm.test('Recurso FL visible en catálogo del coordinator', () => {",
+                  "pm.test('Recurso FL visible en cat\u00e1logo del coordinator', () => {",
                   "    const raw = pm.response.text();",
                   "    let sd = null;",
                   "    try { sd = JSON.parse(raw); } catch(e) {",
-                  "        // Respuesta multipart — extraer el bloque JSON más grande",
+                  "        // Respuesta multipart \u2014 extraer el bloque JSON m\u00e1s grande",
                   "        const blocks = raw.match(/\\{[\\s\\S]*?\\}/g) || [];",
                   "        blocks.sort((a,b) => b.length - a.length);",
                   "        for (const b of blocks) { try { sd = JSON.parse(b); break; } catch(e) {} }",
                   "    }",
-                  "    if (!sd) { console.log('⚠️  No se pudo parsear self-description — omitiendo sub-test'); return; }",
+                  "    if (!sd) { console.log('\u26a0\ufe0f  No se pudo parsear self-description \u2014 omitiendo sub-test'); return; }",
                   "",
                   "    const resources = ((sd['ids:resourceCatalog'] || [{}])[0]['ids:offeredResource'] || []);",
-                  "    console.log('Total recursos en catálogo visible por worker4:', resources.length);",
+                  "    console.log('Total recursos en cat\u00e1logo visible por worker4:', resources.length);",
                   "",
                   "    const flRes = resources.find(r => {",
                   "        const title = ((r['ids:title'] || [{}])[0]['@value'] || '');",
                   "        return title.includes('FL Global Model') || (r['@id'] || '').includes('fl_model_coordinator');",
                   "    });",
                   "    pm.expect(flRes).to.exist;",
-                  "    console.log('✅ Recurso FL visible:', flRes['@id']);",
+                  "    console.log('\u2705 Recurso FL visible:', flRes['@id']);",
                   "",
                   "    // Verificar que el contrato del recurso tiene constraint (aunque worker4 no pueda acceder)",
                   "    const contract   = (flRes['ids:contractOffer']  || [{}])[0] || {};",
@@ -1073,12 +1343,12 @@
                   "    const constraint = (perm['ids:constraint']      || [{}])[0] || {};",
                   "    const allowed    = (constraint['ids:rightOperand'] || []).map(v => v['@value'] || v['@id'] || String(v));",
                   "    const w4inList   = allowed.some(u => u.toLowerCase().includes('worker4'));",
-                  "    console.log('   Worker4 en lista autorizada:', w4inList ? '⚠️  SÍ (inesperado)' : '✅ NO (correcto)');",
+                  "    console.log('   Worker4 en lista autorizada:', w4inList ? '\u26a0\ufe0f  S\u00cd (inesperado)' : '\u2705 NO (correcto)');",
                   "",
                   "    // Guardar para el paso 16",
                   "    pm.environment.set('w4_fl_resource_id', flRes['@id']);",
                   "    pm.environment.set('w4_fl_contract_id', contract['@id'] || '');",
-                  "    console.log('✅ IDs guardados para paso 16');",
+                  "    console.log('\u2705 IDs guardados para paso 16');",
                   "    console.log('   Resource :', flRes['@id']);",
                   "    console.log('   Contract :', contract['@id'] || 'no visible');",
                   "});"
@@ -1088,7 +1358,7 @@
           ]
         },
         {
-          "name": "14 - Worker4: Attempt Contract Negotiation → EXPECT REJECTION",
+          "name": "14 - Worker4: Attempt Contract Negotiation \u2192 EXPECT REJECTION",
           "request": {
             "method": "POST",
             "header": [],
@@ -1107,7 +1377,7 @@
                 "{{Worker4_Proxy_Endpoint}}"
               ]
             },
-            "description": "Worker4 intenta negociar el contrato del modelo FL publicado por el coordinator.\nDebe recibir un RejectionMessage porque:\n  - Si FL_AUTHORIZED_URIS está vacío en worker-coordinator → razón: fl_participation_denied\n  - Si FL_AUTHORIZED_URIS está configurado pero worker4 no está → razón: unauthorized_consumer\nEn ningún caso debe recibir un ContractAgreement."
+            "description": "Worker4 intenta negociar el contrato del modelo FL publicado por el coordinator.\nDebe recibir un RejectionMessage porque:\n  - Si FL_AUTHORIZED_URIS est\u00e1 vac\u00edo en worker-coordinator \u2192 raz\u00f3n: fl_participation_denied\n  - Si FL_AUTHORIZED_URIS est\u00e1 configurado pero worker4 no est\u00e1 \u2192 raz\u00f3n: unauthorized_consumer\nEn ning\u00fan caso debe recibir un ContractAgreement."
           },
           "event": [
             {
@@ -1117,7 +1387,7 @@
                 "exec": [
                   "pm.test('Status 200 (proxy IDS activo)', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('Worker4 recibe RejectionMessage — no puede acceder al modelo FL', () => {",
+                  "pm.test('Worker4 recibe RejectionMessage \u2014 no puede acceder al modelo FL', () => {",
                   "    const raw = pm.response.text();",
                   "    console.log('Respuesta completa (primeros 1200 chars):', raw.substring(0, 1200));",
                   "",
@@ -1130,7 +1400,7 @@
                   "        raw.includes('NOT_AUTHORIZED')           ||",
                   "        raw.includes('\"rejected\"');",
                   "",
-                  "    // Acceso concedido — NO debe ocurrir",
+                  "    // Acceso concedido \u2014 NO debe ocurrir",
                   "    const isAccepted =",
                   "        raw.includes('ContractAgreementMessage') ||",
                   "        raw.includes('ContractAgreement')        ||",
@@ -1138,33 +1408,33 @@
                   "",
                   "    pm.expect(isAccepted).to.be.false;",
                   "    pm.expect(isRejected).to.be.true;",
-                  "    console.log('✅ Worker4 rechazado — acceso al modelo FL denegado');",
+                  "    console.log('\u2705 Worker4 rechazado \u2014 acceso al modelo FL denegado');",
                   "",
-                  "    // Identificar razón exacta del rechazo para el log",
+                  "    // Identificar raz\u00f3n exacta del rechazo para el log",
                   "    if (raw.includes('fl_participation_denied')) {",
-                  "        console.log('   Razón: fl_participation_denied',",
-                  "            '(worker-coordinator tiene FL_AUTHORIZED_URIS vacío → cualquier acceso externo denegado)');",
+                  "        console.log('   Raz\u00f3n: fl_participation_denied',",
+                  "            '(worker-coordinator tiene FL_AUTHORIZED_URIS vac\u00edo \u2192 cualquier acceso externo denegado)');",
                   "    } else if (raw.includes('unauthorized_consumer')) {",
-                  "        console.log('   Razón: unauthorized_consumer',",
-                  "            '(worker4 no está en FL_AUTHORIZED_URIS del coordinator)');",
+                  "        console.log('   Raz\u00f3n: unauthorized_consumer',",
+                  "            '(worker4 no est\u00e1 en FL_AUTHORIZED_URIS del coordinator)');",
                   "    } else if (raw.includes('NOT_AUTHORIZED')) {",
-                  "        console.log('   Razón: NOT_AUTHORIZED (ids:rejectionReason del ECC)');",
+                  "        console.log('   Raz\u00f3n: NOT_AUTHORIZED (ids:rejectionReason del ECC)');",
                   "    } else {",
-                  "        console.log('   Razón: rechazo detectado en respuesta raw');",
+                  "        console.log('   Raz\u00f3n: rechazo detectado en respuesta raw');",
                   "    }",
-                  "    console.log('   Política IDS: connector-restricted-policy excluye a worker4');",
-                  "    console.log('   Soberanía del dato: ✅ Funcionando correctamente');",
+                  "    console.log('   Pol\u00edtica IDS: connector-restricted-policy excluye a worker4');",
+                  "    console.log('   Soberan\u00eda del dato: \u2705 Funcionando correctamente');",
                   "});",
                   "",
                   "pm.test('Broker registra al coordinator correctamente (worker4 no puede suplantar peers)', () => {",
                   "    // Este test es documental: el broker IDS + DAPS garantizan que",
-                  "    // worker4 no puede obtener un token DAT válido que lo identifique",
+                  "    // worker4 no puede obtener un token DAT v\u00e1lido que lo identifique",
                   "    // como uno de los workers autorizados. El rechazo se aplica tanto",
                   "    // a nivel de contrato IDS como a nivel de identidad DAPS.",
-                  "    console.log('ℹ️  Garantías del ecosistema IDS:');",
-                  "    console.log('   · DAPS: token DAT único por conector — worker4 no puede suplantar a worker1/2/3');",
-                  "    console.log('   · Broker: discovery solo devuelve connectors registrados con certificado válido');",
-                  "    console.log('   · Contrato: connector-restricted-policy con constraint IN [worker1_uri, worker3_uri]');",
+                  "    console.log('\u2139\ufe0f  Garant\u00edas del ecosistema IDS:');",
+                  "    console.log('   \u00b7 DAPS: token DAT \u00fanico por conector \u2014 worker4 no puede suplantar a worker1/2/3');",
+                  "    console.log('   \u00b7 Broker: discovery solo devuelve connectors registrados con certificado v\u00e1lido');",
+                  "    console.log('   \u00b7 Contrato: connector-restricted-policy con constraint IN [worker1_uri, worker3_uri]');",
                   "    pm.expect(true).to.be.true; // test documental",
                   "});"
                 ]
@@ -1186,7 +1456,7 @@
                 "status"
               ]
             },
-            "description": "Verifica que worker4 no recibió algorithm.py ni participó en el FL. Puerto 5004 = worker-4 (fijo). Comprueba: algorithm_loaded=false, config_loaded=false, fl_config=null, role=worker, fl_status=idle, peer_eccs=[]."
+            "description": "Verifica que worker4 no recibi\u00f3 algorithm.py ni particip\u00f3 en el FL. Puerto 5004 = worker-4 (fijo). Comprueba: algorithm_loaded=false, config_loaded=false, fl_config=null, role=worker, fl_status=idle, peer_eccs=[]."
           },
           "event": [
             {
@@ -1194,7 +1464,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 — worker4 activo', () => pm.response.to.have.status(200));",
+                  "pm.test('Status 200 \u2014 worker4 activo', () => pm.response.to.have.status(200));",
                   "",
                   "pm.test('Worker4 sin algorithm.py ni fl_config.json', () => {",
                   "    const body = pm.response.json();",
@@ -1205,27 +1475,27 @@
                   "    pm.expect(body.algorithm_loaded).to.be.false;",
                   "    pm.expect(body.config_loaded).to.be.false;",
                   "    pm.expect(body.fl_config).to.be.null;",
-                  "    console.log('✅ algorithm_loaded:', body.algorithm_loaded, '— correcto (false)');",
-                  "    console.log('✅ config_loaded   :', body.config_loaded,    '— correcto (false)');",
-                  "    console.log('✅ fl_config       :', body.fl_config,        '— correcto (null)');",
+                  "    console.log('\u2705 algorithm_loaded:', body.algorithm_loaded, '\u2014 correcto (false)');",
+                  "    console.log('\u2705 config_loaded   :', body.config_loaded,    '\u2014 correcto (false)');",
+                  "    console.log('\u2705 fl_config       :', body.fl_config,        '\u2014 correcto (null)');",
                   "});",
                   "",
                   "pm.test('Worker4 role=worker y fl_status=idle', () => {",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.role).to.equal('worker');",
                   "    pm.expect(body.fl_status).to.equal('idle');",
-                  "    console.log('✅ role     :', body.role,      '— correcto (no coordinator)');",
-                  "    console.log('✅ fl_status:', body.fl_status, '— correcto (idle, no participó)');",
+                  "    console.log('\u2705 role     :', body.role,      '\u2014 correcto (no coordinator)');",
+                  "    console.log('\u2705 fl_status:', body.fl_status, '\u2014 correcto (idle, no particip\u00f3)');",
                   "});",
                   "",
                   "pm.test('Worker4 no tiene peers FL configurados', () => {",
                   "    const body = pm.response.json();",
-                  "    // peer_eccs debe estar vacío — worker4 no participó en la negociación",
+                  "    // peer_eccs debe estar vac\u00edo \u2014 worker4 no particip\u00f3 en la negociaci\u00f3n",
                   "    const peers = body.peer_eccs || [];",
-                  "    // coordinator_ecc debe ser null — worker4 no recibió pesos globales",
+                  "    // coordinator_ecc debe ser null \u2014 worker4 no recibi\u00f3 pesos globales",
                   "    const coordEcc = body.coordinator_ecc;",
-                  "    console.log('✅ peer_eccs      :', JSON.stringify(peers));",
-                  "    console.log('✅ coordinator_ecc:', coordEcc);",
+                  "    console.log('\u2705 peer_eccs      :', JSON.stringify(peers));",
+                  "    console.log('\u2705 coordinator_ecc:', coordEcc);",
                   "    pm.expect(peers.length).to.equal(0, 'Worker4 no debe tener peers configurados');",
                   "});"
                 ]
@@ -1253,7 +1523,7 @@
                 "self-description"
               ]
             },
-            "description": "Llama al DataApp del worker1 para forzar la obtención de un token DAT real desde DAPS (omejdn). Si el token se obtiene correctamente aparece en los logs del DataApp: [DAPS] Token DAT obtenido para worker-1. Verifica que el @id del conector es correcto y que la self-description está firmada con DAPS."
+            "description": "Llama al DataApp del worker1 para forzar la obtenci\u00f3n de un token DAT real desde DAPS (omejdn). Si el token se obtiene correctamente aparece en los logs del DataApp: [DAPS] Token DAT obtenido para worker-1. Verifica que el @id del conector es correcto y que la self-description est\u00e1 firmada con DAPS."
           },
           "event": [
             {
@@ -1261,13 +1531,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 — DataApp worker1 responde', () => pm.response.to.have.status(200));",
+                  "pm.test('Status 200 \u2014 DataApp worker1 responde', () => pm.response.to.have.status(200));",
                   "",
                   "pm.test('Self-description contiene @id del conector', () => {",
                   "    const sd = pm.response.json();",
                   "    pm.expect(sd['@id']).to.exist;",
                   "    pm.expect(sd['@id']).to.include('connector');",
-                  "    console.log('✅ Connector URI:', sd['@id']);",
+                  "    console.log('\u2705 Connector URI:', sd['@id']);",
                   "    pm.environment.set('w1_connector_uri', sd['@id']);",
                   "});",
                   "",
@@ -1276,14 +1546,14 @@
                   "    const pk = sd['ids:publicKey'];",
                   "    pm.expect(pk).to.exist;",
                   "    pm.expect(pk['ids:keyValue']).to.exist;",
-                  "    console.log('✅ ids:publicKey presente — certificado DAPS cargado correctamente');",
+                  "    console.log('\u2705 ids:publicKey presente \u2014 certificado DAPS cargado correctamente');",
                   "    console.log('   keyType:', (pk['ids:keyType'] || {})['@id'] || '?');",
                   "});",
                   "",
                   "pm.test('Self-description tiene ids:securityProfile', () => {",
                   "    const sd = pm.response.json();",
                   "    pm.expect(sd['ids:securityProfile']).to.exist;",
-                  "    console.log('✅ securityProfile:', sd['ids:securityProfile']['@id']);",
+                  "    console.log('\u2705 securityProfile:', sd['ids:securityProfile']['@id']);",
                   "});"
                 ]
               }
@@ -1305,7 +1575,7 @@
                 "self-description"
               ]
             },
-            "description": "Verifica que el coordinator (worker2) también obtiene token DAT correctamente desde DAPS."
+            "description": "Verifica que el coordinator (worker2) tambi\u00e9n obtiene token DAT correctamente desde DAPS."
           },
           "event": [
             {
@@ -1319,14 +1589,14 @@
                   "    const sd = pm.response.json();",
                   "    pm.expect(sd['ids:publicKey']).to.exist;",
                   "    pm.expect(sd['ids:publicKey']['ids:keyValue']).to.exist;",
-                  "    console.log('✅ Coordinator DAPS publicKey presente');",
+                  "    console.log('\u2705 Coordinator DAPS publicKey presente');",
                   "    pm.environment.set('w2_connector_uri', sd['@id']);",
                   "});",
                   "",
-                  "pm.test('outboundModelVersion presente (token DAPS válido al arrancar)', () => {",
+                  "pm.test('outboundModelVersion presente (token DAPS v\u00e1lido al arrancar)', () => {",
                   "    const sd = pm.response.json();",
                   "    pm.expect(sd['ids:outboundModelVersion']).to.exist;",
-                  "    console.log('✅ outboundModelVersion:', sd['ids:outboundModelVersion']);",
+                  "    console.log('\u2705 outboundModelVersion:', sd['ids:outboundModelVersion']);",
                   "});"
                 ]
               }
@@ -1334,7 +1604,7 @@
           ]
         },
         {
-          "name": "DAPS-3: IDS Message Worker1→Worker2 con token DAT real (DescriptionRequest)",
+          "name": "DAPS-3: IDS Message Worker1\u2192Worker2 con token DAT real (DescriptionRequest)",
           "request": {
             "method": "POST",
             "header": [],
@@ -1353,7 +1623,7 @@
                 "{{Proxy_Endpoint}}"
               ]
             },
-            "description": "Envía un DescriptionRequestMessage desde worker1 hacia worker2 a través del ECC. El ECC valida el token DAT del emisor contra DAPS antes de reenviar. Si DAPS no funciona, el ECC rechaza con 403/token invalid. Un 200 con self-description confirma que DAPS valida los tokens correctamente end-to-end."
+            "description": "Env\u00eda un DescriptionRequestMessage desde worker1 hacia worker2 a trav\u00e9s del ECC. El ECC valida el token DAT del emisor contra DAPS antes de reenviar. Si DAPS no funciona, el ECC rechaza con 403/token invalid. Un 200 con self-description confirma que DAPS valida los tokens correctamente end-to-end."
           },
           "event": [
             {
@@ -1361,13 +1631,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 — ECC aceptó el token DAT (DAPS OK)', () => pm.response.to.have.status(200));",
+                  "pm.test('Status 200 \u2014 ECC acept\u00f3 el token DAT (DAPS OK)', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('Respuesta contiene self-description IDS válida', () => {",
+                  "pm.test('Respuesta contiene self-description IDS v\u00e1lida', () => {",
                   "    const body = pm.response.json();",
                   "    pm.expect(body['@type']).to.exist;",
                   "    pm.expect(body['@id']).to.exist;",
-                  "    console.log('✅ DAPS end-to-end OK — ECC worker2 aceptó token DAT de worker1');",
+                  "    console.log('\u2705 DAPS end-to-end OK \u2014 ECC worker2 acept\u00f3 token DAT de worker1');",
                   "    console.log('   @type:', body['@type']);",
                   "    console.log('   @id  :', body['@id']);",
                   "});",
@@ -1376,15 +1646,15 @@
                   "    const body = pm.response.json();",
                   "    pm.expect(body['ids:resourceCatalog']).to.exist;",
                   "    pm.expect(body['ids:resourceCatalog'].length).to.be.above(0);",
-                  "    console.log('✅ resourceCatalog presente —', body['ids:resourceCatalog'].length, 'catálogo(s)');",
+                  "    console.log('\u2705 resourceCatalog presente \u2014', body['ids:resourceCatalog'].length, 'cat\u00e1logo(s)');",
                   "});",
                   "",
                   "pm.test('ids:securityToken presente en la respuesta IDS (DAT en uso)', () => {",
                   "    // El header IDS de respuesta debe incluir securityToken emitido por DAPS",
                   "    const body = pm.response.json();",
-                  "    // La respuesta es el payload (self-description), no el header IDS —",
-                  "    // si llegamos aquí sin 401/403 es porque el token fue validado por el ECC.",
-                  "    console.log('✅ Request completada sin rechazo de token — DAPS funciona correctamente');",
+                  "    // La respuesta es el payload (self-description), no el header IDS \u2014",
+                  "    // si llegamos aqu\u00ed sin 401/403 es porque el token fue validado por el ECC.",
+                  "    console.log('\u2705 Request completada sin rechazo de token \u2014 DAPS funciona correctamente');",
                   "});"
                 ]
               }
@@ -1392,7 +1662,7 @@
           ]
         },
         {
-          "name": "DAPS-4: Verificar que Worker4 también tiene token DAT válido",
+          "name": "DAPS-4: Verificar que Worker4 tambi\u00e9n tiene token DAT v\u00e1lido",
           "request": {
             "method": "GET",
             "header": [],
@@ -1406,7 +1676,7 @@
                 "self-description"
               ]
             },
-            "description": "Verifica que worker4 (el que no participa en FL) también obtiene token DAT correcto. Confirma que el problema de worker4 es de política FL (FL_AUTHORIZED_URIS), no de DAPS."
+            "description": "Verifica que worker4 (el que no participa en FL) tambi\u00e9n obtiene token DAT correcto. Confirma que el problema de worker4 es de pol\u00edtica FL (FL_AUTHORIZED_URIS), no de DAPS."
           },
           "event": [
             {
@@ -1414,12 +1684,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 — worker4 activo y DAPS OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Status 200 \u2014 worker4 activo y DAPS OK', () => pm.response.to.have.status(200));",
                   "",
                   "pm.test('Worker4 tiene ids:publicKey DAPS (certificado cargado)', () => {",
                   "    const sd = pm.response.json();",
                   "    pm.expect(sd['ids:publicKey']).to.exist;",
-                  "    console.log('✅ Worker4 DAPS publicKey presente — DAPS funciona para todos los workers');",
+                  "    console.log('\u2705 Worker4 DAPS publicKey presente \u2014 DAPS funciona para todos los workers');",
                   "    pm.environment.set('w4_connector_uri', sd['@id']);",
                   "    console.log('   Worker4 URI:', sd['@id']);",
                   "});",
@@ -1427,7 +1697,7 @@
                   "pm.test('Worker4 URI contiene worker4 (identidad IDS correcta)', () => {",
                   "    const sd = pm.response.json();",
                   "    pm.expect(sd['@id']).to.include('worker4');",
-                  "    console.log('✅ Identidad IDS worker4 correcta:', sd['@id']);",
+                  "    console.log('\u2705 Identidad IDS worker4 correcta:', sd['@id']);",
                   "});"
                 ]
               }
@@ -1456,7 +1726,7 @@
                 ""
               ]
             },
-            "description": "Accede directamente a la API interna del ECC (puerto 8449) del coordinator para confirmar que el ECC tiene la self-description actualizada. Este puerto solo es accesible localmente. Confirma que el ECC tiene DAPS configurado y la self-description es válida."
+            "description": "Accede directamente a la API interna del ECC (puerto 8449) del coordinator para confirmar que el ECC tiene la self-description actualizada. Este puerto solo es accesible localmente. Confirma que el ECC tiene DAPS configurado y la self-description es v\u00e1lida."
           },
           "event": [
             {
@@ -1480,12 +1750,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 — ECC API accesible (DAPS cargado)', () => pm.response.to.have.status(200));",
+                  "pm.test('Status 200 \u2014 ECC API accesible (DAPS cargado)', () => pm.response.to.have.status(200));",
                   "",
                   "pm.test('ECC devuelve self-description con @id', () => {",
                   "    const sd = pm.response.json();",
                   "    pm.expect(sd['@id']).to.exist;",
-                  "    console.log('✅ ECC self-description OK:', sd['@id']);",
+                  "    console.log('\u2705 ECC self-description OK:', sd['@id']);",
                   "});"
                 ]
               }
@@ -1534,14 +1804,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 — Fuseki SPARQL responde', () => pm.response.to.have.status(200));",
+                  "pm.test('Status 200 \u2014 Fuseki SPARQL responde', () => pm.response.to.have.status(200));",
                   "",
                   "pm.test('Al menos 3 conectores registrados en el broker', () => {",
                   "    const body = pm.response.json();",
                   "    const bindings = body.results.bindings;",
                   "    pm.expect(bindings.length).to.be.above(0);",
                   "    const count = parseInt(bindings[0].n.value);",
-                  "    console.log('✅ Conectores registrados en Fuseki:', count);",
+                  "    console.log('\u2705 Conectores registrados en Fuseki:', count);",
                   "    pm.expect(count).to.be.at.least(3, 'Debe haber al menos worker1, worker2 y worker3 registrados');",
                   "    pm.environment.set('broker_connector_count', count);",
                   "});"
@@ -1579,7 +1849,7 @@
                 "sparql"
               ]
             },
-            "description": "Lista todos los conectores IDS registrados con sus endpoints. Verifica que los URIs y endpoints corresponden a worker1/2/3 y que ningún conector tiene endpoint vacío."
+            "description": "Lista todos los conectores IDS registrados con sus endpoints. Verifica que los URIs y endpoints corresponden a worker1/2/3 y que ning\u00fan conector tiene endpoint vac\u00edo."
           },
           "event": [
             {
@@ -1604,7 +1874,7 @@
                   "    connectors.forEach(c => {",
                   "        const ok = c.endpoint !== '(sin endpoint)';",
                   "        if (!ok) sinEndpoint++;",
-                  "        console.log(ok ? '  ✅' : '  ⚠️ ', c.uri, '→', c.endpoint);",
+                  "        console.log(ok ? '  \u2705' : '  \u26a0\ufe0f ', c.uri, '\u2192', c.endpoint);",
                   "    });",
                   "",
                   "    pm.expect(sinEndpoint).to.equal(0, 'Todos los conectores deben tener endpoint');",
@@ -1619,7 +1889,7 @@
                   "    const requiredWorkers = ['worker1', 'worker2', 'worker3'];",
                   "    requiredWorkers.forEach(w => {",
                   "        const found = uris.some(u => u.includes(w));",
-                  "        console.log(found ? '  ✅' : '  ❌', w, found ? 'registrado' : 'NO encontrado');",
+                  "        console.log(found ? '  \u2705' : '  \u274c', w, found ? 'registrado' : 'NO encontrado');",
                   "        pm.expect(found).to.be.true;",
                   "    });",
                   "});"
@@ -1671,9 +1941,9 @@
                   "    const body = pm.response.json();",
                   "    const count = parseInt(body.results.bindings[0].n.value);",
                   "    console.log('Total triples en Fuseki:', count);",
-                  "    pm.expect(count).to.be.above(50, 'Menos de 50 triples — los conectores no se registraron correctamente');",
-                  "    if (count > 500) console.log('✅ Fuseki bien poblado — self-descriptions completas');",
-                  "    else if (count > 50) console.log('✅ Fuseki con datos suficientes');",
+                  "    pm.expect(count).to.be.above(50, 'Menos de 50 triples \u2014 los conectores no se registraron correctamente');",
+                  "    if (count > 500) console.log('\u2705 Fuseki bien poblado \u2014 self-descriptions completas');",
+                  "    else if (count > 50) console.log('\u2705 Fuseki con datos suficientes');",
                   "    pm.environment.set('broker_triple_count', count);",
                   "});"
                 ]
@@ -1701,7 +1971,7 @@
                 "{{Proxy_Endpoint}}"
               ]
             },
-            "description": "Envía un ConnectorUpdateMessage desde worker1 hacia el broker para registrar/actualizar su self-description. Útil para verificar que el flujo de registro IDS funciona. El broker responde con MessageProcessedNotificationMessage si todo está bien."
+            "description": "Env\u00eda un ConnectorUpdateMessage desde worker1 hacia el broker para registrar/actualizar su self-description. \u00datil para verificar que el flujo de registro IDS funciona. El broker responde con MessageProcessedNotificationMessage si todo est\u00e1 bien."
           },
           "event": [
             {
@@ -1709,15 +1979,15 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 — Broker aceptó el mensaje IDS', () => pm.response.to.have.status(200));",
+                  "pm.test('Status 200 \u2014 Broker acept\u00f3 el mensaje IDS', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('Broker respondió con MessageProcessedNotification o RegistrationMessage', () => {",
+                  "pm.test('Broker respondi\u00f3 con MessageProcessedNotification o RegistrationMessage', () => {",
                   "    const body = pm.response.json();",
                   "    const tipo = body['@type'] || '';",
                   "    const ok = tipo.includes('MessageProcessedNotification') || tipo.includes('ConnectorUpdate') || tipo.includes('RegistrationMessage');",
                   "    console.log('Tipo respuesta broker:', tipo);",
                   "    pm.expect(ok).to.be.true;",
-                  "    console.log('✅ Broker procesó el registro de worker1 correctamente');",
+                  "    console.log('\u2705 Broker proces\u00f3 el registro de worker1 correctamente');",
                   "});"
                 ]
               }
@@ -1753,18 +2023,18 @@
                   "    const body = pm.response.json();",
                   "    pm.expect(body.count).to.be.above(0);",
                   "    pm.expect(body.connectors).to.be.an('array');",
-                  "    console.log('✅ DataApp→Broker OK —', body.count, 'conector(es) visible(s)');",
+                  "    console.log('\u2705 DataApp\u2192Broker OK \u2014', body.count, 'conector(es) visible(s)');",
                   "    body.connectors.forEach(c => {",
-                  "        console.log('  •', c.connector_uri, '| endpoint:', c.endpoint || '(none)');",
+                  "        console.log('  \u2022', c.connector_uri, '| endpoint:', c.endpoint || '(none)');",
                   "    });",
                   "});",
                   "",
-                  "pm.test('Conectores tienen connector_uri válida (w3id.org/engrd)', () => {",
+                  "pm.test('Conectores tienen connector_uri v\u00e1lida (w3id.org/engrd)', () => {",
                   "    const body = pm.response.json();",
                   "    body.connectors.forEach(c => {",
                   "        pm.expect(c.connector_uri).to.include('connector');",
                   "    });",
-                  "    console.log('✅ Todas las URIs son URIs IDS válidas');",
+                  "    console.log('\u2705 Todas las URIs son URIs IDS v\u00e1lidas');",
                   "});"
                 ]
               }
@@ -1772,7 +2042,7 @@
           ]
         },
         {
-          "name": "BROKER-6: Broker QueryMessage (búsqueda IDS nativa)",
+          "name": "BROKER-6: Broker QueryMessage (b\u00fasqueda IDS nativa)",
           "request": {
             "method": "POST",
             "header": [],
@@ -1791,7 +2061,7 @@
                 "{{Proxy_Endpoint}}"
               ]
             },
-            "description": "Envía un QueryMessage IDS al broker para buscar conectores mediante el protocolo nativo IDS (no SPARQL directo). Verifica que el broker responde correctamente al protocolo de mensajería IDS."
+            "description": "Env\u00eda un QueryMessage IDS al broker para buscar conectores mediante el protocolo nativo IDS (no SPARQL directo). Verifica que el broker responde correctamente al protocolo de mensajer\u00eda IDS."
           },
           "event": [
             {
@@ -1799,13 +2069,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 — Broker responde al QueryMessage IDS', () => pm.response.to.have.status(200));",
+                  "pm.test('Status 200 \u2014 Broker responde al QueryMessage IDS', () => pm.response.to.have.status(200));",
                   "",
                   "pm.test('Respuesta contiene conectores o ResultMessage', () => {",
                   "    const raw = pm.response.text();",
                   "    const hasResult = raw.includes('connector') || raw.includes('ResultMessage') || raw.includes('@type');",
                   "    pm.expect(hasResult).to.be.true;",
-                  "    console.log('✅ Broker QueryMessage respondido correctamente');",
+                  "    console.log('\u2705 Broker QueryMessage respondido correctamente');",
                   "    console.log('   Respuesta (150 chars):', raw.substring(0, 150));",
                   "});"
                 ]
@@ -1814,7 +2084,7 @@
           ]
         },
         {
-          "name": "BROKER-7: Cruzar broker vs DataApp — coherencia de registros",
+          "name": "BROKER-7: Cruzar broker vs DataApp \u2014 coherencia de registros",
           "request": {
             "method": "POST",
             "header": [
@@ -1842,7 +2112,7 @@
                 "sparql"
               ]
             },
-            "description": "Consulta Fuseki y cruza los resultados con la lista de accepted_workers del paso 5c. Verifica coherencia entre lo que el broker conoce y lo que el coordinator aceptó en la negociación FL."
+            "description": "Consulta Fuseki y cruza los resultados con la lista de accepted_workers del paso 5c. Verifica coherencia entre lo que el broker conoce y lo que el coordinator acept\u00f3 en la negociaci\u00f3n FL."
           },
           "event": [
             {
@@ -1852,7 +2122,7 @@
                 "exec": [
                   "pm.test('Status 200', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('Coherencia broker ↔ accepted_workers (paso 5c)', () => {",
+                  "pm.test('Coherencia broker \u2194 accepted_workers (paso 5c)', () => {",
                   "    const body = pm.response.json();",
                   "    const brokerUris = body.results.bindings.map(b => b.connector.value);",
                   "",
@@ -1861,28 +2131,28 @@
                   "    const acceptedUris = accepted.map(w => w.connector_uri || '');",
                   "",
                   "    if (acceptedUris.length === 0) {",
-                  "        console.log('⚠️  accepted_workers vacío — ejecuta paso 5c primero');",
+                  "        console.log('\u26a0\ufe0f  accepted_workers vac\u00edo \u2014 ejecuta paso 5c primero');",
                   "        return;",
                   "    }",
                   "",
                   "    console.log('Broker tiene', brokerUris.length, 'conector(es)');",
-                  "    console.log('Paso 5c aceptó', acceptedUris.length, 'worker(s)');",
+                  "    console.log('Paso 5c acept\u00f3', acceptedUris.length, 'worker(s)');",
                   "",
                   "    acceptedUris.forEach(uri => {",
                   "        const inBroker = brokerUris.some(b => b === uri || b.includes(uri) || uri.includes(b));",
-                  "        console.log(inBroker ? '  ✅' : '  ⚠️ ', uri, inBroker ? '→ en broker' : '→ NO en broker');",
+                  "        console.log(inBroker ? '  \u2705' : '  \u26a0\ufe0f ', uri, inBroker ? '\u2192 en broker' : '\u2192 NO en broker');",
                   "    });",
                   "",
                   "    pm.expect(brokerUris.length).to.be.at.least(acceptedUris.length,",
                   "        'El broker debe tener al menos tantos conectores como los aceptados en 5c');",
                   "});",
                   "",
-                  "pm.test('Worker4 está o no está — documentar estado', () => {",
+                  "pm.test('Worker4 est\u00e1 o no est\u00e1 \u2014 documentar estado', () => {",
                   "    const body = pm.response.json();",
                   "    const uris = body.results.bindings.map(b => b.connector.value);",
                   "    const w4inBroker = uris.some(u => u.includes('worker4'));",
-                  "    console.log('Worker4 en broker:', w4inBroker ? '✅ SÍ (registrado pero excluido por política FL)' : '⚠️  NO registrado');",
-                  "    // No es un fallo — worker4 puede o no estar registrado",
+                  "    console.log('Worker4 en broker:', w4inBroker ? '\u2705 S\u00cd (registrado pero excluido por pol\u00edtica FL)' : '\u26a0\ufe0f  NO registrado');",
+                  "    // No es un fallo \u2014 worker4 puede o no estar registrado",
                   "});"
                 ]
               }

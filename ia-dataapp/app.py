@@ -203,6 +203,35 @@ async def _startup_identity_log():
         log.info("  FL_OPT_OUT      : False (Participará en entrenamientos FL válidos).")
     log.info("=" * 60)
 
+    # Publicar datasets automáticamente dando tiempo al ECC a arrancar
+    import asyncio
+    asyncio.create_task(_delay_publish_datasets())
+
+async def _delay_publish_datasets():
+    import asyncio
+    import requests
+    from requests.auth import HTTPBasicAuth
+    
+    ecc_base = f"https://{ECC_HOSTNAME}:8449"
+    basic_api = HTTPBasicAuth(API_USER, API_PASS)
+    max_retries = 15
+    
+    log.info("[startup] Esperando a que el ECC inicie para publicar datasets...")
+    for i in range(max_retries):
+        await asyncio.sleep(5)
+        try:
+            # PING al catalog_id
+            res = requests.get(f"{ecc_base}/api/selfDescription/", verify=False, auth=basic_api, timeout=5)
+            if res.status_code == 200:
+                log.info(f"[startup] ECC levantado (intento {i+1}). Publicando datasets locales...")
+                _publish_local_csvs()
+                return
+        except Exception:
+            pass
+            
+    log.error("[startup] Error: El ECC no arrancó a tiempo. Datasets no publicados.")
+
+
 
 # =============================================================================
 # Utilidades IDS
@@ -1142,7 +1171,7 @@ def _publish_fl_model_as_ids_resource(
 
 def _get_all_local_csvs() -> list:
     """
-    Devuelve [{filename, path, columns}] para todos los CSV disponibles en INPUT_DIR.
+    Devuelve [{filename, path, columns, rows, size_mb}] para todos los CSV disponibles en INPUT_DIR.
     Se usa tanto en el endpoint /dataset/all-columns como en el discovery del coordinator.
     """
     try:
@@ -1152,10 +1181,22 @@ def _get_all_local_csvs() -> list:
         for fname in files:
             fpath = os.path.join(INPUT_DIR, fname)
             try:
+                size_mb = os.path.getsize(fpath) / (1024 * 1024)
                 df   = pd.read_csv(fpath, nrows=0, low_memory=False)
                 cols = [c.lower().strip() for c in df.columns]
-                result.append({"filename": fname, "path": fpath, "columns": cols})
-                log.info(f"[dataset] {fname}: {len(cols)} columnas")
+                
+                # Fast row count
+                with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                    rows = sum(1 for _ in f) - 1
+                    
+                result.append({
+                    "filename": fname, 
+                    "path": fpath, 
+                    "columns": cols,
+                    "rows": max(0, rows),
+                    "size_mb": round(size_mb, 2)
+                })
+                log.info(f"[dataset] {fname}: {len(cols)} columnas, {max(0, rows)} filas, {round(size_mb, 2)} MB")
             except Exception as e:
                 log.warning(f"[dataset] No se pudo leer {fname}: {e}")
         return result
@@ -1333,58 +1374,60 @@ def _get_registered_connectors() -> list:
 
 def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
     """
-    Escanea TODOS los CSVs del peer via /dataset/all-columns y elige el
-    que mayor coincidencia de columnas tenga con my_set.
+    Escanea TODOS los recursos del catálogo IDS del peer y extrae
+    su esquema semántico (CSV metadata representation) para elegir
+    el que mayor coincidencia tenga con my_set.
 
     Devuelve (best_cols, real_uri, best_filename, best_ratio).
     """
     real_uri = connector_uri
+    desc = {}
     try:
-        # ── Obtener real_uri via IDS DescriptionRequestMessage ────────────────
+        # ── Obtener Catálogo del Peer via IDS DescriptionRequestMessage ─────────
         try:
             desc     = _ids_send(ecc_url, connector_uri, "ids:DescriptionRequestMessage")
             real_uri = desc.get("@id", "") or connector_uri
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning(f"[broker-discover] Error al pedir el catálogo a {ecc_url}: {e}")
 
-        # ── Obtener lista completa de CSVs del peer ───────────────────────────
+        # ── Obtener lista completa de CSVs a través del Information Model ───────
         import re as _re
         all_csvs = []
-        m = _re.search(r"ecc-worker(\d+)", ecc_url)
-        if m:
-            wid = m.group(1)
-            try:
-                r = requests.get(
-                    f"https://be-dataapp-worker{wid}:8500/dataset/all-columns",
-                    verify=False, timeout=8,
-                )
-                if r.ok:
-                    all_csvs = r.json()  # [{filename, columns, count}]
-                    log.info(
-                        f"[broker-discover] {real_uri} — "
-                        f"{len(all_csvs)} CSV(s) disponibles para evaluar"
-                    )
-            except Exception as e:
-                log.warning(f"[broker-discover] /dataset/all-columns falló para {ecc_url}: {e}")
+        
+        catalogs = desc.get("ids:resourceCatalog", [])
+        for cat in catalogs:
+            resources = cat.get("ids:offeredResource", [])
+            for res in resources:
+                meta_id = None
+                # Buscamos la representación semántica que contenga "meta_"
+                for rep in res.get("ids:representation", []):
+                    rep_uri = rep.get("@id", "")
+                    if "meta_" in rep_uri:
+                        meta_id = rep_uri
+                        
+                        # El catálogo base del TrueConnector ya incluye recursivamente las representaciones y sus descripciones
+                        try:
+                            desc_texts = rep.get("ids:description", [])
+                            if desc_texts:
+                                full_desc = desc_texts[0].get("@value", "")
+                                # Extraemos usando Regex del texto semántico libre
+                                m_n = _re.search(r"[-:]? Nombre de Fichero:\s*(.+?)\n", full_desc)
+                                m_c = _re.search(r"[-:]? Nombres de Columnas:\s*(.+)", full_desc)
+                                if m_n and m_c:
+                                    fname = m_n.group(1).strip()
+                                    cols_str = m_c.group(1).strip()
+                                    cols_list = [c.strip() for c in cols_str.split(",") if c.strip()]
+                                    all_csvs.append({"filename": fname, "columns": cols_list})
+                        except Exception as e:
+                            log.warning(f"[broker-discover] Error parseando MetadataRepresentation {meta_id}: {e}")
+                            
+                        break
 
-            # Fallback: endpoint antiguo /dataset/columns (un solo CSV)
-            if not all_csvs:
-                try:
-                    r = requests.get(
-                        f"https://be-dataapp-worker{wid}:8500/dataset/columns",
-                        verify=False, timeout=5,
-                    )
-                    if r.ok:
-                        data  = r.json()
-                        cols  = data.get("columns", [])
-                        fname = data.get("filename", "dataset.csv")
-                        all_csvs = [{"filename": fname, "columns": cols}]
-                except Exception:
-                    pass
+        log.info(f"[broker-discover] {real_uri} — {len(all_csvs)} CSV(s) descubiertos en catálogo IDS")
 
         if not all_csvs:
             log.warning(f"[broker-discover] No se pudo obtener ningún CSV de {real_uri}")
-            return [], real_uri, None, 0.0
+            return [], real_uri, None, 0.0, None, []
 
         # ── Evaluar cada CSV y elegir el de mayor match_ratio ─────────────────
         best_cols, best_filename, best_ratio = [], None, 0.0
@@ -1470,7 +1513,7 @@ def _ecc_url_from_connector_uri(connector_uri: str, endpoint: str) -> str:
     return ""
 
 
-MATCH_THRESHOLD = 0.95  # 95% de coincidencia mínima de columnas
+MATCH_THRESHOLD = 0.80  # 80% de coincidencia mínima de columnas
 
 
 def _discover_compatible_workers(my_columns: list) -> list:
@@ -2201,39 +2244,37 @@ async def fl_fetch_algorithm(request: Request):
     source_ecc_url       = body.get("source_ecc_url", "")
     source_connector_uri = body.get("source_connector_uri", "")
 
-    # ── MODO DEFAULT: IDS self-fetch (sin intermediario externo) ─────────────
-    # Si no se especifica source_ecc_url, el coordinator construye la URL de
-    # su propio ECC y ejecuta el handshake IDS completo contra él:
-    #   DescriptionRequestMessage → ContractRequestMessage
-    #   → ContractAgreementMessage → ArtifactRequestMessage
-    # El ECC reenvía cada mensaje al /data del propio DataApp, que actúa en
-    # "modo fuente" y sirve el algorithm.py + fl_config.json baked.
-    # run_in_executor libera el event loop para que /data pueda responder
-    # concurrentemente → no hay deadlock.
+    global is_coordinator
+    
+    # ── MODO NATIVO: Inicialización Local del Coordinator ────────────────────
+    # Si no se especifica source_ecc_url, significa que este worker es el
+    # dueño del algoritmo y quiere asumir el rol de coordinador.
+    # No usamos IDS "self-fetch" porque los ficheros ya viven en su disco.
     if not source_ecc_url:
-        source_ecc_url       = f"https://{ECC_HOSTNAME}:8889/data"
-        source_connector_uri = CONNECTOR_URI
+        log.info(f"[/fl/fetch-algorithm] Coordinator nativo asumiendo rol. Cargando ficheros locales.")
+        import shutil
+        if os.path.exists(ALGO_BAKED_PATH) and ALGO_BAKED_PATH != ALGO_IDS_PATH:
+            shutil.copy(ALGO_BAKED_PATH, ALGO_IDS_PATH)
+            
+        CONFIG_BAKED = "/app/fl_config.json"
+        if os.path.exists(CONFIG_BAKED) and CONFIG_BAKED != CONFIG_PATH:
+            shutil.copy(CONFIG_BAKED, CONFIG_PATH)
+        
+        is_coordinator = True
+        success = True
+        source_ecc_url = "local_filesystem"
+    else:
+        # ── MODO IDS: Fetch desde otro conector (Si fuera necesario) ─────────
         log.info(
-            f"[/fl/fetch-algorithm] IDS self-fetch — coordinator actúa como consumer Y provider\n"
-            f"  source_ecc_url : {source_ecc_url}\n"
-            f"  connector_uri  : {source_connector_uri}"
+            f"[/fl/fetch-algorithm] Iniciando fetch vía IDS —\n"
+            f"  source_ecc_url       : {source_ecc_url}\n"
+            f"  source_connector_uri : {source_connector_uri}"
         )
-
-    # ── Handshake IDS (self-fetch o externo) ─────────────────────────────────
-    # Ejecutar en thread pool para liberar el event loop:
-    #   el ECC necesita llamar de vuelta a /data (o al ECC externo),
-    #   y ese handler debe poder ejecutarse concurrentemente.
-    log.info(
-        f"[/fl/fetch-algorithm] Iniciando fetch —\n"
-        f"  source_ecc_url       : {source_ecc_url}\n"
-        f"  source_connector_uri : {source_connector_uri}"
-    )
-
-    import asyncio
-    loop = asyncio.get_event_loop()
-    success = await loop.run_in_executor(
-        None, _fetch_algorithm_from_ecc, source_ecc_url, source_connector_uri
-    )
+        import asyncio
+        loop = asyncio.get_event_loop()
+        success = await loop.run_in_executor(
+            None, _fetch_algorithm_from_ecc, source_ecc_url, source_connector_uri
+        )
 
     if success:
         cfg = _load_fl_config()
@@ -2359,43 +2400,7 @@ async def fl_start(request: Request):
     )
 
 
-@app.get("/dataset/columns")
-def dataset_columns():
-    try:
-        import pandas as pd
-        csv = _csv_path()
-        df  = pd.read_csv(csv, nrows=0, low_memory=False)
-        cols = [c.lower().strip() for c in df.columns]
-        return {
-            "instance" : INSTANCE_ID,
-            "filename" : os.path.basename(csv),
-            "columns"  : cols,
-            "count"    : len(cols),
-        }
-    except FileNotFoundError:
-        return JSONResponse(status_code=404, content={"error": "CSV no encontrado"})
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
 
-
-@app.get("/dataset/all-columns")
-def dataset_all_columns():
-    """
-    Devuelve la lista de TODOS los CSVs disponibles en INPUT_DIR con sus columnas.
-    El coordinator usa este endpoint durante el descubrimiento (FASE 2) para
-    evaluar qué CSV del peer tiene mayor coincidencia de columnas y elegir el
-    más adecuado para federated learning (umbral 95%).
-    """
-    csvs = _get_all_local_csvs()
-    if not csvs:
-        return JSONResponse(
-            status_code=404,
-            content={"error": f"No hay CSVs en {INPUT_DIR}"}
-        )
-    return [
-        {"filename": c["filename"], "columns": c["columns"], "count": len(c["columns"])}
-        for c in csvs
-    ]
 
 
 @app.get("/dataset/llm-recommend")
@@ -2435,6 +2440,150 @@ def dataset_llm_recommend():
         "confidence": rec["confidence"],
         "all_candidates": [c["filename"] for c in candidates]
     }
+
+
+def _publish_local_csvs() -> dict:
+    """Registra todos los CSVs locales como recursos en el catálogo del worker."""
+    from requests.auth import HTTPBasicAuth
+    
+    basic_api = HTTPBasicAuth(API_USER, API_PASS)
+    ecc_base  = f"https://{ECC_HOSTNAME}:8449"
+    csvs = _get_all_local_csvs()
+    
+    if not csvs:
+        return {"error": "No hay CSVs locales para publicar"}
+        
+    try:
+        sd = requests.get(f"{ecc_base}/api/selfDescription/", verify=False, auth=basic_api, timeout=10).json()
+        catalogs = sd.get("ids:resourceCatalog", [])
+        if not catalogs:
+            return {"error": "No se encontró ningún resourceCatalog en el ECC"}
+        catalog_id = catalogs[0].get("@id", "")
+    except Exception as e:
+        return {"error": f"Error obteniendo catálogo: {e}"}
+
+    published = []
+    
+    for c in csvs:
+        fname = c["filename"]
+        try:
+            # 1. Resource
+            import uuid
+            import datetime
+            ts = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            resource_id = f"https://w3id.org/idsa/autogen/textResource/dataset_{uuid.uuid4()}"
+            artifact_id = f"http://w3id.org/engrd/connector/artifact/dataset_{fname}"
+            
+            res_body = {
+                "@context": {"ids": "https://w3id.org/idsa/core/", "idsc": "https://w3id.org/idsa/code/"},
+                "@id": resource_id,
+                "@type": "ids:TextResource",
+                "ids:title": [{"@value": f"Dataset: {fname}", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
+                "ids:description": [{"@value": f"Dataset CSV con {len(c['columns'])} columnas para Federated Learning.", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
+                "ids:keyword": [{"@value": "dataset", "@type": "http://www.w3.org/2001/XMLSchema#string"}, {"@value": "csv", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
+                "ids:language": [{"@id": "https://w3id.org/idsa/code/EN"}],
+                "ids:version": "1.0.0",
+                "ids:contentType": {"@id": "https://w3id.org/idsa/code/SCHEMA_DEFINITION"}
+            }
+            resp_res = requests.post(f"{ecc_base}/api/offeredResource/", headers={"catalog": catalog_id, "Content-Type": "application/json"}, json=res_body, verify=False, auth=basic_api, timeout=10)
+            
+            # 2. Representation: Metadata
+            metadata_repr_id = f"https://w3id.org/idsa/autogen/representation/meta_{uuid.uuid4()}"
+            cols_str = ", ".join(c["columns"])
+            metadata_desc = (
+                f"Información exhaustiva del Dataset para evaluación IA/Ollama:\n"
+                f"- Nombre de Fichero: {fname}\n"
+                f"- Número Total de Filas (Registros): {c.get('rows', 'Desconocido')}\n"
+                f"- Tamaño en Disco: {c.get('size_mb', '0')} MB\n"
+                f"- Total de Columnas (Features): {len(c['columns'])}\n"
+                f"- Nombres de Columnas: {cols_str}"
+            )
+            meta_body = {
+                "@context": {"ids": "https://w3id.org/idsa/core/", "idsc": "https://w3id.org/idsa/code/"},
+                "@id": metadata_repr_id,
+                "@type": "ids:TextRepresentation",
+                "ids:title": [{"@value": "Metadata Representation (Schema & Stats)", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
+                "ids:description": [{"@value": metadata_desc, "@type": "http://www.w3.org/2001/XMLSchema#string"}],
+                "ids:mediaType": {"@id": "https://w3id.org/idsa/code/JSON"},
+                "ids:instance": [{
+                    "@type": "ids:Artifact",
+                    "@id": f"http://w3id.org/engrd/connector/artifact/metadata_{fname}",
+                    "ids:fileName": f"{fname}_metadata.json",
+                    "ids:creationDate": {"@value": ts, "@type": "http://www.w3.org/2001/XMLSchema#dateTimeStamp"}
+                }]
+            }
+            requests.post(f"{ecc_base}/api/representation/", headers={"resource": resource_id, "Content-Type": "application/json"}, json=meta_body, verify=False, auth=basic_api, timeout=10)
+
+            # 3. Representation: Execution
+            exec_repr_id = f"https://w3id.org/idsa/autogen/representation/exec_{uuid.uuid4()}"
+            exec_body = {
+                "@context": {"ids": "https://w3id.org/idsa/core/", "idsc": "https://w3id.org/idsa/code/"},
+                "@id": exec_repr_id,
+                "@type": "ids:TextRepresentation",
+                "ids:title": [{"@value": "Execution Representation", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
+                "ids:description": [{"@value": "Instancia del dataset en sí para entrenamiento FL", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
+                "ids:mediaType": {"@id": "https://w3id.org/idsa/code/CSV"},
+                "ids:instance": [{
+                    "@type": "ids:Artifact",
+                    "@id": artifact_id,
+                    "ids:fileName": fname,
+                    "ids:creationDate": {"@value": ts, "@type": "http://www.w3.org/2001/XMLSchema#dateTimeStamp"}
+                }]
+            }
+            requests.post(f"{ecc_base}/api/representation/", headers={"resource": resource_id, "Content-Type": "application/json"}, json=exec_body, verify=False, auth=basic_api, timeout=10)
+            
+            # 4. Contract Offer (USE with Constraints)
+            contract_id = f"https://w3id.org/idsa/autogen/contractOffer/dataset_{uuid.uuid4()}"
+            c_body = {
+                "@id": contract_id,
+                "@type": "ids:ContractOffer",
+                "ids:provider": {"@id": CONNECTOR_URI},
+                "ids:permission": [{
+                    "@type": "ids:Permission",
+                    "@id": f"https://w3id.org/idsa/autogen/permission/{uuid.uuid4()}",
+                    "ids:action": [{"@id": "https://w3id.org/idsa/code/USE"}],
+                    "ids:title": [{"@value": "Local FL Training Only", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
+                    "ids:description": [{"@value": "Data strictly restricted for Federated Learning algorithms. No raw data access or transfer allowed.", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
+                    "ids:target": {"@id": artifact_id},
+                    "ids:constraint": [{
+                        "@type": "ids:Constraint",
+                        "@id": f"https://w3id.org/idsa/autogen/constraint/local_only_{uuid.uuid4()}",
+                        "ids:leftOperand": {"@id": "https://w3id.org/idsa/code/PURPOSE"},
+                        "ids:operator": {"@id": "https://w3id.org/idsa/code/SAME_AS"},
+                        "ids:rightOperand": {"@value": "Federated_Learning_Local_Only", "@type": "http://www.w3.org/2001/XMLSchema#string"}
+                    }]
+                }],
+                "ids:obligation": [],
+                "ids:prohibition": [{
+                    "@type": "ids:Prohibition",
+                    "@id": f"https://w3id.org/idsa/autogen/prohibition/no_dist_dataset_{uuid.uuid4()}",
+                    "ids:action": [{"@id": "https://w3id.org/idsa/code/DISTRIBUTE"}],
+                    "ids:target": {"@id": artifact_id}
+                }]
+            }
+            requests.post(f"{ecc_base}/api/contractOffer/", headers={"resource": resource_id, "Content-Type": "application/json"}, json=c_body, verify=False, auth=basic_api, timeout=10)
+            
+            published.append({"filename": fname, "resource_id": resource_id})
+            log.info(f"[publish-datasets] Publicado {fname}: {resource_id}")
+            
+        except Exception as e:
+            log.error(f"[publish-datasets] Error publicando {fname}: {e}")
+            
+    return {"status": "success", "published_count": len(published), "published": published}
+
+
+@app.post("/catalog/publish-datasets")
+async def catalog_publish_datasets():
+    """
+    Endpoint manual para forzar la publicación de los CSVs locales
+    en el catálogo IDS (con las 2 representaciones pedidas).
+    """
+    import asyncio
+    loop = asyncio.get_event_loop()
+    res = await loop.run_in_executor(None, _publish_local_csvs)
+    if "error" in res:
+        return JSONResponse(status_code=500, content=res)
+    return res
 
 
 @app.get("/dataset/info")
