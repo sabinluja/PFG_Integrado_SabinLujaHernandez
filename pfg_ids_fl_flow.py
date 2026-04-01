@@ -266,16 +266,14 @@ def parse_ids(raw, want_type=None):
 def _ecc_internal_url(endpoint_raw, connector_uri):
     """
     Convierte el endpoint publico del broker (puerto 8449 externo)
-    al endpoint interno Docker (puerto 8889 /data).
-    Mapeo: ecc-workerN:8449/api/ids/data  ->  ecc-workerN:8889/data
+    al endpoint interno Docker (puerto 8889 /data — Camel ECC receiver).
+    Mapeo: ecc-workerN:8889/data
     """
     if endpoint_raw:
         m = re.search(r"(ecc-worker\d+):(\d+)", endpoint_raw)
         if m:
             host = m.group(1)
-            port = m.group(2)
-            internal = "8889" if port == "8449" else port
-            return f"https://{host}:{internal}/data"
+            return f"https://{host}:8889/data"
         m2 = re.search(r"(ecc-worker\d+)", endpoint_raw)
         if m2:
             return f"https://{m2.group(1)}:8889/data"
@@ -472,7 +470,7 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
         wid      = m.group(1) if m else "?"
         peer     = endpoints["peers"].get(f"worker{wid}", {})
         ecc      = peer.get("ecc_url") or w.get("ecc_url", "(desconocido)")
-        pl       = peer.get("ecc_label") or f"ecc-worker{wid}:8889"
+        pl       = peer.get("ecc_label") or f"ecc-worker{wid}:8449"
 
         print(f"    {GREEN}OK{RESET}  Worker-{wid}  {GRAY}{uri}{RESET}")
         field("  ECC (broker)", ecc, indent=8)
@@ -868,7 +866,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                     n_exp = len(accepted_wids) + 1
                     total_so_far = 1 + len(already)
                     peer_entry = endpoints["peers"].get(f"worker{wid}", {})
-                    peer_lbl   = peer_entry.get("ecc_label", f"ecc-worker{wid}:8889")
+                    peer_lbl   = peer_entry.get("ecc_label", f"ecc-worker{wid}:8449")
                     print()
                     print(f"    {BOLD}[ronda {rnd_num}] Pesos locales recibidos "
                           f"de worker-{wid}:{RESET}")
@@ -922,7 +920,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                     wid = wid.group(1) if wid else "?"
                     peer_entry = endpoints["peers"].get(f"worker{wid}", {})
                     peer_lbl   = peer_entry.get("ecc_label",
-                                               f"ecc-worker{wid}:8889")
+                                               f"ecc-worker{wid}:8449")
                     _print_handshake_algoritmo(rnd_num, wid, peer_lbl, cid)
                 print()
 
@@ -935,7 +933,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                     wid = wid.group(1) if wid else "?"
                     peer_entry = endpoints["peers"].get(f"worker{wid}", {})
                     peer_lbl   = peer_entry.get("ecc_label",
-                                               f"ecc-worker{wid}:8889")
+                                               f"ecc-worker{wid}:8449")
                     _ids_log("out",
                              f"ids:ArtifactRequestMessage  "
                              f"[fl_global_weights::round{rnd_num}]",
@@ -967,7 +965,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                 total_so_far = 1 + len(already)
                 peer_entry   = endpoints["peers"].get(f"worker{wid}", {})
                 peer_lbl     = peer_entry.get("ecc_label",
-                                             f"ecc-worker{wid}:8889")
+                                             f"ecc-worker{wid}:8449")
                 print()
                 print(f"    {BOLD}[ronda {rnd_num}] Pesos locales recibidos "
                       f"de worker-{wid}:{RESET}")

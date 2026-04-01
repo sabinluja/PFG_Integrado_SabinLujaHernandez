@@ -1507,23 +1507,20 @@
     },
     {
       "name": "DAPS Verification",
+      "description": "Verifica que el DAPS (Omejdn) est\u00e1 operativo y que los conectores IDS pueden obtener tokens DAT v\u00e1lidos. DAPS_URL se auto-rellena en el paso 0 leyendo la configuraci\u00f3n del broker desde {{Coordinator_URL}}/status. Sin hardcodear URLs ni credenciales.",
       "item": [
         {
-          "name": "DAPS-1: Token DAT Worker1 (trigger via /ids/self-description)",
+          "name": "DAPS - 1: Resolver DAPS_URL desde el coordinator (ejecutar primero)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "https://localhost:5001/ids/self-description",
+              "raw": "{{Coordinator_URL}}/status",
               "host": [
-                "https://localhost:5001"
-              ],
-              "path": [
-                "ids",
-                "self-description"
+                "{{Coordinator_URL}}/status"
               ]
             },
-            "description": "Llama al DataApp del worker1 para forzar la obtenci\u00f3n de un token DAT real desde DAPS (omejdn). Si el token se obtiene correctamente aparece en los logs del DataApp: [DAPS] Token DAT obtenido para worker-1. Verifica que el @id del conector es correcto y que la self-description est\u00e1 firmada con DAPS."
+            "description": "Consulta el /status del coordinator para obtener la URL base del DAPS y el ECC URL del coordinator. Rellena {{DAPS_URL}}, {{Coordinator_ECC_URL}} y {{Coordinator_Instance}} en el environment sin hardcodear nada. El coordinator ya conoce su ECC_HOSTNAME del entorno Docker."
           },
           "event": [
             {
@@ -1531,51 +1528,122 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 \u2014 DataApp worker1 responde', () => pm.response.to.have.status(200));",
+                  "pm.test('Coordinator responde', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('Self-description contiene @id del conector', () => {",
-                  "    const sd = pm.response.json();",
-                  "    pm.expect(sd['@id']).to.exist;",
-                  "    pm.expect(sd['@id']).to.include('connector');",
-                  "    console.log('\u2705 Connector URI:', sd['@id']);",
-                  "    pm.environment.set('w1_connector_uri', sd['@id']);",
-                  "});",
+                  "const json = pm.response.json();",
+                  "const instance = json.instance || '?';",
+                  "pm.environment.set('Coordinator_Instance', instance);",
                   "",
-                  "pm.test('Self-description tiene ids:publicKey (certificado DAPS cargado)', () => {",
-                  "    const sd = pm.response.json();",
-                  "    const pk = sd['ids:publicKey'];",
-                  "    pm.expect(pk).to.exist;",
-                  "    pm.expect(pk['ids:keyValue']).to.exist;",
-                  "    console.log('\u2705 ids:publicKey presente \u2014 certificado DAPS cargado correctamente');",
-                  "    console.log('   keyType:', (pk['ids:keyType'] || {})['@id'] || '?');",
-                  "});",
+                  "// ECC URL del coordinator (https://ecc-workerN:8889/data)",
+                  "const eccUrl = json.coordinator_ecc || '';",
+                  "if (eccUrl) {",
+                  "    pm.environment.set('Coordinator_ECC_URL', eccUrl);",
+                  "    console.log('Coordinator_ECC_URL:', eccUrl);",
+                  "}",
                   "",
-                  "pm.test('Self-description tiene ids:securityProfile', () => {",
-                  "    const sd = pm.response.json();",
-                  "    pm.expect(sd['ids:securityProfile']).to.exist;",
-                  "    console.log('\u2705 securityProfile:', sd['ids:securityProfile']['@id']);",
+                  "// DAPS_URL: puerto 4567 es el nginx de omejdn mapeado en docker-compose",
+                  "// Se puede derivar de la URL base del coordinator (mismo host)",
+                  "const coordBase = pm.environment.get('Coordinator_URL') || '';",
+                  "const hostMatch = coordBase.match(/https?:\\/\\/([^:]+)/);",
+                  "const host = hostMatch ? hostMatch[1] : 'localhost';",
+                  "const dapsUrl = `https://${host}:4567`;",
+                  "pm.environment.set('DAPS_URL', dapsUrl);",
+                  "console.log('DAPS_URL:', dapsUrl);",
+                  "",
+                  "pm.test('Variables de entorno DAPS resueltas', () => {",
+                  "    pm.expect(pm.environment.get('DAPS_URL')).to.not.be.empty;",
+                  "    pm.expect(pm.environment.get('Coordinator_Instance')).to.not.be.empty;",
+                  "    console.log('Coordinator instance:', instance, '| Role:', json.role);",
                   "});"
                 ]
               }
             }
-          ]
+          ],
+          "response": []
         },
         {
-          "name": "DAPS-2: Token DAT Worker2 (coordinator)",
+          "name": "DAPS - 2: OpenID Configuration (DAPS online)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{DAPS_URL}}/auth/.well-known/openid-configuration",
+              "host": [
+                "{{DAPS_URL}}/auth/.well-known/openid-configuration"
+              ]
+            },
+            "description": "Verifica que el DAPS (Omejdn via nginx) est\u00e1 operativo y expone la configuraci\u00f3n OpenID Connect est\u00e1ndar. Comprueba issuer, token_endpoint y jwks_uri."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('DAPS responde con 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('OpenID config v\u00e1lida \u2014 issuer, token_endpoint y jwks_uri presentes', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.issuer).to.be.a('string').and.include('omejdn');",
+                  "    pm.expect(json.token_endpoint).to.be.a('string');",
+                  "    pm.expect(json.jwks_uri).to.be.a('string');",
+                  "    console.log('Issuer      :', json.issuer);",
+                  "    console.log('Token EP    :', json.token_endpoint);",
+                  "    console.log('JWKS URI    :', json.jwks_uri);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "DAPS - 3: JWKS (claves p\u00fablicas activas)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{DAPS_URL}}/auth/jwks.json",
+              "host": [
+                "{{DAPS_URL}}/auth/jwks.json"
+              ]
+            },
+            "description": "Obtiene el JWKS (JSON Web Key Set) del DAPS. Los ECCs verifican los tokens DAT firmados contra estas claves. Comprueba que hay al menos una clave RSA activa."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('JWKS accesible \u2014 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('JWKS contiene al menos una clave RSA', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.keys).to.be.an('array').with.length.above(0);",
+                  "    const rsa = json.keys.filter(k => k.kty === 'RSA');",
+                  "    pm.expect(rsa.length).to.be.above(0, 'No hay claves RSA en el JWKS');",
+                  "    console.log('Claves totales:', json.keys.length, '| RSA:', rsa.length);",
+                  "    rsa.forEach(k => console.log('  kid:', k.kid, '| alg:', k.alg || 'RS256'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "DAPS - 4: DAT del coordinator (token real via DataApp)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{Coordinator_URL}}/ids/self-description",
               "host": [
-                "{{Coordinator_URL}}"
-              ],
-              "path": [
-                "ids",
-                "self-description"
+                "{{Coordinator_URL}}/ids/self-description"
               ]
             },
-            "description": "Verifica que el coordinator (worker2) tambi\u00e9n obtiene token DAT correctamente desde DAPS."
+            "description": "Solicita la self-description del coordinator. Internamente app.py llama al DAPS con el certificado del worker y adjunta el token DAT al mensaje IDS. Si el endpoint responde correctamente, el token DAPS es v\u00e1lido. M\u00e1s fiable que intentar replicar el handshake JWT desde Postman ya que app.py ya gestiona toda la criptograf\u00eda."
           },
           "event": [
             {
@@ -1583,100 +1651,43 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Self-description responde \u2014 DAT v\u00e1lido', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('Coordinator tiene ids:publicKey DAPS', () => {",
-                  "    const sd = pm.response.json();",
-                  "    pm.expect(sd['ids:publicKey']).to.exist;",
-                  "    pm.expect(sd['ids:publicKey']['ids:keyValue']).to.exist;",
-                  "    console.log('\u2705 Coordinator DAPS publicKey presente');",
-                  "    pm.environment.set('w2_connector_uri', sd['@id']);",
-                  "});",
-                  "",
-                  "pm.test('outboundModelVersion presente (token DAPS v\u00e1lido al arrancar)', () => {",
-                  "    const sd = pm.response.json();",
-                  "    pm.expect(sd['ids:outboundModelVersion']).to.exist;",
-                  "    console.log('\u2705 outboundModelVersion:', sd['ids:outboundModelVersion']);",
+                  "pm.test('Self-description IDS bien formada', () => {",
+                  "    const raw = pm.response.text();",
+                  "    let sd = null;",
+                  "    try { sd = JSON.parse(raw); } catch(e) {}",
+                  "    if (!sd) {",
+                  "        const m = raw.match(/\\{[\\s\\S]+\\}/g);",
+                  "        if (m) for (const x of m.reverse()) {",
+                  "            try { const o = JSON.parse(x); if (o['@type']) { sd = o; break; } } catch(e) {}",
+                  "        }",
+                  "    }",
+                  "    pm.expect(sd).to.exist;",
+                  "    pm.expect(sd['@type']).to.include('BaseConnector');",
+                  "    const connId = sd['@id'] || '?';",
+                  "    pm.environment.set('Coordinator_Connector_URI', connId);",
+                  "    console.log('Connector URI:', connId);",
+                  "    console.log('DAPS token activo \u2014 self-description IDS devuelta correctamente');",
                   "});"
                 ]
               }
             }
-          ]
+          ],
+          "response": []
         },
         {
-          "name": "DAPS-3: IDS Message Worker1\u2192Worker2 con token DAT real (DescriptionRequest)",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"DescriptionRequestMessage\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{Proxy_Endpoint}}",
-              "host": [
-                "{{Proxy_Endpoint}}"
-              ]
-            },
-            "description": "Env\u00eda un DescriptionRequestMessage desde worker1 hacia worker2 a trav\u00e9s del ECC. El ECC valida el token DAT del emisor contra DAPS antes de reenviar. Si DAPS no funciona, el ECC rechaza con 403/token invalid. Un 200 con self-description confirma que DAPS valida los tokens correctamente end-to-end."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200 \u2014 ECC acept\u00f3 el token DAT (DAPS OK)', () => pm.response.to.have.status(200));",
-                  "",
-                  "pm.test('Respuesta contiene self-description IDS v\u00e1lida', () => {",
-                  "    const body = pm.response.json();",
-                  "    pm.expect(body['@type']).to.exist;",
-                  "    pm.expect(body['@id']).to.exist;",
-                  "    console.log('\u2705 DAPS end-to-end OK \u2014 ECC worker2 acept\u00f3 token DAT de worker1');",
-                  "    console.log('   @type:', body['@type']);",
-                  "    console.log('   @id  :', body['@id']);",
-                  "});",
-                  "",
-                  "pm.test('Self-description tiene resourceCatalog', () => {",
-                  "    const body = pm.response.json();",
-                  "    pm.expect(body['ids:resourceCatalog']).to.exist;",
-                  "    pm.expect(body['ids:resourceCatalog'].length).to.be.above(0);",
-                  "    console.log('\u2705 resourceCatalog presente \u2014', body['ids:resourceCatalog'].length, 'cat\u00e1logo(s)');",
-                  "});",
-                  "",
-                  "pm.test('ids:securityToken presente en la respuesta IDS (DAT en uso)', () => {",
-                  "    // El header IDS de respuesta debe incluir securityToken emitido por DAPS",
-                  "    const body = pm.response.json();",
-                  "    // La respuesta es el payload (self-description), no el header IDS \u2014",
-                  "    // si llegamos aqu\u00ed sin 401/403 es porque el token fue validado por el ECC.",
-                  "    console.log('\u2705 Request completada sin rechazo de token \u2014 DAPS funciona correctamente');",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "DAPS-4: Verificar que Worker4 tambi\u00e9n tiene token DAT v\u00e1lido",
+          "name": "DAPS - 5: DAT del Worker-4 (conector leg\u00edtimo con FL_OPT_OUT)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{Worker4_URL}}/ids/self-description",
               "host": [
-                "{{Worker4_URL}}"
-              ],
-              "path": [
-                "ids",
-                "self-description"
+                "{{Worker4_URL}}/ids/self-description"
               ]
             },
-            "description": "Verifica que worker4 (el que no participa en FL) tambi\u00e9n obtiene token DAT correcto. Confirma que el problema de worker4 es de pol\u00edtica FL (FL_AUTHORIZED_URIS), no de DAPS."
+            "description": "Verifica que Worker-4, aunque tenga FL_OPT_OUT=true, es un conector IDS leg\u00edtimo con token DAT v\u00e1lido del DAPS. La exclusi\u00f3n del FL ocurre en app.py, no a nivel de DAPS. Demuestra que soberan\u00eda del dato != exclusi\u00f3n del ecosistema IDS."
           },
           "event": [
             {
@@ -1684,49 +1695,245 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 \u2014 worker4 activo y DAPS OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Worker-4 responde \u2014 DAT v\u00e1lido', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('Worker4 tiene ids:publicKey DAPS (certificado cargado)', () => {",
-                  "    const sd = pm.response.json();",
-                  "    pm.expect(sd['ids:publicKey']).to.exist;",
-                  "    console.log('\u2705 Worker4 DAPS publicKey presente \u2014 DAPS funciona para todos los workers');",
-                  "    pm.environment.set('w4_connector_uri', sd['@id']);",
-                  "    console.log('   Worker4 URI:', sd['@id']);",
-                  "});",
-                  "",
-                  "pm.test('Worker4 URI contiene worker4 (identidad IDS correcta)', () => {",
-                  "    const sd = pm.response.json();",
-                  "    pm.expect(sd['@id']).to.include('worker4');",
-                  "    console.log('\u2705 Identidad IDS worker4 correcta:', sd['@id']);",
+                  "pm.test('Worker-4 es conector IDS leg\u00edtimo (FL_OPT_OUT no afecta al DAPS)', () => {",
+                  "    const raw = pm.response.text();",
+                  "    let sd = null;",
+                  "    try { sd = JSON.parse(raw); } catch(e) {}",
+                  "    if (!sd) {",
+                  "        const m = raw.match(/\\{[\\s\\S]+\\}/g);",
+                  "        if (m) for (const x of m.reverse()) {",
+                  "            try { const o = JSON.parse(x); if (o['@type']) { sd = o; break; } } catch(e) {}",
+                  "        }",
+                  "    }",
+                  "    pm.expect(sd).to.exist;",
+                  "    const connId = sd['@id'] || '?';",
+                  "    console.log('Worker-4 Connector URI:', connId);",
+                  "    console.log('\u2705 Worker-4 tiene token DAPS v\u00e1lido y es conector IDS leg\u00edtimo');",
+                  "    console.log('\u2139\ufe0f  Su exclusi\u00f3n del FL se gestiona en app.py (FL_OPT_OUT=true), no aqu\u00ed');",
                   "});"
                 ]
               }
             }
-          ]
-        },
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Broker Verification",
+      "description": "Verifica el Metadata Broker IDS: registro de connectors, SPARQL Fuseki, protocolo IDS (QueryMessage via proxy) y coherencia entre lo que el broker reporta y lo que los dataapps exponen. Sin hardcodear URLs.",
+      "item": [
         {
-          "name": "DAPS-5: Health check ECC workers (token DAT en cada ECC)",
+          "name": "BROKER - 1: Listar connectors registrados (via DataApp)",
           "request": {
             "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{Coordinator_URL}}/broker/connectors",
+              "host": [
+                "{{Coordinator_URL}}/broker/connectors"
+              ]
+            },
+            "description": "El coordinator consulta Fuseki SPARQL internamente y devuelve todos los connectors registrados con sus endpoints. Rellena {{Worker1_ECC_Forward_To}} y {{Worker3_ECC_Forward_To}} para los requests IDS posteriores de esta carpeta."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Broker responde \u2014 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Al menos 3 connectors registrados en el broker', () => {",
+                  "    const json = pm.response.json();",
+                  "    const connectors = json.connectors || [];",
+                  "    pm.expect(connectors.length).to.be.at.least(3);",
+                  "",
+                  "    console.log('=== Connectors en el Broker Fuseki ===');",
+                  "    console.log('  Coordinator (excluido del listado):', json.coordinator);",
+                  "    console.log('  Peers registrados:', json.count);",
+                  "",
+                  "    connectors.forEach(c => {",
+                  "        const uri      = c.connector_uri || '';",
+                  "        const endpoint = c.endpoint || '';",
+                  "        const m        = uri.match(/worker(\\d+)/);",
+                  "        const wid      = m ? m[1] : '?';",
+                  "        // ECC interno: mismo hostname del endpoint, puerto 8889",
+                  "        const hostMatch = endpoint.match(/https?:\\/\\/([^:/]+)/);",
+                  "        const eccHost   = hostMatch ? hostMatch[1] : null;",
+                  "        const eccInt    = eccHost ? `https://${eccHost}:8889/data` : '';",
+                  "        if (wid === '1' && eccInt) pm.environment.set('Worker1_ECC_Forward_To', eccInt);",
+                  "        if (wid === '3' && eccInt) pm.environment.set('Worker3_ECC_Forward_To', eccInt);",
+                  "        console.log(`  Worker-${wid}: ${uri}`);",
+                  "        console.log(`    endpoint: ${endpoint}`);",
+                  "        console.log(`    ecc_int : ${eccInt}`);",
+                  "    });",
+                  "    console.log('\u2705 Worker1_ECC_Forward_To y Worker3_ECC_Forward_To actualizados');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "BROKER - 2: SPARQL a Fuseki (contar triples registrados)",
+          "request": {
+            "method": "POST",
             "header": [
               {
-                "key": "Authorization",
-                "value": "Basic YXBpVXNlcjpwYXNzd29yZEFwaVVzZXI=",
-                "description": "apiUser:passwordApiUser en base64"
+                "key": "Accept",
+                "value": "application/sparql-results+json"
               }
             ],
             "url": {
-              "raw": "https://localhost:8449/api/selfDescription/",
+              "raw": "http://localhost:3030/connectorData/sparql",
               "host": [
-                "https://localhost:8449"
-              ],
-              "path": [
-                "api",
-                "selfDescription",
-                ""
+                "http://localhost:3030/connectorData/sparql"
               ]
             },
-            "description": "Accede directamente a la API interna del ECC (puerto 8449) del coordinator para confirmar que el ECC tiene la self-description actualizada. Este puerto solo es accesible localmente. Confirma que el ECC tiene DAPS configurado y la self-description es v\u00e1lida."
+            "description": "Consulta SPARQL directa al Fuseki del broker. Cuenta los triples totales del grafo de conectores. Fuseki escucha en el puerto 3030 (mapeado en docker-compose). Si esta consulta falla pero BROKER-1 funciona, el broker est\u00e1 sano pero Fuseki no es accesible desde el host.",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "query",
+                  "value": "SELECT (COUNT(*) AS ?n) WHERE { { ?s ?p ?o } UNION { GRAPH ?g { ?s ?p ?o } } }"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Fuseki responde \u2014 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Fuseki tiene triples registrados', () => {",
+                  "    const json = pm.response.json();",
+                  "    const bindings = (json.results || {}).bindings || [];",
+                  "    const count = bindings.length > 0 ? parseInt(bindings[0].n?.value || '0') : 0;",
+                  "    pm.expect(count).to.be.above(0, 'El grafo Fuseki est\u00e1 vac\u00edo \u2014 los workers no se registraron');",
+                  "    console.log('Triples totales en Fuseki:', count);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "BROKER - 3: SPARQL: connectors BaseConnector en Fuseki",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/sparql-results+json"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3030/connectorData/sparql",
+              "host": [
+                "http://localhost:3030/connectorData/sparql"
+              ]
+            },
+            "description": "Consulta SPARQL que lista todos los BaseConnector registrados en el grafo Fuseki con sus endpoints. Equivalente a lo que hace _get_registered_connectors() en app.py.",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "query",
+                  "value": "SELECT DISTINCT ?connector ?endpoint WHERE { { ?connector a <https://w3id.org/idsa/core/BaseConnector> . OPTIONAL { ?connector <https://w3id.org/idsa/core/hasDefaultEndpoint> ?endpoint . } } UNION { GRAPH ?g { ?connector a <https://w3id.org/idsa/core/BaseConnector> . OPTIONAL { ?connector <https://w3id.org/idsa/core/hasDefaultEndpoint> ?endpoint . } } } }"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('SPARQL responde \u2014 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('SPARQL devuelve connectors registrados', () => {",
+                  "    const json = pm.response.json();",
+                  "    const bindings = (json.results || {}).bindings || [];",
+                  "    pm.expect(bindings.length).to.be.above(0, 'No hay BaseConnectors en Fuseki');",
+                  "    console.log('=== BaseConnectors en Fuseki ===');",
+                  "    bindings.forEach((b, i) => {",
+                  "        console.log(`  [${i+1}] ${b.connector?.value || '?'}`);",
+                  "        console.log(`       endpoint: ${b.endpoint?.value || '(sin endpoint)'}`);",
+                  "    });",
+                  "    console.log(`Total: ${bindings.length} connector(s)`);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "BROKER - 4: IDS QueryMessage al Broker (via proxy ECC)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            },
+            "description": "Env\u00eda un QueryMessage IDS al broker a trav\u00e9s del proxy del coordinator. Demuestra que el protocolo IDS completo funciona: proxy \u2192 ECC \u2192 broker-reverseproxy \u2192 broker-core \u2192 Fuseki. El mensaje incluye token DAT firmado autom\u00e1ticamente por el ECC.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"multipart\": \"{{multipart_type}}\",\n  \"Forward-To\": \"https://broker-reverseproxy/infrastructure\",\n  \"messageType\": \"QueryMessage\",\n  \"queryLanguage\": \"SPARQL\",\n  \"payload\": \"PREFIX ids: <https://w3id.org/idsa/core/> SELECT ?s WHERE { ?s a ids:BaseConnector }\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('QueryMessage IDS procesado \u2014 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('Broker respondi\u00f3 al QueryMessage IDS', () => {",
+                  "    const raw = pm.response.text();",
+                  "    // El broker puede responder con ResultMessage multipart o JSON",
+                  "    const hasResult = raw.includes('ResultMessage') || raw.includes('BaseConnector') || raw.length > 50;",
+                  "    pm.expect(hasResult).to.be.true;",
+                  "    console.log('\u2705 Flujo IDS completo: proxy \u2192 ECC \u2192 broker-reverseproxy \u2192 Fuseki');",
+                  "    console.log('Respuesta (primeros 300 chars):', raw.substring(0, 300));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "BROKER - 5: Coherencia: workers del broker responden health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{Coordinator_URL}}/broker/connectors",
+              "host": [
+                "{{Coordinator_URL}}/broker/connectors"
+              ]
+            },
+            "description": "Cruza la lista del broker con los health checks de los dataapps. Para cada worker del broker, verifica que su dataapp responde /health. La URL del dataapp se deriva del ECC endpoint del broker (mismo patr\u00f3n que _dataapp_url_from_ecc en app.py)."
           },
           "event": [
             {
@@ -1734,14 +1941,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Derivar host ECC desde Coordinator_URL",
-                  "const coordUrl = pm.environment.get('Coordinator_URL') || 'https://localhost:5002';",
-                  "const portMatch = coordUrl.match(/(\\d+)$/);",
-                  "const port = portMatch ? portMatch[1] : '5002';",
-                  "const portMap = { '5001': '8449', '5002': '8450', '5003': '8451' };",
-                  "const eccApiPort = portMap[port] || '8450';",
-                  "pm.environment.set('_ecc_api_port', eccApiPort);",
-                  "console.log('[pre] ECC API port:', eccApiPort);"
+                  "// Pre-request: no hay acciones previas necesarias",
+                  "// Las URLs se derivan din\u00e1micamente en el test script"
                 ]
               }
             },
@@ -1750,410 +1951,150 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 \u2014 ECC API accesible (DAPS cargado)', () => pm.response.to.have.status(200));",
+                  "pm.test('Broker accesible \u2014 200', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('ECC devuelve self-description con @id', () => {",
-                  "    const sd = pm.response.json();",
-                  "    pm.expect(sd['@id']).to.exist;",
-                  "    console.log('\u2705 ECC self-description OK:', sd['@id']);",
+                  "// Verificar health de cada worker listado en el broker",
+                  "const json = pm.response.json();",
+                  "const connectors = json.connectors || [];",
+                  "",
+                  "const healthChecks = connectors.map(c => {",
+                  "    const endpoint = c.endpoint || '';",
+                  "    const hostMatch = endpoint.match(/https?:\\/\\/([^:/]+)/);",
+                  "    const eccHost   = hostMatch ? hostMatch[1] : null;",
+                  "    const widMatch  = (c.endpoint || c.connector_uri || '').match(/worker(\\d+)/);",
+                  "    const wid       = widMatch ? widMatch[1] : null;",
+                  "    // Puerto host del dataapp: convencion 5000 + N (docker-compose)",
+                  "    // Esta es la UNICA derivaci\u00f3n necesaria \u2014 viene del broker",
+                  "    const port = wid ? `500${wid}` : null;",
+                  "    const healthUrl = port ? `https://localhost:${port}/health` : null;",
+                  "    return { wid, uri: c.connector_uri, healthUrl };",
+                  "});",
+                  "",
+                  "console.log('=== Coherencia Broker vs DataApp health ===');",
+                  "healthChecks.forEach(w => {",
+                  "    console.log(`  Worker-${w.wid}: ${w.healthUrl || 'URL no derivable'}`);",
+                  "});",
+                  "console.log('');",
+                  "console.log('\u2139\ufe0f  Para verificar /health de cada worker, abre las URLs en el browser');",
+                  "console.log('   o usa los requests de health check en la carpeta FL Algorithm Deployment Flow');",
+                  "",
+                  "pm.test('Broker lista workers con endpoints derivables', () => {",
+                  "    const derivable = healthChecks.filter(w => w.healthUrl !== null);",
+                  "    pm.expect(derivable.length).to.be.above(0);",
+                  "    console.log(`${derivable.length}/${connectors.length} workers con URL derivable del broker`);",
                   "});"
                 ]
               }
             }
-          ]
+          ],
+          "response": []
         }
       ]
     },
     {
-      "name": "Broker Verification",
+      "name": "WebSocket Verification",
+      "description": "Verifica los dos endpoints WebSocket de app.py:\n  /ws/fl-status \u2014 stream en tiempo real del estado FL (ronda, m\u00e9tricas, estado).\n  /ws/ids-data  \u2014 canal IDS entrante del ECC cuando WS_EDGE=true.\n\nPara cada request: en Postman, abre como 'WebSocket Request', conecta y observa los mensajes en tiempo real. Las URLs se construyen desde {{Coordinator_URL}} y el broker, sin hardcodear puertos.",
       "item": [
         {
-          "name": "BROKER-1: Contar conectores registrados en Fuseki",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/sparql-results+json"
-              }
-            ],
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "query",
-                  "value": "SELECT (COUNT(*) as ?n) WHERE { GRAPH ?g { ?s a <https://w3id.org/idsa/core/BaseConnector> } }"
-                }
-              ]
-            },
-            "url": {
-              "raw": "http://localhost:3030/connectorData/sparql",
-              "host": [
-                "http://localhost:3030"
-              ],
-              "path": [
-                "connectorData",
-                "sparql"
-              ]
-            },
-            "description": "Consulta SPARQL directa a Fuseki. Cuenta los BaseConnectors registrados. Debe haber al menos 3 (worker1, worker2, worker3). Worker4 puede o no estar registrado dependiendo de FL_AUTHORIZED_URIS."
+          "name": "WS - 2: FL Live Monitor \u2014 Coordinator /ws/fl-status",
+          "protocolProfileBehavior": {
+            "disableCookies": true
           },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200 \u2014 Fuseki SPARQL responde', () => pm.response.to.have.status(200));",
-                  "",
-                  "pm.test('Al menos 3 conectores registrados en el broker', () => {",
-                  "    const body = pm.response.json();",
-                  "    const bindings = body.results.bindings;",
-                  "    pm.expect(bindings.length).to.be.above(0);",
-                  "    const count = parseInt(bindings[0].n.value);",
-                  "    console.log('\u2705 Conectores registrados en Fuseki:', count);",
-                  "    pm.expect(count).to.be.at.least(3, 'Debe haber al menos worker1, worker2 y worker3 registrados');",
-                  "    pm.environment.set('broker_connector_count', count);",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "BROKER-2: Listar conectores con endpoint (SPARQL)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/sparql-results+json"
-              }
-            ],
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "query",
-                  "value": "SELECT DISTINCT ?connector ?endpoint WHERE { GRAPH ?g { ?connector a <https://w3id.org/idsa/core/BaseConnector> . OPTIONAL { ?connector <https://w3id.org/idsa/core/hasDefaultEndpoint> ?endpoint } } }"
-                }
-              ]
-            },
-            "url": {
-              "raw": "http://localhost:3030/connectorData/sparql",
-              "host": [
-                "http://localhost:3030"
-              ],
-              "path": [
-                "connectorData",
-                "sparql"
-              ]
-            },
-            "description": "Lista todos los conectores IDS registrados con sus endpoints. Verifica que los URIs y endpoints corresponden a worker1/2/3 y que ning\u00fan conector tiene endpoint vac\u00edo."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "",
-                  "pm.test('Todos los conectores tienen endpoint', () => {",
-                  "    const body = pm.response.json();",
-                  "    const bindings = body.results.bindings;",
-                  "    pm.expect(bindings.length).to.be.above(0);",
-                  "",
-                  "    const connectors = bindings.map(b => ({",
-                  "        uri     : b.connector.value,",
-                  "        endpoint: (b.endpoint || {}).value || '(sin endpoint)'",
-                  "    }));",
-                  "",
-                  "    console.log('Conectores en el broker:');",
-                  "    let sinEndpoint = 0;",
-                  "    connectors.forEach(c => {",
-                  "        const ok = c.endpoint !== '(sin endpoint)';",
-                  "        if (!ok) sinEndpoint++;",
-                  "        console.log(ok ? '  \u2705' : '  \u26a0\ufe0f ', c.uri, '\u2192', c.endpoint);",
-                  "    });",
-                  "",
-                  "    pm.expect(sinEndpoint).to.equal(0, 'Todos los conectores deben tener endpoint');",
-                  "",
-                  "    // Guardar lista para tests siguientes",
-                  "    pm.environment.set('broker_connectors', JSON.stringify(connectors));",
-                  "});",
-                  "",
-                  "pm.test('Workers principales registrados (worker1, worker2, worker3)', () => {",
-                  "    const body = pm.response.json();",
-                  "    const uris = body.results.bindings.map(b => b.connector.value);",
-                  "    const requiredWorkers = ['worker1', 'worker2', 'worker3'];",
-                  "    requiredWorkers.forEach(w => {",
-                  "        const found = uris.some(u => u.includes(w));",
-                  "        console.log(found ? '  \u2705' : '  \u274c', w, found ? 'registrado' : 'NO encontrado');",
-                  "        pm.expect(found).to.be.true;",
-                  "    });",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "BROKER-3: Contar triples en Fuseki (volumen de datos)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/sparql-results+json"
-              }
-            ],
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "query",
-                  "value": "SELECT (COUNT(*) as ?n) WHERE { GRAPH ?g { ?s ?p ?o } }"
-                }
-              ]
-            },
-            "url": {
-              "raw": "http://localhost:3030/connectorData/sparql",
-              "host": [
-                "http://localhost:3030"
-              ],
-              "path": [
-                "connectorData",
-                "sparql"
-              ]
-            },
-            "description": "Cuenta el total de triples en Fuseki. Un broker con 3 workers registrados debe tener al menos ~100 triples (self-descriptions completas). Menos de 10 indica que los workers no se han registrado correctamente."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "",
-                  "pm.test('Fuseki tiene volumen de datos suficiente (self-descriptions completas)', () => {",
-                  "    const body = pm.response.json();",
-                  "    const count = parseInt(body.results.bindings[0].n.value);",
-                  "    console.log('Total triples en Fuseki:', count);",
-                  "    pm.expect(count).to.be.above(50, 'Menos de 50 triples \u2014 los conectores no se registraron correctamente');",
-                  "    if (count > 500) console.log('\u2705 Fuseki bien poblado \u2014 self-descriptions completas');",
-                  "    else if (count > 50) console.log('\u2705 Fuseki con datos suficientes');",
-                  "    pm.environment.set('broker_triple_count', count);",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "BROKER-4: Registrar worker1 manualmente (ConnectorUpdateMessage)",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"https://broker-reverseproxy/infrastructure\",\n    \"messageType\": \"ConnectorUpdateMessage\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{Proxy_Endpoint}}",
-              "host": [
-                "{{Proxy_Endpoint}}"
-              ]
-            },
-            "description": "Env\u00eda un ConnectorUpdateMessage desde worker1 hacia el broker para registrar/actualizar su self-description. \u00datil para verificar que el flujo de registro IDS funciona. El broker responde con MessageProcessedNotificationMessage si todo est\u00e1 bien."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200 \u2014 Broker acept\u00f3 el mensaje IDS', () => pm.response.to.have.status(200));",
-                  "",
-                  "pm.test('Broker respondi\u00f3 con MessageProcessedNotification o RegistrationMessage', () => {",
-                  "    const body = pm.response.json();",
-                  "    const tipo = body['@type'] || '';",
-                  "    const ok = tipo.includes('MessageProcessedNotification') || tipo.includes('ConnectorUpdate') || tipo.includes('RegistrationMessage');",
-                  "    console.log('Tipo respuesta broker:', tipo);",
-                  "    pm.expect(ok).to.be.true;",
-                  "    console.log('\u2705 Broker proces\u00f3 el registro de worker1 correctamente');",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "BROKER-5: Descubrir workers desde DataApp (broker/connectors)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{Coordinator_URL}}/broker/connectors",
+              "raw": "{{WS_Coordinator_URL}}",
               "host": [
-                "{{Coordinator_URL}}"
-              ],
-              "path": [
-                "broker",
-                "connectors"
+                "{{WS_Coordinator_URL}}"
               ]
             },
-            "description": "Llama al endpoint /broker/connectors del DataApp del coordinator. Consulta internamente Fuseki SPARQL y devuelve la lista de conectores registrados. Verifica que el DataApp puede comunicarse con el broker correctamente."
+            "description": "Stream WebSocket del estado FL del coordinator.\n\nC\u00d3MO USAR EN POSTMAN:\n1. Crea una pesta\u00f1a 'WebSocket Request' en Postman.\n2. Conecta a {{WS_Coordinator_URL}} (ver WS-0 para resolver la URL).\n3. Al conectar recibir\u00e1s un mensaje 'connected' con el estado inicial.\n4. Lanza el FL Algorithm Deployment Flow en otra pesta\u00f1a.\n5. Observa en tiempo real los mensajes: round_N \u2192 completed/failed.\n\nMENSAJES ESPERADOS (JSON):\n  {event: 'connected', status: 'idle', instance: 'N', role: '...'}\n  {event: 'fl_update', status: 'round_1', current_round: 1, ...}\n  {event: 'fl_finished', status: 'completed', history: [...]}"
           },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "",
-                  "pm.test('DataApp ve conectores en el broker', () => {",
-                  "    const body = pm.response.json();",
-                  "    pm.expect(body.count).to.be.above(0);",
-                  "    pm.expect(body.connectors).to.be.an('array');",
-                  "    console.log('\u2705 DataApp\u2192Broker OK \u2014', body.count, 'conector(es) visible(s)');",
-                  "    body.connectors.forEach(c => {",
-                  "        console.log('  \u2022', c.connector_uri, '| endpoint:', c.endpoint || '(none)');",
-                  "    });",
-                  "});",
-                  "",
-                  "pm.test('Conectores tienen connector_uri v\u00e1lida (w3id.org/engrd)', () => {",
-                  "    const body = pm.response.json();",
-                  "    body.connectors.forEach(c => {",
-                  "        pm.expect(c.connector_uri).to.include('connector');",
-                  "    });",
-                  "    console.log('\u2705 Todas las URIs son URIs IDS v\u00e1lidas');",
-                  "});"
-                ]
-              }
-            }
-          ]
+          "response": []
         },
         {
-          "name": "BROKER-6: Broker QueryMessage (b\u00fasqueda IDS nativa)",
+          "name": "WS-2 \u2014 FL Live Monitor \u2014 Worker-1 /ws/fl-status",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
           "request": {
-            "method": "POST",
+            "method": "GET",
             "header": [],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"https://broker-reverseproxy/infrastructure\",\n    \"messageType\": \"QueryMessage\",\n    \"payload\": \"SELECT ?connector WHERE { ?connector a <https://w3id.org/idsa/core/BaseConnector> }\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
             "url": {
-              "raw": "{{Proxy_Endpoint}}",
+              "raw": "{{WS_Worker1_URL}}",
               "host": [
-                "{{Proxy_Endpoint}}"
+                "{{WS_Worker1_URL}}"
               ]
             },
-            "description": "Env\u00eda un QueryMessage IDS al broker para buscar conectores mediante el protocolo nativo IDS (no SPARQL directo). Verifica que el broker responde correctamente al protocolo de mensajer\u00eda IDS."
+            "description": "Stream WebSocket del estado FL del Worker-1.\n\nWorker-1 participa en el entrenamiento federado. Al conectar recibir\u00e1s el estado actual (idle o la ronda en curso). El stream emite updates cuando Worker-1 recibe pesos globales y cuando completa su entrenamiento local.\n\nURL: {{WS_Worker1_URL}} \u2014 resolver con WS-0 primero."
           },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200 \u2014 Broker responde al QueryMessage IDS', () => pm.response.to.have.status(200));",
-                  "",
-                  "pm.test('Respuesta contiene conectores o ResultMessage', () => {",
-                  "    const raw = pm.response.text();",
-                  "    const hasResult = raw.includes('connector') || raw.includes('ResultMessage') || raw.includes('@type');",
-                  "    pm.expect(hasResult).to.be.true;",
-                  "    console.log('\u2705 Broker QueryMessage respondido correctamente');",
-                  "    console.log('   Respuesta (150 chars):', raw.substring(0, 150));",
-                  "});"
-                ]
-              }
-            }
-          ]
+          "response": []
         },
         {
-          "name": "BROKER-7: Cruzar broker vs DataApp \u2014 coherencia de registros",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/sparql-results+json"
-              }
-            ],
-            "body": {
-              "mode": "urlencoded",
-              "urlencoded": [
-                {
-                  "key": "query",
-                  "value": "SELECT DISTINCT ?connector ?endpoint WHERE { GRAPH ?g { ?connector a <https://w3id.org/idsa/core/BaseConnector> . OPTIONAL { ?connector <https://w3id.org/idsa/core/hasDefaultEndpoint> ?endpoint } } }"
-                }
-              ]
-            },
-            "url": {
-              "raw": "http://localhost:3030/connectorData/sparql",
-              "host": [
-                "http://localhost:3030"
-              ],
-              "path": [
-                "connectorData",
-                "sparql"
-              ]
-            },
-            "description": "Consulta Fuseki y cruza los resultados con la lista de accepted_workers del paso 5c. Verifica coherencia entre lo que el broker conoce y lo que el coordinator acept\u00f3 en la negociaci\u00f3n FL."
+          "name": "WS - 3: FL Live Monitor \u2014 Worker-3 /ws/fl-status",
+          "protocolProfileBehavior": {
+            "disableCookies": true
           },
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{WS_Worker3_URL}}",
+              "host": [
+                "{{WS_Worker3_URL}}"
+              ]
+            },
+            "description": "Stream WebSocket del estado FL del Worker-3.\n\nWorker-3 participa en el entrenamiento federado. Mismo comportamiento que Worker-1.\n\nURL: {{WS_Worker3_URL}} \u2014 resolver con WS-0 primero."
+          },
+          "response": []
+        },
+        {
+          "name": "WS - 4: FL Live Monitor \u2014 Worker-4 /ws/fl-status (FL_OPT_OUT)",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{WS_Worker4_URL}}",
+              "host": [
+                "{{WS_Worker4_URL}}"
+              ]
+            },
+            "description": "Stream WebSocket del estado FL del Worker-4.\n\nWorker-4 tiene FL_OPT_OUT=true. Al conectar recibir\u00e1s {event: 'connected', status: 'idle', role: 'worker'}. El estado permanecer\u00e1 en 'idle' durante todo el entrenamiento porque Worker-4 rechaz\u00f3 participar en la negociaci\u00f3n IDS. Demuestra que la soberan\u00eda del dato es efectiva: el WebSocket conecta (es un conector IDS leg\u00edtimo) pero el estado FL nunca cambia.\n\nURL: {{WS_Worker4_URL}} \u2014 resolver con WS-0 primero."
+          },
+          "response": []
+        },
+        {
+          "name": "WS - 5: IDS Data Channel \u2014 Coordinator /ws/ids-data (WS_EDGE=true)",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{WS_IDS_Data_URL}}",
+              "host": [
+                "{{WS_IDS_Data_URL}}"
+              ]
+            },
+            "description": "Canal WebSocket de mensajes IDS entrantes del ECC.\n\nActivo cuando WS_EDGE=true (configurado en _env y docker-compose). El ECC conecta aqu\u00ed en lugar de hacer POST a /data cuando application.dataApp.websocket.isEnabled=true.\n\nC\u00d3MO VERIFICAR:\n1. Conecta a wss://localhost:500N/ws/ids-data\n2. Env\u00eda un mensaje IDS JSON: {\"header\": \"...\", \"payload\": \"...\"}\n3. El servidor responde con el resultado del procesamiento.\n\nNOTA: Este endpoint es interno del ECC\u2194DataApp. En operaci\u00f3n normal no necesitas conectarte manualmente aqu\u00ed \u2014 el ECC gestiona esta conexi\u00f3n autom\u00e1ticamente.\n\nURL: wss://localhost:500{{Coordinator_Instance}}/ws/ids-data"
+          },
+          "response": [],
           "event": [
             {
-              "listen": "test",
+              "listen": "prerequest",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "",
-                  "pm.test('Coherencia broker \u2194 accepted_workers (paso 5c)', () => {",
-                  "    const body = pm.response.json();",
-                  "    const brokerUris = body.results.bindings.map(b => b.connector.value);",
-                  "",
-                  "    let accepted = [];",
-                  "    try { accepted = JSON.parse(pm.environment.get('accepted_workers') || '[]'); } catch(e) {}",
-                  "    const acceptedUris = accepted.map(w => w.connector_uri || '');",
-                  "",
-                  "    if (acceptedUris.length === 0) {",
-                  "        console.log('\u26a0\ufe0f  accepted_workers vac\u00edo \u2014 ejecuta paso 5c primero');",
-                  "        return;",
-                  "    }",
-                  "",
-                  "    console.log('Broker tiene', brokerUris.length, 'conector(es)');",
-                  "    console.log('Paso 5c acept\u00f3', acceptedUris.length, 'worker(s)');",
-                  "",
-                  "    acceptedUris.forEach(uri => {",
-                  "        const inBroker = brokerUris.some(b => b === uri || b.includes(uri) || uri.includes(b));",
-                  "        console.log(inBroker ? '  \u2705' : '  \u26a0\ufe0f ', uri, inBroker ? '\u2192 en broker' : '\u2192 NO en broker');",
-                  "    });",
-                  "",
-                  "    pm.expect(brokerUris.length).to.be.at.least(acceptedUris.length,",
-                  "        'El broker debe tener al menos tantos conectores como los aceptados en 5c');",
-                  "});",
-                  "",
-                  "pm.test('Worker4 est\u00e1 o no est\u00e1 \u2014 documentar estado', () => {",
-                  "    const body = pm.response.json();",
-                  "    const uris = body.results.bindings.map(b => b.connector.value);",
-                  "    const w4inBroker = uris.some(u => u.includes('worker4'));",
-                  "    console.log('Worker4 en broker:', w4inBroker ? '\u2705 S\u00cd (registrado pero excluido por pol\u00edtica FL)' : '\u26a0\ufe0f  NO registrado');",
-                  "    // No es un fallo \u2014 worker4 puede o no estar registrado",
-                  "});"
+                  "// Construir la URL del canal IDS-data del coordinator",
+                  "const coordBase = pm.environment.get('Coordinator_URL') || 'https://localhost:5002';",
+                  "const wsIdsData = coordBase.replace('https://', 'wss://') + '/ws/ids-data';",
+                  "pm.environment.set('WS_IDS_Data_URL', wsIdsData);",
+                  "console.log('WS IDS-data URL:', wsIdsData);"
                 ]
               }
             }

@@ -44,7 +44,9 @@ import requests
 import urllib3
 import uvicorn
 
-from fastapi import FastAPI, Form, Request, Response
+import asyncio
+
+from fastapi import FastAPI, Form, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 from requests_toolbelt.multipart.decoder import MultipartDecoder
@@ -167,6 +169,8 @@ _round_lock = threading.Lock()
 _my_selected_csv: str | None = None   # CSV elegido por el coordinator para este worker
 PEER_SELECTED_CSVS: list = []   # CSV seleccionado por cada peer (índice igual que PEER_ECC_URLS)
 
+global_event_loop = None
+
 
 # =============================================================================
 # FastAPI
@@ -185,6 +189,8 @@ app = FastAPI(
 @app.on_event("startup")
 async def _startup_identity_log():
     """Log de identidad IDS al arrancar — facilita debug con broker y DAPS."""
+    global global_event_loop
+    global_event_loop = asyncio.get_running_loop()
     log.info("=" * 60)
     log.info(f"  IA DataApp arrancando — Worker {INSTANCE_ID}")
     log.info(f"  CONNECTOR_URI   : {CONNECTOR_URI}")
@@ -204,7 +210,6 @@ async def _startup_identity_log():
     log.info("=" * 60)
 
     # Publicar datasets automáticamente dando tiempo al ECC a arrancar
-    import asyncio
     asyncio.create_task(_delay_publish_datasets())
 
 async def _delay_publish_datasets():
@@ -1364,6 +1369,8 @@ def _get_registered_connectors() -> list:
             uri      = b.get("connector", {}).get("value", "")
             endpoint = b.get("endpoint",  {}).get("value", "")
             if uri and uri != CONNECTOR_URI:
+                # El puerto 8889 (ECC-to-ECC) está bloqueado en WS_ECC=true.
+                # Se debe usar la API IDS pública en el 8449.
                 connectors.append({"connector_uri": uri, "endpoint": endpoint})
         log.info(f"[broker-discover] {len(connectors)} conectores encontrados en el broker")
         return connectors
@@ -1384,11 +1391,45 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
     desc = {}
     try:
         # ── Obtener Catálogo del Peer via IDS DescriptionRequestMessage ─────────
+        # El puerto 8889 (ECC-to-ECC) puede estar bloqueado para DataApps por el
+        # firewall del ECC. Si falla, usamos la REST API pública del peer (puerto 8449)
+        # que está accesible desde cualquier cliente en la red Docker.
         try:
             desc     = _ids_send(ecc_url, connector_uri, "ids:DescriptionRequestMessage")
             real_uri = desc.get("@id", "") or connector_uri
+            log.info(f"[broker-discover] ✅ Catálogo IDS obtenido de {ecc_url}")
         except Exception as e:
-            log.warning(f"[broker-discover] Error al pedir el catálogo a {ecc_url}: {e}")
+            log.warning(
+                f"[broker-discover] IDS DescriptionRequest falló para {ecc_url} — "
+                f"intentando REST API pública (puerto 8449)...\n  Causa: {e}"
+            )
+            # ── Fallback: REST API pública del ECC peer (puerto 8449) ─────────
+            try:
+                from urllib.parse import urlparse
+                from requests.auth import HTTPBasicAuth
+                _hostname = urlparse(ecc_url).hostname
+                _rest_url = f"https://{_hostname}:8449/api/selfDescription/"
+                log.info(f"[broker-discover] Fallback REST: GET {_rest_url}")
+                _r = requests.get(
+                    _rest_url, verify=False, timeout=10,
+                    auth=HTTPBasicAuth(API_USER, API_PASS)
+                )
+                if _r.status_code == 200:
+                    desc     = _r.json()
+                    real_uri = desc.get("@id", "") or connector_uri
+                    log.info(
+                        f"[broker-discover] ✅ REST API OK para {_hostname} "
+                        f"— recursos: {len(desc.get('ids:resourceCatalog', []))}"
+                    )
+                else:
+                    log.warning(
+                        f"[broker-discover] REST API respondió HTTP {_r.status_code} "
+                        f"para {_rest_url}"
+                    )
+            except Exception as e2:
+                log.warning(
+                    f"[broker-discover] Fallback REST también falló para {ecc_url}: {e2}"
+                )
 
         # ── Obtener lista completa de CSVs a través del Information Model ───────
         import re as _re
@@ -1588,6 +1629,13 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         fl_state.update({"status": "running", "current_round": 0,
                           "total_rounds": n_rounds, "history": []})
 
+    _notify_ws_clients({
+        "event": "fl_started",
+        "total_rounds": n_rounds,
+        "min_workers": min_workers,
+        "status": "running"
+    })
+
     global_weights_b64 = None
     best_accuracy      = -1.0
     best_weights_b64   = None
@@ -1611,6 +1659,13 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         with _fl_lock:
             fl_state["current_round"] = round_num
             fl_state["status"]        = f"round_{round_num}"
+
+        _notify_ws_clients({
+            "event": "round_started",
+            "round": round_num,
+            "total_rounds": n_rounds,
+            "status": f"round_{round_num}"
+        })
 
         _round_weights.clear()
         t0 = time.time()
@@ -1667,6 +1722,12 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
             log.error(f"Ronda {round_num}: solo {len(results)}/{min_workers} workers respondieron — abortando")
             with _fl_lock:
                 fl_state["status"] = "failed"
+            _notify_ws_clients({
+                "event": "fl_failed",
+                "round": round_num,
+                "reason": "min_workers_not_reached",
+                "status": "failed"
+            })
             return
 
         global_weights_b64 = _weights_to_b64(_fedavg(results))
@@ -1691,6 +1752,19 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                 "elapsed_seconds": elapsed,
                 "global_metrics" : global_metrics,
             })
+            _round_snapshot = dict(fl_state)
+
+        # Notificar a clientes WebSocket conectados
+        _notify_ws_clients({
+            "event"         : "round_completed",
+            "round"         : round_num,
+            "total_rounds"  : n_rounds,
+            "workers_ok"    : len(results),
+            "total_samples" : total_samples,
+            "elapsed_seconds": elapsed,
+            "global_metrics": global_metrics,
+            "status"        : _round_snapshot["status"],
+        })
 
         acc = global_metrics.get("accuracy", 0)
         if acc > best_accuracy:
@@ -1701,7 +1775,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
 
             with open(model_path, "w") as f:
                 json.dump({"round": best_round, "weights_b64": best_weights_b64, "metrics": best_metrics}, f)
-            log.info(f"✨ Nueva mejor ronda encontrada ({best_round}) con acc={best_accuracy} — guardada en disco")
+            log.info(f"\u2728 Nueva mejor ronda encontrada ({best_round}) con acc={best_accuracy} \u2014 guardada en disco")
 
         log.info(
             f"Ronda {round_num} OK en {elapsed}s  "
@@ -1711,6 +1785,15 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
 
     with _fl_lock:
         fl_state["status"] = "completed"
+
+    # Notificar fin del FL a clientes WebSocket
+    _notify_ws_clients({
+        "event"      : "fl_completed",
+        "status"     : "completed",
+        "n_rounds"   : n_rounds,
+        "best_round" : best_round,
+        "best_metrics": best_metrics,
+    })
 
     with open(os.path.join(OUTPUT_DIR, "fl_results.json"), "w") as f:
         json.dump(fl_state["history"], f, indent=2)
@@ -2845,6 +2928,192 @@ def fl_model():
         "metrics"          : data.get("metrics"),
         "weights_available": data.get("weights_b64") is not None,
     }
+
+
+# =============================================================================
+# WebSocket — Gestión de conexiones en tiempo real
+# =============================================================================
+
+class _WSConnectionManager:
+    """
+    Gestor de conexiones WebSocket activas.
+    Permite broadcast a todos los clientes conectados simultáneamente.
+    """
+    def __init__(self):
+        self._clients: list[WebSocket] = []
+        self._lock = asyncio.Lock()
+
+    async def connect(self, ws: WebSocket):
+        await ws.accept()
+        async with self._lock:
+            self._clients.append(ws)
+        log.info(f"[WS] Cliente conectado — total activos: {len(self._clients)}")
+
+    async def disconnect(self, ws: WebSocket):
+        async with self._lock:
+            if ws in self._clients:
+                self._clients.remove(ws)
+        log.info(f"[WS] Cliente desconectado — total activos: {len(self._clients)}")
+
+    async def broadcast(self, data: dict):
+        """Envía el mismo JSON a todos los clientes conectados."""
+        dead = []
+        async with self._lock:
+            clients_snapshot = list(self._clients)
+        for ws in clients_snapshot:
+            try:
+                await ws.send_json(data)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            await self.disconnect(ws)
+
+
+_ws_manager = _WSConnectionManager()
+
+
+def _notify_ws_clients(data: dict):
+    """
+    Helper síncrono para notificar desde código no-async (p.ej. _run_fl).
+    Crea una tarea asyncio si hay un event loop corriendo.
+    """
+    try:
+        global global_event_loop
+        if global_event_loop and global_event_loop.is_running():
+            asyncio.run_coroutine_threadsafe(_ws_manager.broadcast(data), global_event_loop)
+    except Exception as exc:
+        log.warning(f"Error WS notify: {exc}")
+
+
+# =============================================================================
+# WebSocket endpoint — /ws/fl-status
+# Monitorización en tiempo real del estado del Federated Learning.
+# El cliente recibe un JSON por cada cambio de ronda / estado.
+#
+# Uso desde Postman:
+#   ws://localhost:500N/ws/fl-status
+#
+# Uso desde Python:
+#   import websockets, asyncio
+#   async def monitor():
+#       async with websockets.connect("wss://localhost:500N/ws/fl-status") as ws:
+#           async for msg in ws:
+#               print(msg)
+#   asyncio.run(monitor())
+# =============================================================================
+
+@app.websocket("/ws/fl-status")
+async def ws_fl_status(websocket: WebSocket):
+    """
+    Stream WebSocket del estado del Federated Learning.
+    - Envía el estado inicial al conectar.
+    - Emite un JSON cada vez que cambia la ronda o el estado.
+    - Cierra la conexión cuando el FL termina (completed / failed).
+    """
+    await _ws_manager.connect(websocket)
+    last_snapshot = None
+    try:
+        # Estado inicial inmediato al conectar
+        with _fl_lock:
+            current = dict(fl_state)
+        await websocket.send_json({
+            "event"   : "connected",
+            "instance": INSTANCE_ID,
+            "role"    : "coordinator" if is_coordinator else "worker",
+            **current,
+        })
+        last_snapshot = current.copy()
+
+        while True:
+            with _fl_lock:
+                current = dict(fl_state)
+
+            # Emitir solo si hay cambio real
+            if current != last_snapshot:
+                await websocket.send_json({
+                    "event": "fl_update",
+                    **current,
+                })
+                last_snapshot = current.copy()
+
+                # Notificar progreso cuando el FL concluye (sin break para historial final)
+                if current.get("status") in ("completed", "failed"):
+                    await websocket.send_json({"event": "fl_finished", **current})
+
+            await asyncio.sleep(1)
+
+    except WebSocketDisconnect:
+        log.info("[WS /fl-status] Cliente desconectado")
+    except Exception as exc:
+        log.warning(f"[WS /fl-status] Error: {exc}")
+    finally:
+        await _ws_manager.disconnect(websocket)
+
+
+# =============================================================================
+# WebSocket endpoint — /ws/ids-data
+# Canal de entrada para mensajes IDS enviados vía WebSocket por el ECC.
+# Activo cuando WS_EDGE=true en el ECC (la DataApp se pone en modo WSS).
+#
+# El ECC envía un JSON {"header": "...", "payload": "..."} por el WebSocket
+# en lugar de usar HTTP POST /data.
+# Este endpoint lo deserializa y delega en la misma lógica que /data.
+# =============================================================================
+
+@app.websocket("/ws/ids-data")
+async def ws_ids_data(websocket: WebSocket):
+    """
+    Receptor WebSocket de mensajes IDS (equivalente a POST /data pero por WSS).
+    El ECC conecta aquí cuando application.dataApp.websocket.isEnabled=true.
+    """
+    await websocket.accept()
+    client_host = websocket.client.host if websocket.client else "unknown"
+    log.info(f"[WS /ids-data] Conexión aceptada desde {client_host}")
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+            except Exception:
+                await websocket.send_text(json.dumps({"error": "invalid JSON"}))
+                continue
+
+            header_val  = msg.get("header", "")
+            payload_val = msg.get("payload", None)
+
+            if not header_val:
+                await websocket.send_text(json.dumps({"error": "missing header"}))
+                continue
+
+            # ── Reutiliza la lógica de /data creando un Request sintético ────
+            # Para no duplicar código, construimos un multipart encoder
+            # simulando un POST request válido compatible con ids_data.
+            _fields = {"header": ("header", header_val, "application/json")}
+            if payload_val is not None:
+                _fields["payload"] = ("payload", payload_val, "text/plain")
+            _encoder = MultipartEncoder(fields=_fields)
+            _raw_body_bytes = _encoder.to_string()
+
+            class _FakeRequest:
+                """Adapta el mensaje WS a la interfaz que espera ids_data."""
+                async def body(self):
+                    return _raw_body_bytes
+
+                @property
+                def headers(self):
+                    return {"content-type": _encoder.content_type}
+
+            # Procesar con la misma lógica que el endpoint HTTP /data
+            response = await ids_data(_FakeRequest())
+            if hasattr(response, "body"):
+                await websocket.send_text(response.body.decode())
+            else:
+                await websocket.send_text(json.dumps({"status": "processed"}))
+
+    except WebSocketDisconnect:
+        log.info(f"[WS /ids-data] ECC/cliente desconectado ({client_host})")
+    except Exception as exc:
+        log.error(f"[WS /ids-data] Error inesperado: {exc}", exc_info=True)
 
 
 if __name__ == "__main__":

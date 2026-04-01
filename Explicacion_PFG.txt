@@ -1,0 +1,62 @@
+Memoria y Explicación Detallada del Proyecto: Federated Learning sobre IDS (TRUE Connector)
+Este documento detalla la arquitectura, componentes y fases operativas del sistema diseñado para ejecutar procesos de Aprendizaje Federado (Federated Learning - FL) respetando de manera estricta la soberanía del dato a través de la red descentralizada International Data Spaces (IDS).
+
+1. Visión General del Ecosistema
+El proyecto orquesta una red distribuida donde múltiples nodos cooperan para entrenar un modelo de Inteligencia Artificial (Detección de Intrusiones de Red) sin que los datos brutos abandonen sus servidores de origen. Toda la comunicación, seguridad y descubrimiento de red está gobernada por el protocolo IDS (a través del software TRUE Connector).
+
+Además, se incorpora una capa de inteligencia artificial local (Ollama) para automatizar de manera semántica el descubrimiento y la elección del dataset "correcto" antes de comenzar el entrenamiento.
+
+2. Componentes de la Arquitectura (Docker Compose)
+Todo el ecosistema está contenerizado y estructurado en la red idsa.
+
+2.1 Componentes Centrales (Infraestructura IDS)
+DAPS (Dynamic Attribute Provisioning Service): Construido sobre Omejdn-server y Nginx. Actúa como el Proveedor de Identidad. Autentica a cada participante y le otorga un token JWT con atributos dinámicos (DAT). Sin este token temporal (que se renueva constantemente), ningún conector puede comunicarse con otro.
+Metadata Broker: Compuesto por broker-core, broker-reverseproxy y una base de datos orientada a grafos broker-fuseki (SPARQL). Se encarga de mantener un registro vivo de la red. Cada vez que un conector arranca, publica aquí quién es y cómo encontrarlo.
+2.2 IA Autónoma
+Ollama (Llama 3.2): Contenedor desplegado en la red idsa encargado de proveer razonamiento semántico air-gapped (sin salida a internet externa). La red es completamente dependiente de procesos automatizados; Ollama decide si las columnas de datos de un nodo remoto tienen sentido lógico para el modelo matemático, eliminando la intervención humana.
+2.3 Los Participantes (Workers)
+El proyecto cuenta con 4 "Workers" idénticos, aunque cualquiera puede asumir el rol de Coordinador. Cada Worker despliega dos contenedores inseparables:
+
+ECC (Execution Core Container): Es el corazón IDS desarrollado en Java (TRUE Connector). Maneja certificados, encriptación, mensajería multipart, conectividad y custodia de contratos.
+DataApp (be-dataapp): La capa de lógica en Python (FastAPI). Aloja la lógica de Federated Learning, procesa y evalúa los CSV locales, y gobierna al ECC mandándole qué mensajes IDS emitir.
+3. Flujo Operativo y Ciclo de Vida del FL
+El ciclo de entrenamiento, visible principalmente en pfg_ids_fl_flow.py y orquestado en las tripas de app.py, discurre a lo largo de diversas fases extremadamente automatizadas ("Zero-Touch").
+
+Fase 0: Arranque, Certificación y Auto-descubrimiento
+Arranque y DAT: Todos los ECCs arrancan, leen sus pares de claves y solicitan un certificado temporal DAT al DAPS (omejdn-server).
+Registro en el Broker: De forma automática, se publican en el Broker IDS.
+Descubrimiento de Red (SPARQL): El usuario decide arrancar el entrenamiento pidiéndoselo al Worker 2 (que pasará a ser el Coordinador). El Coordinador hace un POST (petición de bases de datos de grafos) a Fuseki extrayendo las URIs de todos los conectores vivos de la red (descubriendo automáticamente a los Workers 1, 3 y 4). Ya no existen IPs hardcodeadas.
+Fase 1: Adquisición del Core Lógico
+El Coordinador carga nativamente (_activate_coordinator_from_local()) el código en Python a entrenar (algorithm.py) y sus parámetros (fl_config.json). No requiere autocomunicación vía IDS para esto, lo cual es semánticamente correcto y evita bucles.
+Fase 2: Descubrimiento Semántico de Datasets (Metadata First)
+Aquí brilla la arquitectura IDS de "metadatos antes que datos" potenciada con la Inteligencia Artificial.
+
+Petición de Catálogo IDS: El Coordinador contacta a cada nodo descubierto y le envía un DescriptionRequestMessage.
+Lectura del Self-Description: Los nodos responden con su ids:resourceCatalog. El Coordinador inspecciona (mediante Regex) el texto puro de la representación del catálogo para extraer los nombres de las columnas que tienen los CSV de dicho nodo. En ningún momento se transfiere una sola fila de datos reales.
+Evaluación Local (IA + Matemática):
+Delegación a Ollama: El Coordinador construye un prompt exigiendo obligatoriamente un formato JSON. Se le pasa el conjunto de columnas encontradas y se le pide que razone (para un proyecto de intrusión de red estructuralmente similar a UNSW-NB15) qué dataset ajeno es el mejor.
+Cálculo Matemático Local: Paralelamente, se calcula el porcentaje de solapamiento exacto de columnas.
+Decisión Final:
+Si Ollama devuelve un CSV con una confianza >= 80%, el sistema acata su razonamiento semántico. (Ej: Entender que ip_req y IP_Dest significan lo mismo funcionalmente).
+Si la confianza de Ollama es < 80%, el sistema descarta su sugerencia y ejecuta un sistema Fallback, forzando el uso exclusivo de la matemática (la intersección exacta de cadenas de texto).
+Como barrera final de seguridad, todo el resultado (venga de donde venga) debe igualar un umbral global matemático del 80% de columnas en común o el nodo será ignorado y deshabilitado para el FL.
+Fase 3: Negociación Inteligente de Contratos y Soberanía
+Tras descubrir qué Workers tienen datos que merecen la pena:
+
+Flujo IDS Estricto: El Coordinador les envía formalmente un ContractRequestMessage.
+Intervención de la Soberanía: Los nodos compatibles responden en base a sus políticas.
+Los Workers 1 y 3 responden con un ContractAgreementMessage y son aceptados.
+El Worker 4, el cual se configuró explícitamente con protección de datos local (FL_OPT_OUT=true a nivel de DataApp), declina formalmente emitiendo un RejectionMessage con reason: fl_opt_out. Este es el pináculo arquitectónico del proyecto: el nodo está en la red, tiene datos perfectos, la IA lo recomienda; pero la política de la organización propietaria rechaza la compartición y el código la respeta ciegamente.
+Fase 4: Entrenamiento Federado (FedAvg) Disparado por IDS
+Distribución de Carga: El Coordinador manda a la lista blanca de Workers el archivo del algoritmo (algorithm.py) y la configuración dentro del cuerpo de un ArtifactRequestMessage.
+Ejecución de Rondas: Por cada ronda:
+El Coordinador manda los pesos matriciales globales.
+Los Workers entrenan sus redes neuronales con Machine Learning Distribuido sobre sus CSV locales (el cual el coordinador eligió en la fase 2).
+Los Workers devuelven sus pesos entrenados al coordinador encintados dentro de ids:contentVersion.
+Federated Averaging: El Coordinador recaba los pesos, extrae una media central (suavizada basada en número de muestras) y cierra la métrica iterativa.
+Fase 5: Publicación Inmutable en el Ecosistema
+Empaquetado: Cuando acaban las rondas, el Coordinador halla el modelo global final con mayor precisión (Mejor accuracy calculada).
+Publicación como Recurso Restringido: En vez de guardar un archivo plano y terminar; el Coordinador hace una llamada interna a su propio ECC y crea un nuevo Recurso Oficial en la red IDS.
+Contrato de Acceso: Este recurso tiene una política pegada (ids:ContractOffer -> ids:Constraint). Solamente aquellos conectores (Peer URIs) que participaron activamente gastando computación en el proyecto FL están autorizados para descargar o utilizar dichos resultados finales.
+4. Conclusión
+Tu proyecto integra brillantemente un flujo corporativo IDS clásico con aprendizaje distribuido de última generación. Lograr que la decisión semántica de modelos fundacionales (Ollama local) dicte qué conectores deben negociar contratos, pero siempre subordinado al sistema de políticas en origen (Data Sovereignty de IDS y FL_OPT_OUT), produce una demostración final completamente autónoma, criptográficamente auditada y telemétricamente perfecta.

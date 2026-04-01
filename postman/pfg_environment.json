@@ -5,7 +5,7 @@
     {
       "key": "Proxy_Endpoint",
       "value": "https://localhost:5001/proxy",
-      "description": "Proxy del coordinator (Worker 1). Todas las peticiones IDS salen desde aqu\u00ed hacia los workers destino.",
+      "description": "Proxy del coordinator (Worker 1). Todas las peticiones IDS salen desde aquí hacia los workers destino.",
       "type": "default",
       "enabled": true
     },
@@ -33,49 +33,49 @@
     {
       "key": "offered_resource",
       "value": "",
-      "description": "Auto-rellenado por el test script del paso 1 \u2192 ids:resourceCatalog[0].ids:offeredResource[0].@id",
+      "description": "Auto-rellenado por el test script del paso 1 → ids:resourceCatalog[0].ids:offeredResource[0].@id",
       "type": "default",
       "enabled": true
     },
     {
       "key": "contract_id",
       "value": "",
-      "description": "Auto-rellenado por el test script del paso 1 \u2192 ids:contractOffer[0].@id",
+      "description": "Auto-rellenado por el test script del paso 1 → ids:contractOffer[0].@id",
       "type": "default",
       "enabled": true
     },
     {
       "key": "contract_permission",
       "value": "{}",
-      "description": "Auto-rellenado por el test script del paso 1 \u2192 ids:contractOffer[0].ids:permission[0] (objeto JSON completo). Usado en paso 3.",
+      "description": "Auto-rellenado por el test script del paso 1 → ids:contractOffer[0].ids:permission[0] (objeto JSON completo). Usado en paso 3.",
       "type": "default",
       "enabled": true
     },
     {
       "key": "contract_provider",
       "value": "",
-      "description": "Auto-rellenado por el test script del paso 1 \u2192 ids:contractOffer[0].ids:provider.@id",
+      "description": "Auto-rellenado por el test script del paso 1 → ids:contractOffer[0].ids:provider.@id",
       "type": "default",
       "enabled": true
     },
     {
       "key": "contract_agreement",
       "value": "{}",
-      "description": "Auto-rellenado por el test script del paso 3 \u2192 JSON completo del ContractAgreement. Usado en paso 4.",
+      "description": "Auto-rellenado por el test script del paso 3 → JSON completo del ContractAgreement. Usado en paso 4.",
       "type": "default",
       "enabled": true
     },
     {
       "key": "transfer_contract",
       "value": "",
-      "description": "Auto-rellenado por el test script del paso 3 \u2192 @id del ContractAgreement",
+      "description": "Auto-rellenado por el test script del paso 3 → @id del ContractAgreement",
       "type": "default",
       "enabled": true
     },
     {
       "key": "contract_artifact",
       "value": "http://w3id.org/engrd/connector/artifact/1",
-      "description": "Auto-rellenado por el test script del paso 1 \u2192 ids:representation[0].ids:instance[0].@id. Valor por defecto: artifact/1",
+      "description": "Auto-rellenado por el test script del paso 1 → ids:representation[0].ids:instance[0].@id. Valor por defecto: artifact/1",
       "type": "default",
       "enabled": true
     },
@@ -87,98 +87,98 @@
     {
       "key": "algorithm_b64",
       "value": "",
-      "description": "\u26a0\ufe0f RELLENAR MANUALMENTE antes del paso 5. Base64 de algorithm.py. PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\algorithm.py'))",
+      "description": "⚠️ RELLENAR MANUALMENTE antes del paso 5. Base64 de algorithm.py. PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\algorithm.py'))",
       "type": "default",
       "enabled": true
     },
     {
       "key": "config_b64",
       "value": "",
-      "description": "\u26a0\ufe0f RELLENAR MANUALMENTE antes del paso 5. Base64 de fl_config.json. PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\fl_config.json'))",
+      "description": "⚠️ RELLENAR MANUALMENTE antes del paso 5. Base64 de fl_config.json. PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\fl_config.json'))",
       "type": "default",
       "enabled": true
     },
     {
       "key": "compatible_workers",
       "value": "[]",
-      "description": "Auto-rellenado por el paso 5b \u2192 lista de workers compatibles descubiertos via broker Fuseki SPARQL (JSON array).",
+      "description": "Auto-rellenado por el paso 5b → lista de workers compatibles descubiertos via broker Fuseki SPARQL (JSON array).",
       "type": "default",
       "enabled": true
     },
     {
       "key": "accepted_workers",
       "value": "[]",
-      "description": "Auto-rellenado por el paso 5c \u2192 workers que aceptaron el contrato IDS (JSON array con connector_uri, ecc_url, transfer_contract).",
+      "description": "Auto-rellenado por el paso 5c → workers que aceptaron el contrato IDS (JSON array con connector_uri, ecc_url, transfer_contract).",
       "type": "default",
       "enabled": true
     },
     {
       "key": "rejected_workers",
       "value": "[]",
-      "description": "Auto-rellenado por el paso 5c \u2192 workers rechazados (ej. worker4 con FL_AUTHORIZED_URIS vac\u00edo).",
+      "description": "Auto-rellenado por el paso 5c → workers rechazados (ej. worker4 con FL_AUTHORIZED_URIS vacío).",
       "type": "default",
       "enabled": true
     },
     {
       "key": "Coordinator_Discover_Endpoint",
       "value": "https://localhost:5002/broker/discover",
-      "description": "Referencia documental. La colecci\u00f3n usa {{Coordinator_URL}}/broker/discover",
+      "description": "Referencia documental. La colección usa {{Coordinator_URL}}/broker/discover",
       "type": "default",
       "enabled": true
     },
     {
       "key": "Coordinator_Negotiate_Endpoint",
       "value": "https://localhost:5002/fl/negotiate",
-      "description": "Referencia documental. La colecci\u00f3n usa {{Coordinator_URL}}/fl/negotiate",
+      "description": "Referencia documental. La colección usa {{Coordinator_URL}}/fl/negotiate",
       "type": "default",
       "enabled": true
     },
     {
       "key": "Coordinator_Start_Endpoint",
       "value": "https://localhost:5002/fl/start",
-      "description": "Referencia documental. La colecci\u00f3n usa {{Coordinator_URL}}/fl/start",
+      "description": "Referencia documental. La colección usa {{Coordinator_URL}}/fl/start",
       "type": "default",
       "enabled": true
     },
     {
       "key": "Worker4_ECC_Forward_To",
       "value": "https://ecc-worker2:8889/data",
-      "description": "Auto-calculado en el pre-request del paso 15 seg\u00fan Coordinator_Port. ECC del coordinator al que worker4 intenta acceder.",
+      "description": "Auto-calculado en el pre-request del paso 15 según Coordinator_Port. ECC del coordinator al que worker4 intenta acceder.",
       "type": "default",
       "enabled": true
     },
     {
       "key": "fl_model_resource_id",
       "value": "",
-      "description": "Auto-rellenado por el paso 13 \u2192 @id del recurso FL publicado por el coordinator.",
+      "description": "Auto-rellenado por el paso 13 → @id del recurso FL publicado por el coordinator.",
       "type": "default",
       "enabled": true
     },
     {
       "key": "fl_model_contract_id",
       "value": "",
-      "description": "Auto-rellenado por el paso 13 \u2192 @id del contractOffer del recurso FL (pol\u00edtica connector-restricted-policy).",
+      "description": "Auto-rellenado por el paso 13 → @id del contractOffer del recurso FL (política connector-restricted-policy).",
       "type": "default",
       "enabled": true
     },
     {
       "key": "fl_model_authorised_peers",
       "value": "[]",
-      "description": "Auto-rellenado por el paso 13 \u2192 lista de connector URIs autorizados en el constraint del contrato FL (JSON array).",
+      "description": "Auto-rellenado por el paso 13 → lista de connector URIs autorizados en el constraint del contrato FL (JSON array).",
       "type": "default",
       "enabled": true
     },
     {
       "key": "w4_fl_resource_id",
       "value": "",
-      "description": "Auto-rellenado por el paso 15 \u2192 @id del recurso FL visible por worker4 en el cat\u00e1logo del coordinator.",
+      "description": "Auto-rellenado por el paso 15 → @id del recurso FL visible por worker4 en el catálogo del coordinator.",
       "type": "default",
       "enabled": true
     },
     {
       "key": "w4_fl_contract_id",
       "value": "",
-      "description": "Auto-rellenado por el paso 15 \u2192 @id del contrato FL usado por worker4 en el intento de negociaci\u00f3n (paso 16).",
+      "description": "Auto-rellenado por el paso 15 → @id del contrato FL usado por worker4 en el intento de negociación (paso 16).",
       "type": "default",
       "enabled": true
     },
@@ -216,9 +216,86 @@
       "description": "ID del Artifact",
       "type": "default",
       "enabled": true
+    },
+    {
+      "key": "DAPS_URL",
+      "value": "",
+      "description": "Auto-rellenado por DAPS-0 desde el host del Coordinator_URL. Puerto 4567 (omejdn-nginx en docker-compose). Ej: https://localhost:4567",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "Coordinator_ECC_URL",
+      "value": "",
+      "description": "Auto-rellenado por DAPS-0 desde /status del coordinator. URL interna del ECC (https://ecc-workerN:8889/data).",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "Coordinator_Connector_URI",
+      "value": "",
+      "description": "Auto-rellenado por DAPS-3 desde la self-description IDS. URI IDS del coordinator (http://w3id.org/engrd/connector/workerN).",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "Coordinator_Instance",
+      "value": "",
+      "description": "Auto-rellenado por DAPS-0 → instance ID del coordinator (1, 2, 3 o 4).",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "Worker1_ECC_Forward_To",
+      "value": "",
+      "description": "Auto-rellenado por BROKER-1 desde el endpoint del broker. ECC interno de Worker-1 (https://ecc-worker1:8889/data).",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "Worker3_ECC_Forward_To",
+      "value": "",
+      "description": "Auto-rellenado por BROKER-1 desde el endpoint del broker. ECC interno de Worker-3 (https://ecc-worker3:8889/data).",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "WS_Coordinator_URL",
+      "value": "",
+      "description": "Auto-rellenado por WS-0. URL WebSocket del coordinator: wss://localhost:500N/ws/fl-status.",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "WS_Worker1_URL",
+      "value": "",
+      "description": "Auto-rellenado por WS-0 desde el broker. URL WebSocket de Worker-1.",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "WS_Worker3_URL",
+      "value": "",
+      "description": "Auto-rellenado por WS-0 desde el broker. URL WebSocket de Worker-3.",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "WS_Worker4_URL",
+      "value": "",
+      "description": "Auto-rellenado por WS-0 desde el broker. URL WebSocket de Worker-4 (FL_OPT_OUT — estado siempre idle).",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "WS_IDS_Data_URL",
+      "value": "",
+      "description": "Auto-rellenado por WS-5 pre-request. URL WebSocket del canal IDS-data del coordinator (wss://localhost:500N/ws/ids-data).",
+      "type": "default",
+      "enabled": true
     }
   ],
   "_postman_variable_scope": "environment",
-  "_postman_exported_at": "2026-03-23T00:00:00.000Z",
+  "_postman_exported_at": "2026-03-31T00:00:00.000Z",
   "_postman_exported_using": "Postman/10.16.9"
 }
