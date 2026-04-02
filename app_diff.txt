@@ -1,0 +1,368 @@
+﻿diff --git a/ia-dataapp/app.py b/ia-dataapp/app.py
+index f490eee..43f0952 100644
+--- a/ia-dataapp/app.py
++++ b/ia-dataapp/app.py
+@@ -121,6 +121,7 @@ def _load_fl_config() -> dict:
+         "batch_size"   : 32,
+         "learning_rate": 0.001,
+         "test_split"   : 0.2,
++        "force_http_fallback": False, # Nuevo: fuerza pasar por IDS para benchmarking
+     }
+     if os.path.exists(CONFIG_PATH):
+         try:
+@@ -169,6 +170,22 @@ _round_lock = threading.Lock()
+ _my_selected_csv: str | None = None   # CSV elegido por el coordinator para este worker
+ PEER_SELECTED_CSVS: list = []   # CSV seleccionado por cada peer (├¡ndice igual que PEER_ECC_URLS)
+ 
++# =============================================================================
++# M├®tricas de rendimiento WebSocket vs HTTP
++# =============================================================================
++_ws_perf_stats = {
++    "ws_sends": 0,
++    "ws_total_ms": 0.0,
++    "ws_bytes": 0,
++    "http_sends": 0,
++    "http_total_ms": 0.0,
++    "http_bytes": 0,
++    "ws_failures": 0,
++    "http_failures": 0,
++    "history": [],   # ├║ltimas 50 transferencias con detalle
++}
++_ws_perf_lock = threading.Lock()
++
+ global_event_loop = None
+ 
+ 
+@@ -966,15 +983,8 @@ def _train_local(global_weights_b64: str, round_num: int, csv_path: str | None =
+ 
+ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
+                           weights_b64: str, round_num: int):
+-    try:
+-        import re
+-        m = re.search(r"worker(\d+)", peer_ecc_url)
+-        worker_id = m.group(1) if m else "?"
+-        if _send_global_weights_ws(worker_id, weights_b64, round_num):
+-            log.info(f"Pesos globales ronda {round_num} ÔåÆ worker-{worker_id} (WS High-Speed) Ô£à")
+-            return
+-    except Exception as e:
+-        log.warning(f"Fallback WS global_weights fall├│: {e}")
++    payload_size = len(weights_b64) if weights_b64 else 0
++    t_start = time.time()
+ 
+     try:
+         # Forzar renovaci├│n del token DAT antes de enviar
+@@ -988,7 +998,6 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
+             "coordinator_uri"   : CONNECTOR_URI,
+         }
+         # Serializar payload completo en base64 dentro de ids:contentVersion
+-        # como canal de respaldo por si el ECC descarta el payload multipart
+         payload_b64 = base64.b64encode(
+             json.dumps(fl_payload).encode()
+         ).decode()
+@@ -996,6 +1005,9 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
+             f"fl_global_weights::round{round_num}"
+             f"::payload::{payload_b64}"
+         )
++        
++        log.info(f"­ƒöÆ Preparando payload IDS cifrado ({payload_size/1024:.0f} KB) para {peer_ecc_url}")
++        
+         _ids_send(
+             peer_ecc_url, peer_conn_uri, "ids:ArtifactRequestMessage",
+             requested_artifact=(
+@@ -1004,8 +1016,15 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
+             extra_header={"ids:contentVersion": content_version},
+             payload=fl_payload,
+         )
+-        log.info(f"Pesos globales ronda {round_num} ÔåÆ {peer_ecc_url} Ô£à")
++        elapsed_ms = (time.time() - t_start) * 1000
++        log.info(
++            f"­ƒøí´©Å  Pesos globales IDS ronda {round_num} ÔåÆ {peer_ecc_url} "
++            f"Ô£à  {payload_size/1024:.0f} KB procesados y validados en {elapsed_ms:.1f}ms"
++        )
++        _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"IDS globalÔåÆ{peer_ecc_url}")
+     except Exception as exc:
++        with _ws_perf_lock:
++            _ws_perf_stats["http_failures"] += 1
+         log.error(f"Error enviando pesos globales a {peer_ecc_url}: {exc}")
+ 
+ 
+@@ -1014,7 +1033,10 @@ def _send_local_weights(weights_b64: str, n_samples: int,
+     if not coordinator_ecc_url:
+         log.error("coordinator_ecc_url no definido")
+         return
+-        
++
++    payload_size = len(weights_b64) if weights_b64 else 0
++    t_start = time.time()
++
+     fl_payload = {
+         "type"       : "fl_weights",
+         "instance_id": INSTANCE_ID,
+@@ -1024,18 +1046,9 @@ def _send_local_weights(weights_b64: str, n_samples: int,
+         "metrics"    : metrics,
+     }
+ 
+-    try:
+-        if _send_local_weights_ws(fl_payload):
+-            log.info(f"Pesos ronda {round_num} enviados al coordinator (WS High-Speed) Ô£à")
+-            return
+-    except Exception as e:
+-        log.warning(f"Fallback WS local_weights fall├│: {e}")
+-
+     try:
+         # Forzar renovaci├│n del token DAT antes de enviar
+         _dat_cache["exp"] = 0
+-        # Serializar payload completo en base64 dentro de ids:contentVersion
+-        # como canal de respaldo por si el ECC descarta el payload multipart
+         payload_b64 = base64.b64encode(
+             json.dumps(fl_payload).encode()
+         ).decode()
+@@ -1043,6 +1056,9 @@ def _send_local_weights(weights_b64: str, n_samples: int,
+             f"fl_weights::worker{INSTANCE_ID}::round{round_num}"
+             f"::payload::{payload_b64}"
+         )
++        
++        log.info(f"­ƒöÆ Preparando payload local IDS cifrado ({payload_size/1024:.0f} KB) para el coordinador")
++
+         _ids_send(
+             coordinator_ecc_url,
+             coordinator_conn_uri or CONNECTOR_URI,
+@@ -1053,8 +1069,15 @@ def _send_local_weights(weights_b64: str, n_samples: int,
+             extra_header={"ids:contentVersion": content_version},
+             payload=fl_payload,
+         )
+-        log.info(f"Pesos ronda {round_num} enviados al coordinator Ô£à")
++        elapsed_ms = (time.time() - t_start) * 1000
++        log.info(
++            f"­ƒøí´©Å  Pesos locales IDS ronda {round_num} ÔåÆ coordinator "
++            f"Ô£à  {payload_size/1024:.0f} KB procesados y validados en {elapsed_ms:.1f}ms"
++        )
++        _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"IDS local-w{INSTANCE_ID}ÔåÆcoord")
+     except Exception as exc:
++        with _ws_perf_lock:
++            _ws_perf_stats["http_failures"] += 1
+         log.error(f"Error enviando pesos locales: {exc}")
+ 
+ 
+@@ -2625,10 +2648,20 @@ async def ws_llm_recommend(websocket: WebSocket):
+     
+     loop = asyncio.get_running_loop()
+     def _stream_llm():
+-        with requests.post(LLM_ENDPOINT, json={"model": LLM_MODEL, "prompt": prompt, "stream": True}, stream=True, verify=False, timeout=60) as r:
+-            for line in r.iter_lines():
+-                if line:
+-                    yield line.decode()
++        try:
++            with requests.post(LLM_ENDPOINT, json={"model": LLM_MODEL, "prompt": prompt, "stream": True}, stream=True, verify=False, timeout=60) as r:
++                r.raise_for_status()
++                for line in r.iter_lines():
++                    if line:
++                        try:
++                            # Verify valid JSON block from Ollama before yielding
++                            json.loads(line.decode())
++                            yield line.decode()
++                        except json.JSONDecodeError:
++                            continue
++        except requests.exceptions.RequestException as req_err:
++            log.warning(f"[LLM] Error de conexi├│n con Ollama en ws_llm_recommend: {req_err}")
++            yield json.dumps({"error": f"Error de conexi├│n con Ollama: {req_err}"})
+ 
+     import queue
+     q = queue.Queue()
+@@ -2955,6 +2988,7 @@ async def fl_negotiate():
+                     "ecc_url"          : ecc_url,
+                     "match_ratio"      : worker["match_ratio"],
+                     "transfer_contract": agreement_id,
++                    "selected_csv"     : worker.get("selected_csv"),  # preservar CSV asignado por coordinator
+                 })
+ 
+         except Exception as exc:
+@@ -3089,15 +3123,43 @@ class FLTrainingWSManager:
+     async def connect(self, worker_id: str, websocket: WebSocket):
+         await websocket.accept()
+         self.active_workers[worker_id] = websocket
+-        log.info(f"[WS FL-Train] Worker-{worker_id} conectado al t├║nel de entrenamiento (Alta velocidad)")
++        log.info(
++            f"[WS FL-Train] ­ƒÜÇ T├ÜNEL ESTABLECIDO: Worker-{worker_id} ÔåÆ Coordinator-{INSTANCE_ID}\n"
++            f"  T├║neles activos: {list(self.active_workers.keys())}\n"
++            f"  Total: {len(self.active_workers)} worker(s) en data-plane WS"
++        )
+ 
+     def disconnect(self, worker_id: str):
+         if worker_id in self.active_workers:
+             del self.active_workers[worker_id]
+-            log.info(f"[WS FL-Train] Worker-{worker_id} desconectado del t├║nel de entrenamiento")
++            log.info(
++                f"[WS FL-Train] ÔÜí T├ÜNEL CERRADO: Worker-{worker_id}\n"
++                f"  T├║neles activos restantes: {list(self.active_workers.keys())}"
++            )
+ 
+ fl_ws_manager = FLTrainingWSManager()
+ 
++
++def _record_ws_perf(channel: str, elapsed_ms: float, payload_bytes: int,
++                    round_num: int, label: str):
++    """Registra una transferencia en las m├®tricas de rendimiento WS vs HTTP."""
++    with _ws_perf_lock:
++        key = "ws" if channel == "ws" else "http"
++        _ws_perf_stats[f"{key}_sends"] += 1
++        _ws_perf_stats[f"{key}_total_ms"] += elapsed_ms
++        _ws_perf_stats[f"{key}_bytes"] += payload_bytes
++        entry = {
++            "channel": channel,
++            "elapsed_ms": round(elapsed_ms, 2),
++            "payload_kb": round(payload_bytes / 1024, 1),
++            "round": round_num,
++            "label": label,
++            "ts": datetime.datetime.utcnow().strftime("%H:%M:%S"),
++        }
++        _ws_perf_stats["history"].append(entry)
++        if len(_ws_perf_stats["history"]) > 50:
++            _ws_perf_stats["history"] = _ws_perf_stats["history"][-50:]
++
+ @app.websocket("/ws/fl-training/{worker_id}")
+ async def ws_fl_training(websocket: WebSocket, worker_id: str):
+     await fl_ws_manager.connect(worker_id, websocket)
+@@ -3153,14 +3215,21 @@ async def _fl_worker_ws_client_connect():
+     coord_id = m.group(1)
+     if str(coord_id) == str(INSTANCE_ID):
+         return # Auto-loop
+-    ws_url = f"wss://be-dataapp-worker{coord_id}:8500/ws/fl-training/{INSTANCE_ID}"
++    # ws:// (no wss://) porque el DataApp corre en HTTP plano dentro de Docker.
++    # El ECC usa TLS en sus puertos p├║blicos, pero la red Docker interna
++    # entre DataApps no necesita TLS adicional.
++    ws_url = f"ws://be-dataapp-worker{coord_id}:8500/ws/fl-training/{INSTANCE_ID}"
+     try:
+-        import ssl
+-        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+-        ssl_ctx.check_hostname = False
+-        ssl_ctx.verify_mode = ssl.CERT_NONE
+-        fl_ws_client_conn = await websockets.connect(ws_url, max_size=None, ping_timeout=None, ssl=ssl_ctx)
+-        log.info(f"[WS FL-Train] ­ƒÜÇ T├║nel de entrenamiento establecido hacia coordinator en {ws_url}")
++        fl_ws_client_conn = await websockets.connect(
++            ws_url, max_size=None, ping_timeout=None
++        )
++        log.info(
++            f"[WS FL-Train] ­ƒÜÇ T├ÜNEL WORKERÔåÆCOORDINATOR ESTABLECIDO\n"
++            f"  Worker-{INSTANCE_ID} ÔöÇÔöÇWSÔöÇÔöÇÔåÆ Coordinator (worker{coord_id})\n"
++            f"  URL: {ws_url}\n"
++            f"  Canal: ws:// (data-plane interno Docker, sin TLS overhead)\n"
++            f"  Modo: Bypass IDS ÔÇö pesos viajar├ín por WS en lugar de HTTP multipart"
++        )
+         
+         while True:
+             try:
+@@ -3179,11 +3248,16 @@ async def _fl_worker_ws_client_connect():
+                             log.error(f"Error WS training local ronda {round_num}: {exc}")
+                     threading.Thread(target=_train_and_reply_ext, daemon=True).start()
+             except Exception as loop_e:
+-                log.warning(f"[WS FL-Train] Enlace websocket interrumpido: {loop_e}")
++                log.warning(f"[WS FL-Train] ÔÜí Enlace websocket interrumpido: {loop_e}")
+                 break
+                 
+     except Exception as e:
+-        log.warning(f"[WS FL-Train] No se pudo establecer t├║nel WS con {ws_url}: {e} - Seguiremos cruzando por IDS API")
++        log.warning(
++            f"[WS FL-Train] ÔØî T├ÜNEL WS NO DISPONIBLE\n"
++            f"  URL: {ws_url}\n"
++            f"  Error: {e}\n"
++            f"  Fallback: Los pesos se enviar├ín por IDS/HTTP multipart (m├ís lento)"
++        )
+         fl_ws_client_conn = None
+ 
+ def _start_worker_ws_client():
+@@ -3203,19 +3277,21 @@ class _WSConnectionManager:
+     """
+     Gestor de conexiones WebSocket activas.
+     Permite broadcast a todos los clientes conectados simult├íneamente.
++    Usa threading.Lock para compatibilidad con Python 3.12+ donde
++    asyncio.Lock() no puede crearse fuera del event loop.
+     """
+     def __init__(self):
+         self._clients: list[WebSocket] = []
+-        self._lock = asyncio.Lock()
++        self._lock = threading.Lock()  # threading.Lock es seguro fuera del event loop
+ 
+     async def connect(self, ws: WebSocket):
+         await ws.accept()
+-        async with self._lock:
++        with self._lock:
+             self._clients.append(ws)
+         log.info(f"[WS] Cliente conectado ÔÇö total activos: {len(self._clients)}")
+ 
+     async def disconnect(self, ws: WebSocket):
+-        async with self._lock:
++        with self._lock:
+             if ws in self._clients:
+                 self._clients.remove(ws)
+         log.info(f"[WS] Cliente desconectado ÔÇö total activos: {len(self._clients)}")
+@@ -3223,7 +3299,7 @@ class _WSConnectionManager:
+     async def broadcast(self, data: dict):
+         """Env├¡a el mismo JSON a todos los clientes conectados."""
+         dead = []
+-        async with self._lock:
++        with self._lock:
+             clients_snapshot = list(self._clients)
+         for ws in clients_snapshot:
+             try:
+@@ -3267,6 +3343,60 @@ def _notify_ws_clients(data: dict):
+ #   asyncio.run(monitor())
+ # =============================================================================
+ 
++@app.get("/ws/tunnel-status")
++def ws_tunnel_status():
++    """
++    Observabilidad de los t├║neles WebSocket activos.
++    Permite a pfg_ids_fl_flow.py verificar si los canales
++    de alta velocidad est├ín realmente establecidos.
++    """
++    return {
++        "instance"                : INSTANCE_ID,
++        "fl_status_clients"       : len(_ws_manager._clients),
++        "worker_tunnels_active"   : list(fl_ws_manager.active_workers.keys()),
++        "coordinator_tunnel_active": fl_ws_client_conn is not None,
++        "role"                    : "coordinator" if is_coordinator else "worker",
++    }
++
++
++@app.get("/ws/performance")
++def ws_performance():
++    """
++    M├®tricas de rendimiento comparando WebSocket vs HTTP para
++    la transferencia de pesos del modelo en Federated Learning.
++    Permite demostrar la ventaja del data-plane WS frente al
++    control-plane IDS/HTTP multipart.
++    """
++    with _ws_perf_lock:
++        stats = dict(_ws_perf_stats)
++        history = list(stats.pop("history", []))
++
++    ws_avg = (stats["ws_total_ms"] / stats["ws_sends"]) if stats["ws_sends"] > 0 else 0
++    http_avg = (stats["http_total_ms"] / stats["http_sends"]) if stats["http_sends"] > 0 else 0
++    speedup = (http_avg / ws_avg) if ws_avg > 0 and http_avg > 0 else None
++
++    return {
++        "instance": INSTANCE_ID,
++        "role": "coordinator" if is_coordinator else "worker",
++        "summary": {
++            "ws": {
++                "sends": stats["ws_sends"],
++                "avg_ms": round(ws_avg, 2),
++                "total_kb": round(stats["ws_bytes"] / 1024, 1),
++                "failures": stats["ws_failures"],
++            },
++            "http": {
++                "sends": stats["http_sends"],
++                "avg_ms": round(http_avg, 2),
++                "total_kb": round(stats["http_bytes"] / 1024, 1),
++                "failures": stats["http_failures"],
++            },
++            "ws_speedup_factor": round(speedup, 2) if speedup else "N/A (datos insuficientes)",
++        },
++        "recent_transfers": history[-20:],
++    }
++
++
+ @app.websocket("/ws/fl-status")
+ async def ws_fl_status(websocket: WebSocket):
+     """

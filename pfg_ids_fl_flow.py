@@ -501,11 +501,76 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
             llm_conf = w.get("llm_confidence", 0)
             llm_mod  = w.get("llm_model", "Ollama")
             llm_rsn  = w.get("llm_reasoning", "Decisión basada en esquema semántico.")
-            
-            print(f"\n        {MAGENTA}→ Buscando el mejor CSV mediante IA Local ({llm_mod})...{RESET}")
-            print(f"          {GRAY}(Análisis semántico de columnas sin acceso a datos reales){RESET}")
-            field(f"  IA ({llm_mod}) Sugerencia", f"{CYAN}{llm_rec} (confianza: {llm_conf:.0%}){RESET}", indent=8)
-            field(f"  IA ({llm_mod}) Razonamiento", f"{GRAY}{llm_rsn}{RESET}", indent=8)
+
+            # ── Streaming WS del razonamiento LLM ─────────────────────────────
+            # Conectamos al /ws/llm-recommend del COORDINATOR pasando los CSVs
+            # del PEER como query param (peer_csvs=<JSON URL-encoded>).
+            # Así el LLM razona sobre los ficheros correctos del peer y el
+            # streaming es visible en tiempo real, sin necesidad de que el peer
+            # tenga un puerto expuesto directamente al script externo.
+            _llm_streamed = False
+
+            if _WS_AVAILABLE:
+                import asyncio as _asyncio
+                import ssl as _ssl
+                import urllib.parse as _urlparse
+
+                # Construir la lista de candidatos del peer para pasarla al WS
+                # Incluye las columnas reales que vienen en all_evaluated para
+                # que el LLM pueda razonar sobre el schema completo del peer.
+                _peer_csvs_list = [
+                    {
+                        "filename": ev["filename"],
+                        "columns" : ev.get("columns", []),
+                        "count"   : ev.get("count", ev.get("total_cols", 0)),
+                    }
+                    for ev in w.get("all_evaluated", [])
+                ]
+                _peer_csvs_json = _urlparse.quote(json.dumps(_peer_csvs_list))
+
+                _ws_url = (
+                    f"{coordinator_url.rstrip('/')}/ws/llm-recommend"
+                    f"?peer_worker_id={wid}&peer_csvs={_peer_csvs_json}"
+                )
+                _ws_url = _ws_url.replace("https://", "wss://").replace("http://", "ws://")
+
+                async def _stream_llm_tokens():
+                    _ssl_ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
+                    _ssl_ctx.check_hostname = False
+                    _ssl_ctx.verify_mode    = _ssl.CERT_NONE
+                    full_text = ""
+                    try:
+                        async with websockets.connect(
+                            _ws_url, ssl=_ssl_ctx,
+                            open_timeout=8, ping_interval=None
+                        ) as _ws:
+                            print(f"\n        {MAGENTA}→ IA Local ({llm_mod}) razonando en tiempo real (via WS):{RESET}")
+                            print(f"          {GRAY}", end="", flush=True)
+                            async for _raw in _ws:
+                                try:
+                                    _chunk = json.loads(_raw)
+                                    if _chunk.get("type") == "token":
+                                        tk = _chunk["token"]
+                                        print(tk, end="", flush=True)
+                                        full_text += tk
+                                    elif "error" in _chunk:
+                                        break
+                                except Exception:
+                                    pass
+                            print(f"{RESET}")
+                    except Exception:
+                        pass  # fallback silencioso a datos del /broker/discover
+                    return full_text
+
+                _llm_streamed = bool(_asyncio.run(_stream_llm_tokens()))
+
+            if not _llm_streamed:
+                # Fallback: mostrar los datos que ya devolvió /broker/discover
+                print(f"\n        {MAGENTA}→ Buscando el mejor CSV mediante IA Local ({llm_mod})...{RESET}")
+                print(f"          {GRAY}(Análisis semántico de columnas sin acceso a datos reales){RESET}")
+
+            field(f"  IA ({llm_mod}) Sugerencia",    f"{CYAN}{llm_rec} (confianza: {llm_conf:.0%}){RESET}", indent=8)
+            field(f"  IA ({llm_mod}) Razonamiento",  f"{GRAY}{llm_rsn}{RESET}", indent=8)
 
             if llm_conf >= 0.80:
                 field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
@@ -516,7 +581,7 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
         else:
             field("  CSV (Seleccionado por columnas)", math_csv, indent=8)
             field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
-                
+
         info(f"     El coordinator usará {sel_csv!r} "
              f"en worker-{wid} para el entrenamiento FL")
         print()
@@ -795,13 +860,35 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
     phase(
         5,
         "Monitorización FL en tiempo real via WebSocket",
-        f"wss://localhost:{coordinator_url.split(':')[-1]}/ws/fl-status\n"
+        f"ws://localhost:{coordinator_url.split(':')[-1]}/ws/fl-status\n"
         f"Eventos: fl_started → round_started → round_completed → fl_completed\n"
         f"Workers participantes: {', '.join('worker-' + w for w in accepted_wids)}\n"
         f"Fallback automático a polling HTTP si WebSocket no está disponible."
     )
 
-    # ── Intentar conexión WebSocket ───────────────────────────────────────────
+    # ── Verificar estado real de los túneles WS ───────────────────────────────
+    step("WS-check", "GET /ws/tunnel-status — verificando túneles de comunicación activos")
+    try:
+        ts = SESSION.get(f"{coordinator_url}/ws/tunnel-status", timeout=10, verify=False)
+        if ts.ok:
+            td = ts.json()
+            ws_status_clients  = td.get("fl_status_clients", 0)
+            ws_workers_active  = td.get("worker_tunnels_active", [])
+            ws_coord_tunnel    = td.get("coordinator_tunnel_active", False)
+            info(f"[WS] /ws/fl-status   → {ws_status_clients} cliente(s) de monitorización")
+            if ws_workers_active:
+                ok(f"[WS] Túneles High-Speed ACTIVOS → workers: {ws_workers_active}")
+            else:
+                warn("[WS] Ningún túnel High-Speed WS activo aún — "
+                     "los pesos se enviarán vía IDS HTTP (fallback normal)")
+            info(f"[WS] Túnel hacia coordinator: {'Activo ✅' if ws_coord_tunnel else 'Inactivo (fallback HTTP)'}")
+        else:
+            warn(f"GET /ws/tunnel-status respondió {ts.status_code}")
+    except Exception as _te:
+        warn(f"No se pudo consultar /ws/tunnel-status: {_te}")
+
+    # wss:// — el DataApp corre con TLS (uvicorn + ECDHE cipher suites, start.sh).
+    # https://localhost:5002 → wss://localhost:5002/ws/fl-status
     ws_url = coordinator_url.replace("https://", "wss://").replace("http://", "ws://")
     ws_url = f"{ws_url}/ws/fl-status"
 
@@ -823,17 +910,15 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
 
         while conn_attempts < max_attempts:
             try:
-                # Contexto SSL que acepta el certificado autofirmado del DataApp.
-                # El DataApp arranca con TLS (wss://) usando un cert autofirmado,
-                # igual que el resto de componentes del stack (ECC, DAPS, Broker).
-                import ssl as _ssl
-                _ssl_ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
-                _ssl_ctx.check_hostname = False
-                _ssl_ctx.verify_mode    = _ssl.CERT_NONE
-
+                # wss:// con TLS — el DataApp usa ECDHE (start.sh con ssl_keyfile).
+                # ssl_ctx con verify=False para certificado auto-firmado del DataApp.
+                import ssl as _ssl_fl
+                _ssl_fl_ctx = _ssl_fl.SSLContext(_ssl_fl.PROTOCOL_TLS_CLIENT)
+                _ssl_fl_ctx.check_hostname = False
+                _ssl_fl_ctx.verify_mode    = _ssl_fl.CERT_NONE
                 async with websockets.connect(
                     ws_url,
-                    ssl           = _ssl_ctx,
+                    ssl          = _ssl_fl_ctx,
                     ping_interval = 20,
                     ping_timeout  = 30,
                     open_timeout  = 15,
