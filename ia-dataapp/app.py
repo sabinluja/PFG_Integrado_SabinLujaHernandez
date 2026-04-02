@@ -967,6 +967,16 @@ def _train_local(global_weights_b64: str, round_num: int, csv_path: str | None =
 def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                           weights_b64: str, round_num: int):
     try:
+        import re
+        m = re.search(r"worker(\d+)", peer_ecc_url)
+        worker_id = m.group(1) if m else "?"
+        if _send_global_weights_ws(worker_id, weights_b64, round_num):
+            log.info(f"Pesos globales ronda {round_num} → worker-{worker_id} (WS High-Speed) ✅")
+            return
+    except Exception as e:
+        log.warning(f"Fallback WS global_weights falló: {e}")
+
+    try:
         # Forzar renovación del token DAT antes de enviar
         _dat_cache["exp"] = 0
         fl_payload = {
@@ -1004,17 +1014,26 @@ def _send_local_weights(weights_b64: str, n_samples: int,
     if not coordinator_ecc_url:
         log.error("coordinator_ecc_url no definido")
         return
+        
+    fl_payload = {
+        "type"       : "fl_weights",
+        "instance_id": INSTANCE_ID,
+        "round"      : round_num,
+        "weights_b64": weights_b64,
+        "n_samples"  : n_samples,
+        "metrics"    : metrics,
+    }
+
+    try:
+        if _send_local_weights_ws(fl_payload):
+            log.info(f"Pesos ronda {round_num} enviados al coordinator (WS High-Speed) ✅")
+            return
+    except Exception as e:
+        log.warning(f"Fallback WS local_weights falló: {e}")
+
     try:
         # Forzar renovación del token DAT antes de enviar
         _dat_cache["exp"] = 0
-        fl_payload = {
-            "type"       : "fl_weights",
-            "instance_id": INSTANCE_ID,
-            "round"      : round_num,
-            "weights_b64": weights_b64,
-            "n_samples"  : n_samples,
-            "metrics"    : metrics,
-        }
         # Serializar payload completo en base64 dentro de ids:contentVersion
         # como canal de respaldo por si el ECC descarta el payload multipart
         payload_b64 = base64.b64encode(
@@ -2193,6 +2212,7 @@ async def ids_data(request: Request):
                         log.info(f"[fl_global_weights] coordinator_ecc_url inferido del issuerConnector: {_coord_ecc}")
                 coordinator_ecc_url  = _coord_ecc
                 coordinator_conn_uri = _coord_uri
+                _start_worker_ws_client()
 
             def _train_and_reply():
                 try:
@@ -2560,6 +2580,90 @@ def dataset_llm_recommend():
         "confidence": rec["confidence"],
         "all_candidates": [c["filename"] for c in candidates]
     }
+
+
+@app.websocket("/ws/llm-recommend")
+async def ws_llm_recommend(websocket: WebSocket):
+    """
+    Realiza una consulta a Ollama simulando streaming y envía la salida 
+    token a token por el WebSocket, mejorando drásticamente el User Experience 
+    y simulando una IA "pensando en tiempo real".
+    """
+    await websocket.accept()
+    
+    csvs = _get_all_local_csvs()
+    if not csvs:
+        await websocket.send_json({"error": f"No hay CSVs en {INPUT_DIR}"})
+        await websocket.close()
+        return
+
+    candidates = [{"filename": c["filename"], "columns": c["columns"], "count": len(c["columns"])} for c in csvs]
+    context_str = "El dataset de referencia ideal para este entorno es UNSW-NB15 (Intrusión de red)."
+    
+    csv_descriptions = [
+        f"  [{i}] {c['filename']}\n      Columnas ({c['count']}): {', '.join(c.get('columns', [])[:12])}..."
+        for i, c in enumerate(candidates, 1)
+    ]
+    
+    prompt = (
+        "Eres un experto en Machine Learning y Federated Learning para ciberseguridad.\n"
+        "Tu tarea es seleccionar el dataset MÁS ADECUADO para un entrenamiento de "
+        "detección de intrusiones de red (Network Intrusion Detection) en un entorno "
+        "de Federated Learning basado en el ecosistema IDS.\n"
+        f"Contexto adicional: {context_str}\n\n"
+        "A continuación tienes los datasets disponibles en este worker:\n"
+        f"{str(csv_descriptions)}\n\n"
+        "Razona tu respuesta paso a paso detalladamente de forma concisa y SIEMPRE termina tu respuesta "
+        "con un bloque en formato JSON EXACTAMENTE así:\n"
+        "```json\n"
+        "{\"filename\": \"<nombre_exacto>\", \"reasoning\": \"<explicación>\", \"confidence\": <número_0_1>}\n"
+        "```\n"
+        "No añadas texto después del JSON."
+    )
+    
+    log.info(f"[ws/llm-recommend] Iniciando streaming con {LLM_MODEL}")
+    
+    loop = asyncio.get_running_loop()
+    def _stream_llm():
+        with requests.post(LLM_ENDPOINT, json={"model": LLM_MODEL, "prompt": prompt, "stream": True}, stream=True, verify=False, timeout=60) as r:
+            for line in r.iter_lines():
+                if line:
+                    yield line.decode()
+
+    import queue
+    q = queue.Queue()
+    def _run_req():
+        try:
+            for l in _stream_llm():
+                q.put(l)
+            q.put(None)
+        except Exception as e:
+            q.put(e)
+            
+    threading.Thread(target=_run_req, daemon=True).start()
+    
+    try:
+        while True:
+            item = await loop.run_in_executor(None, q.get)
+            if item is None:
+                break
+            if isinstance(item, Exception):
+                await websocket.send_json({"error": "Error de conexión con Ollama", "detail": str(item)})
+                break
+            try:
+                chunk = json.loads(item)
+                if "response" in chunk:
+                    await websocket.send_json({"type": "token", "token": chunk["response"]})
+                if chunk.get("done"):
+                    break
+            except Exception:
+                pass
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        log.warning(f"Error WS LLM: {e}")
+    finally:
+        await websocket.close()
 
 
 def _publish_local_csvs() -> dict:
@@ -2976,6 +3080,124 @@ def fl_model():
 # =============================================================================
 # WebSocket — Gestión de conexiones en tiempo real
 # =============================================================================
+
+# Túnel High-Speed para Federación de Pesos (Bypass IDS payload bottleneck)
+class FLTrainingWSManager:
+    def __init__(self):
+        self.active_workers: dict[str, WebSocket] = {}
+
+    async def connect(self, worker_id: str, websocket: WebSocket):
+        await websocket.accept()
+        self.active_workers[worker_id] = websocket
+        log.info(f"[WS FL-Train] Worker-{worker_id} conectado al túnel de entrenamiento (Alta velocidad)")
+
+    def disconnect(self, worker_id: str):
+        if worker_id in self.active_workers:
+            del self.active_workers[worker_id]
+            log.info(f"[WS FL-Train] Worker-{worker_id} desconectado del túnel de entrenamiento")
+
+fl_ws_manager = FLTrainingWSManager()
+
+@app.websocket("/ws/fl-training/{worker_id}")
+async def ws_fl_training(websocket: WebSocket, worker_id: str):
+    await fl_ws_manager.connect(worker_id, websocket)
+    try:
+        while True:
+            data = await websocket.receive_json()
+            if data.get("type") == "fl_weights":
+                sender      = data.get("instance_id", "?")
+                round_num   = data.get("round", 0)
+                weights_b64 = data.get("weights_b64")
+                n_samples   = data.get("n_samples")
+                metrics     = data.get("metrics")
+                
+                with _round_lock:
+                    _round_weights[sender] = {
+                        "weights_b64": weights_b64,
+                        "n_samples"  : n_samples,
+                        "metrics"    : metrics,
+                    }
+                log.info(f"[WS FL-Train] 💨 Pesos locales recibidos vía WS: worker-{sender} ronda {round_num}")
+    except WebSocketDisconnect:
+        fl_ws_manager.disconnect(worker_id)
+    except Exception as e:
+        log.error(f"[WS FL-Train] Error en conexión WS para worker-{worker_id}: {e}")
+        fl_ws_manager.disconnect(worker_id)
+
+def _send_global_weights_ws(worker_id: str, weights_b64: str, round_num: int) -> bool:
+    global global_event_loop
+    if worker_id in fl_ws_manager.active_workers and global_event_loop:
+        ws = fl_ws_manager.active_workers[worker_id]
+        payload = {
+            "type"              : "fl_global_weights",
+            "round"             : round_num,
+            "global_weights_b64": weights_b64,
+            "from_coordinator"  : INSTANCE_ID
+        }
+        asyncio.run_coroutine_threadsafe(ws.send_json(payload), global_event_loop)
+        return True
+    return False
+
+# Client WS logic for Workers connecting to Coordinator
+fl_ws_client_conn = None
+
+async def _fl_worker_ws_client_connect():
+    global fl_ws_client_conn, coordinator_ecc_url
+    if not coordinator_ecc_url:
+        return
+    import re
+    import websockets
+    m = re.search(r"worker(\d+)", coordinator_ecc_url)
+    if not m:
+        return
+    coord_id = m.group(1)
+    if str(coord_id) == str(INSTANCE_ID):
+        return # Auto-loop
+    ws_url = f"wss://be-dataapp-worker{coord_id}:8500/ws/fl-training/{INSTANCE_ID}"
+    try:
+        import ssl
+        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        fl_ws_client_conn = await websockets.connect(ws_url, max_size=None, ping_timeout=None, ssl=ssl_ctx)
+        log.info(f"[WS FL-Train] 🚀 Túnel de entrenamiento establecido hacia coordinator en {ws_url}")
+        
+        while True:
+            try:
+                data = await fl_ws_client_conn.recv()
+                payload = json.loads(data)
+                if payload.get("type") == "fl_global_weights":
+                    round_num = payload.get("round", 1)
+                    global_weights = payload.get("global_weights_b64")
+                    log.info(f"[WS FL-Train] 💨 Pesos globales recibidos vía WS — ronda {round_num}")
+                    
+                    def _train_and_reply_ext():
+                        try:
+                            result = _train_local(global_weights, round_num, _my_selected_csv)
+                            _send_local_weights(result["weights_b64"], result["n_samples"], result["metrics"], round_num)
+                        except Exception as exc:
+                            log.error(f"Error WS training local ronda {round_num}: {exc}")
+                    threading.Thread(target=_train_and_reply_ext, daemon=True).start()
+            except Exception as loop_e:
+                log.warning(f"[WS FL-Train] Enlace websocket interrumpido: {loop_e}")
+                break
+                
+    except Exception as e:
+        log.warning(f"[WS FL-Train] No se pudo establecer túnel WS con {ws_url}: {e} - Seguiremos cruzando por IDS API")
+        fl_ws_client_conn = None
+
+def _start_worker_ws_client():
+    global global_event_loop
+    if global_event_loop:
+        asyncio.run_coroutine_threadsafe(_fl_worker_ws_client_connect(), global_event_loop)
+
+def _send_local_weights_ws(payload: dict) -> bool:
+    global fl_ws_client_conn, global_event_loop
+    if fl_ws_client_conn and global_event_loop:
+        asyncio.run_coroutine_threadsafe(fl_ws_client_conn.send(json.dumps(payload)), global_event_loop)
+        return True
+    return False
+
 
 class _WSConnectionManager:
     """

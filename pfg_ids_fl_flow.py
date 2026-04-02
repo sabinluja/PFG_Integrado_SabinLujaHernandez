@@ -893,21 +893,14 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                                         pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
                                         _print_handshake_algoritmo(rnd_num, wid, pl, cid)
                                     print()
-                                    print(f"    {BOLD}[ronda {rnd_num}] Enviando pesos globales "
-                                          f"a peers via IDS...{RESET}")
+                                    print(f"    {BOLD}[ronda {rnd_num}] 💨 Enviando pesos globales a peers via WebSocket (High-Speed Data Plane)...{RESET}")
                                     for w in accepted:
                                         uri = w.get("connector_uri", "")
                                         m   = re.search(r"worker(\d+)", uri)
                                         wid = m.group(1) if m else "?"
                                         pe  = endpoints["peers"].get(f"worker{wid}", {})
                                         pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
-                                        _ids_log("out",
-                                                 f"ids:ArtifactRequestMessage  "
-                                                 f"[fl_global_weights::round{rnd_num}]",
-                                                 f"coordinator-{cid}", pl)
-                                        _ids_log("in",
-                                                 "ids:ArtifactResponseMessage  [training_started]",
-                                                 pl, f"coordinator-{cid}")
+                                        print(f"      {CYAN}[WS 💨]  fl_global_weights::round{rnd_num}  {GRAY}coordinator-{cid}  ──▶  {pl}{RESET}")
                                         print(f"      {GRAY}Pesos globales ronda {rnd_num} "
                                               f"→ {pl}  {GREEN}✅{RESET}")
                                     print()
@@ -955,21 +948,14 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                                     _print_handshake_algoritmo(rnd_num, wid, pl, cid)
 
                                 print()
-                                print(f"    {BOLD}[ronda {rnd_num}] Enviando pesos globales "
-                                      f"a peers via IDS...{RESET}")
+                                print(f"    {BOLD}[ronda {rnd_num}] 💨 Enviando pesos globales a peers via WebSocket (High-Speed Data Plane)...{RESET}")
                                 for w in accepted:
                                     uri = w.get("connector_uri", "")
                                     m   = re.search(r"worker(\d+)", uri)
                                     wid = m.group(1) if m else "?"
                                     pe  = endpoints["peers"].get(f"worker{wid}", {})
                                     pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
-                                    _ids_log("out",
-                                             f"ids:ArtifactRequestMessage  "
-                                             f"[fl_global_weights::round{rnd_num}]",
-                                             f"coordinator-{cid}", pl)
-                                    _ids_log("in",
-                                             "ids:ArtifactResponseMessage  [training_started]",
-                                             pl, f"coordinator-{cid}")
+                                    print(f"      {CYAN}[WS 💨]  fl_global_weights::round{rnd_num}  {GRAY}coordinator-{cid}  ──▶  {pl}{RESET}")
                                     print(f"      {GRAY}Pesos globales ronda {rnd_num} "
                                           f"→ {pl}  {GREEN}✅{RESET}")
 
@@ -1006,15 +992,9 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                                     pe  = endpoints["peers"].get(f"worker{wid}", {})
                                     pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
                                     print()
-                                    print(f"    {BOLD}[ronda {rnd_num}] Pesos locales "
-                                          f"recibidos de worker-{wid}:{RESET}")
-                                    _ids_log("out",
-                                             f"ids:ArtifactRequestMessage  "
-                                             f"[fl_weights::worker{wid}::round{rnd_num}]",
-                                             pl, f"coordinator-{cid}")
-                                    _ids_log("in",
-                                             "ids:ArtifactResponseMessage  [weights_received]",
-                                             f"coordinator-{cid}", pl)
+                                    print(f"    {BOLD}[ronda {rnd_num}] 💨 Pesos locales "
+                                          f"recibidos de worker-{wid} (WebSocket):{RESET}")
+                                    print(f"      {GREEN}[WS 💨]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  ──▶  coordinator-{cid}{RESET}")
                                     print(f"    {GRAY}[WS] [fl_weights] ✅ Pesos de worker-{wid} "
                                           f"ronda {rnd_num} acumulados "
                                           f"({total_so_far}/{n_exp}){RESET}")
@@ -1162,12 +1142,8 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
                     pe   = endpoints["peers"].get(f"worker{wid}", {})
                     pl   = pe.get("ecc_label", f"ecc-worker{wid}:8889")
                     print()
-                    print(f"    {BOLD}[ronda {rnd_num}] Pesos de worker-{wid}:{RESET}")
-                    _ids_log("out",
-                             f"ids:ArtifactRequestMessage [fl_weights::worker{wid}::round{rnd_num}]",
-                             pl, f"coordinator-{cid}")
-                    _ids_log("in", "ids:ArtifactResponseMessage [weights_received]",
-                             f"coordinator-{cid}", pl)
+                    print(f"    {BOLD}[ronda {rnd_num}] 💨 Pesos recibidos de worker-{wid} (WebSocket):{RESET}")
+                    print(f"      {GREEN}[WS 💨]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  ──▶  coordinator-{cid}{RESET}")
                     print(f"    {GRAY}✅ Pesos acumulados ({total_so_far}/{n_exp}){RESET}")
             weights_shown[rnd_num] = already
 
