@@ -51,6 +51,12 @@ import re
 
 import requests
 import urllib3
+try:
+    import websockets
+    import websockets.exceptions
+    _WS_AVAILABLE = True
+except ImportError:
+    _WS_AVAILABLE = False
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -470,7 +476,7 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
         wid      = m.group(1) if m else "?"
         peer     = endpoints["peers"].get(f"worker{wid}", {})
         ecc      = peer.get("ecc_url") or w.get("ecc_url", "(desconocido)")
-        pl       = peer.get("ecc_label") or f"ecc-worker{wid}:8449"
+        pl       = peer.get("ecc_label") or f"ecc-worker{wid}:8889"
 
         print(f"    {GREEN}OK{RESET}  Worker-{wid}  {GRAY}{uri}{RESET}")
         field("  ECC (broker)", ecc, indent=8)
@@ -726,7 +732,7 @@ def fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout):
 # =============================================================================
 
 def _ids_log(direction, msg_type, src, dst):
-    arrow = "──▶" if direction == "out" else "◀──"
+    arrow = "──▶" if direction == "out" else "──"
     color = CYAN   if direction == "out" else GREEN
     short = msg_type.replace("ids:", "").replace("Message", "Msg")
     print(f"      {color}[IDS {arrow}]  {short:<44}{GRAY}{src}  ↔  {dst}{RESET}")
@@ -765,20 +771,21 @@ def _print_handshake_algoritmo(rnd_num, wid, peer_lbl, cid):
 
 def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
     """
-    Replica los logs de app.py durante _run_fl() via polling a /fl/status.
+    Monitoriza el entrenamiento FL en tiempo real via WebSocket /ws/fl-status.
 
-    Clave de sincronización (fix solapamiento):
-      - La cabecera de ronda N se imprime SOLO cuando history tiene ya
-        la entrada de ronda N-1 cerrada (o es la ronda 1).
-      - Así los logs de FedAvg/cierre de ronda N-1 aparecen ANTES
-        de los logs de inicio de ronda N, igual que en el app.py real.
+    El coordinator emite eventos JSON por cada cambio de estado:
+      connected       → conexión establecida, estado inicial
+      fl_started      → FL arrancó (total_rounds, min_workers)
+      round_started   → inicio de ronda N
+      round_completed → ronda N cerrada con métricas (accuracy, auc, loss...)
+      fl_completed    → FL terminado con mejor ronda y métricas finales
+      fl_failed       → FL abortado (min_workers no alcanzado)
+      fl_update       → cambio de estado genérico
 
-    Handshake IDS en TODAS las rondas:
-      - _negotiate_and_send_algorithm se llama en cada ronda en app.py.
-      - Por tanto el handshake Description→Contract→Agreement→Artifact
-        aparece en ronda 1, 2, 3... siempre.
+    Fallback: si websockets no está instalado o la conexión falla,
+    vuelve al polling HTTP (GET /fl/status cada 5s).
     """
-    accepted   = nego.get("accepted", [])
+    accepted      = nego.get("accepted", [])
     accepted_wids = sorted(
         m.group(1)
         for w in accepted
@@ -787,19 +794,321 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
 
     phase(
         5,
-        "Monitorización del entrenamiento FL en tiempo real",
-        f"Polling a GET /fl/status cada 5s.\n"
-        f"Replica el flujo completo de app.py por cada ronda:\n"
-        f"  · Handshake IDS completo para distribución de algorithm.py\n"
-        f"    (Description→ContractRequest→Agreement→Artifact) en CADA ronda\n"
-        f"  · Envío de pesos globales via IDS a cada worker\n"
-        f"  · Entrenamiento local del coordinator\n"
-        f"  · Recepción de pesos locales via IDS de cada worker\n"
-        f"  · FedAvg y métricas de cierre\n"
-        f"Workers participantes: {', '.join('worker-' + w for w in accepted_wids)}"
+        "Monitorización FL en tiempo real via WebSocket",
+        f"wss://localhost:{coordinator_url.split(':')[-1]}/ws/fl-status\n"
+        f"Eventos: fl_started → round_started → round_completed → fl_completed\n"
+        f"Workers participantes: {', '.join('worker-' + w for w in accepted_wids)}\n"
+        f"Fallback automático a polling HTTP si WebSocket no está disponible."
     )
 
-    step("monitor", "Esperando arranque del FL (status != idle)...")
+    # ── Intentar conexión WebSocket ───────────────────────────────────────────
+    ws_url = coordinator_url.replace("https://", "wss://").replace("http://", "ws://")
+    ws_url = f"{ws_url}/ws/fl-status"
+
+    if not _WS_AVAILABLE:
+        warn(
+            "librería 'websockets' no instalada — usando polling HTTP como fallback.\n"
+            "      Instala con: pip install websockets"
+        )
+        _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids)
+        return
+
+    info(f"Conectando a {ws_url} ...")
+
+    import asyncio as _asyncio
+
+    async def _ws_monitor():
+        conn_attempts = 0
+        max_attempts  = 5
+
+        while conn_attempts < max_attempts:
+            try:
+                # Contexto SSL que acepta el certificado autofirmado del DataApp.
+                # El DataApp arranca con TLS (wss://) usando un cert autofirmado,
+                # igual que el resto de componentes del stack (ECC, DAPS, Broker).
+                import ssl as _ssl
+                _ssl_ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
+                _ssl_ctx.check_hostname = False
+                _ssl_ctx.verify_mode    = _ssl.CERT_NONE
+
+                async with websockets.connect(
+                    ws_url,
+                    ssl           = _ssl_ctx,
+                    ping_interval = 20,
+                    ping_timeout  = 30,
+                    open_timeout  = 15,
+                ) as ws:
+                    ok(f"WebSocket conectado a {ws_url}")
+                    conn_attempts = 0   # reset en conexión exitosa
+
+                    seen_rounds   = 0
+                    total_rounds  = None
+                    weights_shown = {}   # rnd → set de wids ya mostrados
+                    fl_done       = False
+
+                    async for raw_msg in ws:
+                        try:
+                            evt = json.loads(raw_msg)
+                        except Exception:
+                            continue
+
+                        event = evt.get("event", "")
+
+                        # ── connected ─────────────────────────────────────────
+                        if event == "connected":
+                            role         = evt.get("role", "?")
+                            status       = evt.get("status", "?")
+                            current_rnd  = evt.get("current_round", 0)
+                            total_rounds = evt.get("total_rounds") or total_rounds
+
+                            print()
+                            ok(f"WebSocket activo — coordinator-{cid}  "
+                               f"role={role}  status={status}")
+                            info(f"Canal WS: {ws_url}")
+                            info(f"El servidor emite eventos IDS en tiempo real "
+                                 f"(fl_started → round_started → round_completed → fl_completed)")
+
+                            if status in ("completed", "failed"):
+                                warn("El FL ya terminó antes de conectar — mostrando resultados")
+                                fl_done = True
+                                break
+
+                            # ── FIX race condition ronda 1 ────────────────────
+                            import re as _re_status
+                            rnd_match = _re_status.match(r"round_(\d+)", status)
+                            if rnd_match:
+                                rnd_num = int(rnd_match.group(1))
+                                if rnd_num not in weights_shown:
+                                    print()
+                                    weights_shown.setdefault(rnd_num, set())
+                                    _print_ronda_header(rnd_num, total_rounds, cid)
+                                    print()
+                                    print(f"    {BOLD}[ronda {rnd_num}] Distribuyendo algorithm.py + "
+                                          f"fl_config.json a peers via IDS...{RESET}")
+                                    for w in accepted:
+                                        uri = w.get("connector_uri", "")
+                                        m   = re.search(r"worker(\d+)", uri)
+                                        wid = m.group(1) if m else "?"
+                                        pe  = endpoints["peers"].get(f"worker{wid}", {})
+                                        pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
+                                        _print_handshake_algoritmo(rnd_num, wid, pl, cid)
+                                    print()
+                                    print(f"    {BOLD}[ronda {rnd_num}] Enviando pesos globales "
+                                          f"a peers via IDS...{RESET}")
+                                    for w in accepted:
+                                        uri = w.get("connector_uri", "")
+                                        m   = re.search(r"worker(\d+)", uri)
+                                        wid = m.group(1) if m else "?"
+                                        pe  = endpoints["peers"].get(f"worker{wid}", {})
+                                        pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
+                                        _ids_log("out",
+                                                 f"ids:ArtifactRequestMessage  "
+                                                 f"[fl_global_weights::round{rnd_num}]",
+                                                 f"coordinator-{cid}", pl)
+                                        _ids_log("in",
+                                                 "ids:ArtifactResponseMessage  [training_started]",
+                                                 pl, f"coordinator-{cid}")
+                                        print(f"      {GRAY}Pesos globales ronda {rnd_num} "
+                                              f"→ {pl}  {GREEN}✅{RESET}")
+                                    print()
+                                    print(f"    {BOLD}[ronda {rnd_num}] Entrenando localmente "
+                                          f"(coordinator-{cid})...{RESET}")
+                                    n_exp = len(accepted_wids) + 1
+                                    print(f"    {GRAY}[WS] Esperando pesos... 1/{n_exp}  "
+                                          f"(coordinator-{cid} local en progreso){RESET}")
+
+                        # ── fl_started ────────────────────────────────────────
+                        elif event == "fl_started":
+                            total_rounds = evt.get("total_rounds")
+                            min_workers  = evt.get("min_workers")
+                            print()
+                            ok(f"[WS] FL arrancado — {total_rounds} rondas  "
+                               f"min_workers={min_workers}")
+                            info(f"[WS] Workers participantes: "
+                                 f"{', '.join('worker-' + w for w in accepted_wids)}")
+                            info(f"[WS] Escuchando eventos en tiempo real...")
+
+                        # ── round_started ─────────────────────────────────────
+                        elif event == "round_started":
+                            rnd_num      = evt.get("round", "?")
+                            total_rounds = evt.get("total_rounds") or total_rounds
+
+                            if rnd_num in weights_shown:
+                                # Ya renderizado desde el evento 'connected'
+                                pass
+                            else:
+                                weights_shown.setdefault(rnd_num, set())
+                                print()
+                                info(f"[WS] Evento round_started recibido — ronda {rnd_num}")
+                                _print_ronda_header(rnd_num, total_rounds, cid)
+
+                                # Distribución de algorithm.py via IDS (en cada ronda)
+                                print()
+                                print(f"    {BOLD}[ronda {rnd_num}] Distribuyendo algorithm.py + "
+                                      f"fl_config.json a peers via IDS...{RESET}")
+                                for w in accepted:
+                                    uri = w.get("connector_uri", "")
+                                    m   = re.search(r"worker(\d+)", uri)
+                                    wid = m.group(1) if m else "?"
+                                    pe  = endpoints["peers"].get(f"worker{wid}", {})
+                                    pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
+                                    _print_handshake_algoritmo(rnd_num, wid, pl, cid)
+
+                                print()
+                                print(f"    {BOLD}[ronda {rnd_num}] Enviando pesos globales "
+                                      f"a peers via IDS...{RESET}")
+                                for w in accepted:
+                                    uri = w.get("connector_uri", "")
+                                    m   = re.search(r"worker(\d+)", uri)
+                                    wid = m.group(1) if m else "?"
+                                    pe  = endpoints["peers"].get(f"worker{wid}", {})
+                                    pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
+                                    _ids_log("out",
+                                             f"ids:ArtifactRequestMessage  "
+                                             f"[fl_global_weights::round{rnd_num}]",
+                                             f"coordinator-{cid}", pl)
+                                    _ids_log("in",
+                                             "ids:ArtifactResponseMessage  [training_started]",
+                                             pl, f"coordinator-{cid}")
+                                    print(f"      {GRAY}Pesos globales ronda {rnd_num} "
+                                          f"→ {pl}  {GREEN}✅{RESET}")
+
+                                print()
+                                print(f"    {BOLD}[ronda {rnd_num}] Entrenando localmente "
+                                      f"(coordinator-{cid})...{RESET}")
+                                n_exp = len(accepted_wids) + 1
+                                print(f"    {GRAY}[WS] Esperando pesos... 1/{n_exp}  "
+                                      f"(coordinator-{cid} local en progreso){RESET}")
+
+                        # ── round_completed ───────────────────────────────────
+                        elif event == "round_completed":
+                            rnd_num  = evt.get("round", seen_rounds + 1)
+                            elapsed  = evt.get("elapsed_seconds", 0)
+                            workers  = evt.get("workers_ok", "?")
+                            samples  = evt.get("total_samples", 0)
+                            gm       = evt.get("global_metrics", {})
+                            total_rounds = evt.get("total_rounds") or total_rounds
+
+                            def _fv(k):
+                                v = gm.get(k)
+                                return f"{v:.4f}" if isinstance(v, float) else (
+                                    str(v) if v is not None else "—")
+
+                            info(f"[WS] Evento round_completed — ronda {rnd_num}")
+
+                            # Mostrar llegada de pesos de cada worker
+                            already = weights_shown.get(rnd_num, set())
+                            n_exp   = len(accepted_wids) + 1
+                            for wid in accepted_wids:
+                                if wid not in already:
+                                    already.add(wid)
+                                    total_so_far = 1 + len(already)
+                                    pe  = endpoints["peers"].get(f"worker{wid}", {})
+                                    pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
+                                    print()
+                                    print(f"    {BOLD}[ronda {rnd_num}] Pesos locales "
+                                          f"recibidos de worker-{wid}:{RESET}")
+                                    _ids_log("out",
+                                             f"ids:ArtifactRequestMessage  "
+                                             f"[fl_weights::worker{wid}::round{rnd_num}]",
+                                             pl, f"coordinator-{cid}")
+                                    _ids_log("in",
+                                             "ids:ArtifactResponseMessage  [weights_received]",
+                                             f"coordinator-{cid}", pl)
+                                    print(f"    {GRAY}[WS] [fl_weights] ✅ Pesos de worker-{wid} "
+                                          f"ronda {rnd_num} acumulados "
+                                          f"({total_so_far}/{n_exp}){RESET}")
+                            weights_shown[rnd_num] = already
+
+                            # FedAvg + métricas de cierre de ronda
+                            print()
+                            print(f"    {GRAY}[ronda {rnd_num}] FedAvg sobre {workers} workers  "
+                                  f"({samples:,} muestras totales){RESET}")
+                            print(f"    {GREEN}Ronda {rnd_num} OK en {elapsed}s  "
+                                  f"acc={_fv('accuracy')}  auc={_fv('auc')}  "
+                                  f"loss={_fv('loss')}  prec={_fv('precision')}  "
+                                  f"rec={_fv('recall')}{RESET}")
+                            seen_rounds += 1
+
+                        # ── fl_completed ──────────────────────────────────────
+                        elif event in ("fl_completed", "fl_finished"):
+                            n_rounds    = evt.get("n_rounds", total_rounds or "?")
+                            best_round  = evt.get("best_round", "?")
+                            best_m      = evt.get("best_metrics") or {}
+
+                            print()
+                            info(f"[WS] Evento fl_completed recibido")
+                            ok(f"✅ FL completado — {n_rounds} rondas")
+                            if best_round != "?":
+                                field("Mejor ronda",   best_round)
+                            for k in ("accuracy", "auc", "loss", "precision", "recall"):
+                                v = best_m.get(k)
+                                if v is not None:
+                                    field(f"  {k}", f"{v:.4f}")
+                            fl_done = True
+                            break
+
+                        # ── fl_failed ─────────────────────────────────────────
+                        elif event == "fl_failed":
+                            reason = evt.get("reason", "?")
+                            rnd    = evt.get("round", "?")
+                            print()
+                            info(f"[WS] Evento fl_failed recibido")
+                            warn(f"❌ FL abortado en ronda {rnd} — {reason}")
+                            fl_done = True
+                            break
+
+                        # ── fl_update genérico ────────────────────────────────
+                        # Emitido por el polling interno de /ws/fl-status cuando
+                        # hay cambio de estado pero sin evento específico.
+                        # Solo actuamos si el FL terminó.
+                        elif event == "fl_update":
+                            status = evt.get("status", "?")
+                            # Silenciar los updates de ronda en curso — ya los
+                            # mostramos via round_started/round_completed.
+                            # Solo reaccionar si el FL terminó inesperadamente.
+                            if status in ("completed", "failed"):
+                                info(f"[WS] fl_update: status={status} — FL terminado")
+                                fl_done = True
+                                break
+
+                    if fl_done:
+                        return   # éxito — salir del loop de reconexión
+
+            except websockets.exceptions.ConnectionClosed as exc:
+                conn_attempts += 1
+                warn(f"WebSocket cerrado inesperadamente (intento {conn_attempts}/{max_attempts}): {exc}")
+                if conn_attempts < max_attempts:
+                    info(f"Reconectando en 3s...")
+                    await _asyncio.sleep(3)
+
+            except (ConnectionRefusedError, OSError) as exc:
+                conn_attempts += 1
+                warn(f"No se pudo conectar al WebSocket (intento {conn_attempts}/{max_attempts}): {exc}")
+                if conn_attempts < max_attempts:
+                    info(f"Reintentando en 3s...")
+                    await _asyncio.sleep(3)
+
+            except Exception as exc:
+                warn(f"Error inesperado en WebSocket: {exc}")
+                break
+
+        if conn_attempts >= max_attempts:
+            warn(f"No se pudo conectar al WebSocket tras {max_attempts} intentos.")
+            warn("Fallback a polling HTTP...")
+            _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids)
+
+    _asyncio.run(_ws_monitor())
+
+
+def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids):
+    """
+    Fallback de monitorización por polling HTTP (GET /fl/status cada 5s).
+    Se usa cuando websockets no está disponible o la conexión WS falla.
+    """
+    info("Monitorizando via polling HTTP GET /fl/status cada 5s...")
+
+    # Esperar a que el FL arranque
     for _ in range(30):
         try:
             r = SESSION.get(f"{coordinator_url}/fl/status", timeout=10, verify=False)
@@ -809,43 +1118,29 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
             pass
         time.sleep(2)
 
-    # ── Estado del monitor ────────────────────────────────────────────────────
-    #
-    # Estrategia anti-solapamiento:
-    #   next_rnd_to_announce  → próxima ronda que podemos anunciar
-    #   Para anunciar ronda N necesitamos que history tenga N-1 entradas
-    #   (es decir, la ronda N-1 ya está cerrada).
-    #   Así FedAvg de N-1 se imprime ANTES de la cabecera de N.
-    #
-    next_rnd_to_announce = 1   # primera ronda que aún no hemos anunciado
-    seen_rounds          = 0   # entradas de history ya mostradas
+    seen_rounds          = 0
+    next_rnd_to_announce = 1
     total_rounds         = None
-    weights_shown        = {}  # round_num → set de wids ya mostrados
-
-    poll_interval = 5
-    t_start       = time.time()
+    weights_shown        = {}
+    t_start              = time.time()
+    poll_interval        = 5
 
     while True:
         if time.time() - t_start > 3600:
-            warn("Timeout de monitorización (1h)")
-            break
+            warn("Timeout de monitorización (1h)"); break
 
         try:
-            r = SESSION.get(f"{coordinator_url}/fl/status", timeout=10, verify=False)
+            r  = SESSION.get(f"{coordinator_url}/fl/status", timeout=10, verify=False)
             r.raise_for_status()
             fl = r.json()
         except Exception as e:
-            warn(f"Error polling /fl/status: {e} — reintentando en {poll_interval}s")
-            time.sleep(poll_interval)
-            continue
+            warn(f"Error polling /fl/status: {e}"); time.sleep(poll_interval); continue
 
         status       = fl.get("status", "?")
         history      = fl.get("history", [])
         total_rounds = fl.get("total_rounds") or total_rounds
 
-        # ── 1. Primero vaciar history: imprimir rondas cerradas ───────────────
-        #    Esto garantiza que el FedAvg de ronda N-1 aparece antes
-        #    de que anunciemos el inicio de ronda N.
+        # Vaciar history: mostrar rondas cerradas
         while seen_rounds < len(history):
             entry   = history[seen_rounds]
             rnd_num = entry.get("round", seen_rounds + 1)
@@ -858,242 +1153,53 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                 v = gm.get(k)
                 return f"{v:.4f}" if isinstance(v, float) else (str(v) if v is not None else "—")
 
-            # Cerrar pesos pendientes de esta ronda si no se habían mostrado
             already = weights_shown.get(rnd_num, set())
             for wid in accepted_wids:
                 if wid not in already:
                     already.add(wid)
                     n_exp = len(accepted_wids) + 1
                     total_so_far = 1 + len(already)
-                    peer_entry = endpoints["peers"].get(f"worker{wid}", {})
-                    peer_lbl   = peer_entry.get("ecc_label", f"ecc-worker{wid}:8449")
+                    pe   = endpoints["peers"].get(f"worker{wid}", {})
+                    pl   = pe.get("ecc_label", f"ecc-worker{wid}:8889")
                     print()
-                    print(f"    {BOLD}[ronda {rnd_num}] Pesos locales recibidos "
-                          f"de worker-{wid}:{RESET}")
+                    print(f"    {BOLD}[ronda {rnd_num}] Pesos de worker-{wid}:{RESET}")
                     _ids_log("out",
-                             f"ids:ArtifactRequestMessage  "
-                             f"[fl_weights::worker{wid}::round{rnd_num}]",
-                             peer_lbl, f"coordinator-{cid}")
-                    _ids_log("in",
-                             "ids:ArtifactResponseMessage  [weights_received]",
-                             f"coordinator-{cid}", peer_lbl)
-                    print(f"    {GRAY}[fl_weights] ✅ Pesos de worker-{wid} "
-                          f"ronda {rnd_num} acumulados "
-                          f"({total_so_far}/{n_exp}){RESET}")
+                             f"ids:ArtifactRequestMessage [fl_weights::worker{wid}::round{rnd_num}]",
+                             pl, f"coordinator-{cid}")
+                    _ids_log("in", "ids:ArtifactResponseMessage [weights_received]",
+                             f"coordinator-{cid}", pl)
+                    print(f"    {GRAY}✅ Pesos acumulados ({total_so_far}/{n_exp}){RESET}")
             weights_shown[rnd_num] = already
 
-            # FedAvg + cierre de ronda
             print()
-            print(f"    {GRAY}[ronda {rnd_num}] FedAvg sobre {workers} workers  "
-                  f"({samples:,} muestras totales){RESET}")
+            print(f"    {GRAY}[ronda {rnd_num}] FedAvg — {workers} workers, {samples:,} muestras{RESET}")
             print(f"    {GREEN}Ronda {rnd_num} OK en {elapsed}s  "
-                  f"acc={_fv('accuracy')}  auc={_fv('auc')}  "
-                  f"loss={_fv('loss')}  prec={_fv('precision')}  "
-                  f"rec={_fv('recall')}{RESET}")
-
+                  f"acc={_fv('accuracy')}  auc={_fv('auc')}  loss={_fv('loss')}{RESET}")
             seen_rounds += 1
-            # Ahora que ronda seen_rounds está cerrada,
-            # podemos anunciar la siguiente si es la que toca
             next_rnd_to_announce = seen_rounds + 1
 
-        # ── 2. Anunciar la ronda actual si ya podemos ─────────────────────────
-        #    Condición: status = round_N  AND  N-1 ya está en history
+        # Anunciar ronda actual si podemos
         rnd_match = re.match(r"round_(\d+)", status)
         if rnd_match:
             rnd_num = int(rnd_match.group(1))
-
             if rnd_num == next_rnd_to_announce:
                 weights_shown.setdefault(rnd_num, set())
-                next_rnd_to_announce = rnd_num + 1   # no repetir este bloque
-
-                # Cabecera de ronda
+                next_rnd_to_announce = rnd_num + 1
                 _print_ronda_header(rnd_num, total_rounds, cid)
-
-                # Distribución de algorithm.py + fl_config.json con handshake
-                # IDS completo — ocurre en CADA ronda en app.py
-                print()
-                print(f"    {BOLD}[ronda {rnd_num}] Distribuyendo algorithm.py + "
-                      f"fl_config.json a peers via IDS...{RESET}")
-                for w in accepted:
+                for w in nego.get("accepted", []):
                     uri = w.get("connector_uri", "")
-                    wid = re.search(r"worker(\d+)", uri)
-                    wid = wid.group(1) if wid else "?"
-                    peer_entry = endpoints["peers"].get(f"worker{wid}", {})
-                    peer_lbl   = peer_entry.get("ecc_label",
-                                               f"ecc-worker{wid}:8449")
-                    _print_handshake_algoritmo(rnd_num, wid, peer_lbl, cid)
-                print()
+                    m   = re.search(r"worker(\d+)", uri)
+                    wid = m.group(1) if m else "?"
+                    pe  = endpoints["peers"].get(f"worker{wid}", {})
+                    pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
+                    _print_handshake_algoritmo(rnd_num, wid, pl, cid)
 
-                # Envío de pesos globales a peers
-                print(f"    {BOLD}[ronda {rnd_num}] Enviando pesos globales "
-                      f"a peers via IDS (ArtifactRequestMessage)...{RESET}")
-                for w in accepted:
-                    uri = w.get("connector_uri", "")
-                    wid = re.search(r"worker(\d+)", uri)
-                    wid = wid.group(1) if wid else "?"
-                    peer_entry = endpoints["peers"].get(f"worker{wid}", {})
-                    peer_lbl   = peer_entry.get("ecc_label",
-                                               f"ecc-worker{wid}:8449")
-                    _ids_log("out",
-                             f"ids:ArtifactRequestMessage  "
-                             f"[fl_global_weights::round{rnd_num}]",
-                             f"coordinator-{cid}", peer_lbl)
-                    _ids_log("in",
-                             "ids:ArtifactResponseMessage  [training_started]",
-                             peer_lbl, f"coordinator-{cid}")
-                    print(f"      {GRAY}Pesos globales ronda {rnd_num} "
-                          f"→ {peer_lbl}  {GREEN}✅{RESET}")
-                print()
-
-                # Entrenamiento local + espera inicial
-                print(f"    {BOLD}[ronda {rnd_num}] Entrenando localmente "
-                      f"(coordinator-{cid})...{RESET}")
-                n_exp = len(accepted_wids) + 1
-                print(f"    {GRAY}Esperando pesos... 1/{n_exp}  "
-                      f"(coordinator-{cid} local en progreso){RESET}")
-
-        # ── 3. Mostrar llegada progresiva de pesos (un worker por poll) ───────
-        if rnd_match:
-            rnd_num = int(rnd_match.group(1))
-            already = weights_shown.get(rnd_num, set())
-            pending = [w for w in accepted_wids if w not in already]
-            if pending:
-                wid = pending[0]
-                already.add(wid)
-                weights_shown[rnd_num] = already
-                n_exp        = len(accepted_wids) + 1
-                total_so_far = 1 + len(already)
-                peer_entry   = endpoints["peers"].get(f"worker{wid}", {})
-                peer_lbl     = peer_entry.get("ecc_label",
-                                             f"ecc-worker{wid}:8449")
-                print()
-                print(f"    {BOLD}[ronda {rnd_num}] Pesos locales recibidos "
-                      f"de worker-{wid}:{RESET}")
-                _ids_log("out",
-                         f"ids:ArtifactRequestMessage  "
-                         f"[fl_weights::worker{wid}::round{rnd_num}]",
-                         peer_lbl, f"coordinator-{cid}")
-                _ids_log("in",
-                         "ids:ArtifactResponseMessage  [weights_received]",
-                         f"coordinator-{cid}", peer_lbl)
-                print(f"    {GRAY}[fl_weights] ✅ Pesos de worker-{wid} "
-                      f"ronda {rnd_num} acumulados "
-                      f"({total_so_far}/{n_exp}){RESET}")
-                if total_so_far < n_exp:
-                    print(f"    {GRAY}Esperando pesos... "
-                          f"{total_so_far}/{n_exp}{RESET}")
-
-        # ── Condiciones de salida ─────────────────────────────────────────────
         if status == "completed" and seen_rounds >= (total_rounds or 0):
-            print()
-            ok(f"✅ FL completado — {seen_rounds} rondas en "
-               f"{time.time() - t_start:.1f}s")
-            break
+            ok(f"✅ FL completado — {seen_rounds} rondas"); break
         elif status == "failed":
-            print()
-            warn("❌ FL terminó con status=failed — "
-                 "workers insuficientes en alguna ronda")
-            break
+            warn("❌ FL terminó con status=failed"); break
 
         time.sleep(poll_interval)
-
-    # ── Tabla resumen de métricas ─────────────────────────────────────────────
-    _sep("-", color=BLUE)
-    print(f"{BOLD}{BLUE}  Resultados finales del entrenamiento{RESET}")
-    _sep("-", color=BLUE)
-
-    try:
-        r = SESSION.get(f"{coordinator_url}/fl/results", timeout=10, verify=False)
-        if r.ok:
-            results = r.json()
-            if isinstance(results, list) and results:
-                print(f"\n  {BOLD}Tabla de métricas por ronda:{RESET}\n")
-                hdr = (f"  {'Rda':>4}  {'Accuracy':>10}  {'AUC':>10}  "
-                       f"{'Loss':>10}  {'Precision':>10}  {'Recall':>10}  "
-                       f"{'Workers':>7}  {'Samples':>9}  {'Tiempo':>8}")
-                print(f"{BOLD}{GRAY}{hdr}{RESET}")
-                print(f"  {GRAY}{'─' * 90}{RESET}")
-                for e in results:
-                    gm = e.get("global_metrics", {})
-                    def fm(k):
-                        v = gm.get(k)
-                        return f"{v:.4f}" if v is not None else "   —  "
-                    print(
-                        f"  {str(e.get('round', '?')):>4}  "
-                        f"{fm('accuracy'):>10}  {fm('auc'):>10}  "
-                        f"{fm('loss'):>10}  {fm('precision'):>10}  "
-                        f"{fm('recall'):>10}  "
-                        f"{str(e.get('workers_ok', '?')):>7}  "
-                        f"{e.get('total_samples', 0):>9,}  "
-                        f"{e.get('elapsed_seconds', 0):>7.1f}s"
-                    )
-                print(f"  {GRAY}{'─' * 90}{RESET}")
-                best = max(results,
-                           key=lambda e: (e.get("global_metrics") or {})
-                                         .get("accuracy") or 0)
-                bm = best.get("global_metrics", {})
-                print(f"\n  {BOLD}Mejor ronda: {best.get('round', '?')}  "
-                      f"acc={bm.get('accuracy', '?')}  "
-                      f"auc={bm.get('auc', '?')}  "
-                      f"loss={bm.get('loss', '?')}{RESET}")
-    except Exception as e:
-        warn(f"No se pudieron obtener resultados: {e}")
-
-    # ── Modelo final y recurso IDS ────────────────────────────────────────────
-    print()
-    _sep("-", color=BLUE)
-    print(f"{BOLD}{BLUE}  Modelo FL publicado como recurso IDS{RESET}")
-    _sep("-", color=BLUE)
-
-    try:
-        r = SESSION.get(f"{coordinator_url}/fl/model", timeout=10, verify=False)
-        if r.ok:
-            model = r.json()
-            print()
-            field("coordinator_id",    model.get("coordinator_id", "?"))
-            field("round",             model.get("round", "?"))
-            field("weights_available",
-                  "✅ sí" if model.get("weights_available") else "❌ no")
-            metrics = model.get("metrics") or {}
-            if metrics:
-                print(f"\n    {BOLD}Métricas del modelo global final:{RESET}")
-                for k, v in metrics.items():
-                    vstr = f"{v:.4f}" if isinstance(v, float) else str(v)
-                    print(f"    {MAGENTA}{k:<14}{RESET} {vstr}")
-        else:
-            info(f"GET /fl/model → {r.status_code}")
-    except Exception as e:
-        warn(f"No se pudo obtener el modelo: {e}")
-
-    try:
-        r = SESSION.get(f"{coordinator_url}/ids/self-description",
-                        timeout=10, verify=False)
-        if r.ok:
-            sd  = r.json()
-            res = (sd.get("ids:resourceCatalog") or [{}])[0].get(
-                "ids:offeredResource", [])
-            fl_res = next(
-                (x for x in res if
-                 "fl_model_coordinator" in x.get("@id", "") or
-                 "FL Global Model" in (
-                     (x.get("ids:title") or [{}])[0]).get("@value", "")),
-                None
-            )
-            if fl_res:
-                cid_val = (
-                    (fl_res.get("ids:contractOffer") or [{}])[0]
-                ).get("@id", "")
-                print()
-                field("resource IDS", fl_res.get("@id", "?"))
-                if cid_val:
-                    field("contract @id", cid_val)
-                    info("Contrato connector-restricted-policy "
-                         "(worker-4 excluido de ids:rightOperand):")
-                    info(f"  GET {coordinator_url}/ids/contract"
-                         f"?contractOffer={cid_val}")
-    except Exception:
-        pass
-
 
 # =============================================================================
 # FASE 6 — Test de Acceso al Modelo Global (Soberanía de Datos)
@@ -1109,24 +1215,27 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
     )
 
     try:
-        r = SESSION.get(f"{coordinator_url}/ids/self-description", timeout=10, verify=False)
-        if not r.ok:
-            warn("No se pudo obtener self-description para probar acceso")
-            return
+        fl_res = None
+        info("Esperando a que el recurso del modelo FL se publique en el catálogo IDS...")
+        for _ in range(15):
+            r = SESSION.get(f"{coordinator_url}/ids/self-description", timeout=10, verify=False)
+            if r.ok:
+                sd = r.json()
+                cat = (sd.get("ids:resourceCatalog") or [{}])[0]
+                res = cat.get("ids:offeredResource", [])
+                
+                fl_res = next(
+                    (x for x in res if
+                     "fl_model_coordinator" in x.get("@id", "") or
+                     "FL Global Model" in ((x.get("ids:title") or [{}])[0]).get("@value", "")),
+                    None
+                )
+                if fl_res:
+                    break
+            time.sleep(1)
             
-        sd = r.json()
-        cat = (sd.get("ids:resourceCatalog") or [{}])[0]
-        res = cat.get("ids:offeredResource", [])
-        
-        fl_res = next(
-            (x for x in res if
-             "fl_model_coordinator" in x.get("@id", "") or
-             "FL Global Model" in ((x.get("ids:title") or [{}])[0]).get("@value", "")),
-            None
-        )
-        
         if not fl_res:
-            warn("No se encontro el recurso del modelo FL en el catálogo")
+            warn("No se encontro el recurso del modelo FL en el catálogo tras la espera")
             return
             
         cid_val = ((fl_res.get("ids:contractOffer") or [{}])[0]).get("@id", "")

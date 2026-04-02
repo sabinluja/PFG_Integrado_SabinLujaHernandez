@@ -1512,31 +1512,68 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
                 f"El peer evaluado es {real_uri}."
             ),
         )
+        llm_rec_with_math = None
+
         if llm_rec:
             llm_filename   = llm_rec["filename"]
             llm_confidence = llm_rec["confidence"]
-            llm_rec["math_filename"] = best_filename
-            
-            if llm_filename == best_filename:
-                log.info(
-                    f"[llm-recommend] ✅ LLM confirma la selección column-match: "
-                    f"{best_filename!r} (confianza={llm_confidence:.0%})"
-                )
-            else:
-                if llm_confidence >= 0.80:
-                    log.info(
-                        f"[llm-recommend] ⚠ LLM recomienda {llm_filename!r} con alta confianza ({llm_confidence:.0%} >= 80%).\n"
-                        f"  → SOBRESCRIBIENDO la selección matemática ({best_filename!r})."
-                    )
-                    best_filename = llm_filename
-                else:
-                    log.info(
-                        f"[llm-recommend] ⚠ LLM recomienda {llm_filename!r} "
-                        f"pero sin confianza suficiente ({llm_confidence:.0%} < 80%).\n"
-                        f"  → Se mantiene la selección por column-matching ({best_filename!r})."
-                    )
+            llm_rec_with_math = dict(llm_rec)
+            llm_rec_with_math["math_filename"] = best_filename
 
-        return best_cols, real_uri, best_filename, best_ratio, llm_rec, all_evaluated
+            if llm_confidence >= 0.80:
+                # ── LLM tiene confianza suficiente — validar ratio antes de sobrescribir ──
+                # El LLM puede hacer una elección semánticamente correcta pero cuyo schema
+                # real no tiene columnas en común con el coordinator. Verificamos el ratio
+                # ANTES de sobrescribir: si no supera el umbral, la elección del LLM es
+                # inválida para FL aunque la confianza sea alta.
+                if llm_filename != best_filename:
+                    llm_csv_info = next(
+                        (c for c in all_csvs if c.get("filename") == llm_filename), None
+                    )
+                    llm_cols  = [col.lower().strip()
+                                 for col in (llm_csv_info.get("columns", []) if llm_csv_info else [])]
+                    llm_ratio = len(set(llm_cols) & my_set) / len(my_set) if my_set else 0.0
+
+                    if llm_ratio >= MATCH_THRESHOLD:
+                        # LLM elige un CSV con schema compatible — puede sobrescribir
+                        log.info(
+                            f"[llm-recommend] ✅ LLM elige {llm_filename!r} "
+                            f"(confianza={llm_confidence:.0%} >= 80%, ratio={llm_ratio:.0%} >= umbral) "
+                            f"— matemática sugería {best_filename!r} → LLM SOBRESCRIBE"
+                        )
+                        best_cols     = llm_cols
+                        best_filename = llm_filename
+                        best_ratio    = llm_ratio
+                    else:
+                        # LLM eligió un CSV cuyo schema es incompatible — matemática gana
+                        log.warning(
+                            f"[llm-recommend] ⚠ LLM eligió {llm_filename!r} "
+                            f"(confianza={llm_confidence:.0%}) pero ratio={llm_ratio:.0%} < "
+                            f"umbral {MATCH_THRESHOLD:.0%} — schema incompatible para FL.\n"
+                            f"  → FALLBACK a matemática: {best_filename!r} ({best_ratio:.0%}).\n"
+                            f"  (El LLM razonó por nombre/semántica sin acceso al schema real)"
+                        )
+                else:
+                    # LLM confirma la misma elección que la matemática
+                    log.info(
+                        f"[llm-recommend] ✅ LLM confirma la selección matemática: "
+                        f"{best_filename!r} (confianza={llm_confidence:.0%}) — LLM decide"
+                    )
+            else:
+                # LLM sin confianza suficiente — matemática gana
+                log.info(
+                    f"[llm-recommend] ⚠ LLM sugiere {llm_filename!r} "
+                    f"(confianza={llm_confidence:.0%} < 80%) — "
+                    f"FALLBACK a matemática: {best_filename!r} ({best_ratio:.0%})"
+                )
+        else:
+            # LLM no disponible — matemática es el fallback
+            log.info(
+                f"[llm-recommend] LLM no disponible — "
+                f"FALLBACK a selección matemática: {best_filename!r} ({best_ratio:.0%})"
+            )
+
+        return best_cols, real_uri, best_filename, best_ratio, llm_rec_with_math, all_evaluated
 
     except Exception as e:
         log.warning(f"[broker-discover] Error escaneando CSVs de {connector_uri}: {e}")
@@ -2747,6 +2784,12 @@ async def fl_negotiate():
         ecc_url = worker["ecc_url"]
         log.info(f"[/fl/negotiate] Negociando contrato con {uri}")
         try:
+            # Llamada directa al ECC del peer en :8889/data (modo HTTP multipart form).
+            # use_local_ecc=False (default): la DataApp construye el mensaje IDS y lo
+            # envía directamente al ECC del peer, sin pasar por el camelSenderPort :8887
+            # del propio ECC. Esto funciona con MULTIPART_EDGE=form y WS_EDGE=false.
+            # Si se activa WS_EDGE=true habría que cambiar el routing, pero en esta
+            # configuración el acceso directo a :8889 es el camino correcto.
             desc     = _ids_send(ecc_url, uri, "ids:DescriptionRequestMessage")
 
             # FIX: Usar el @id real de la self-description como connector_uri,
