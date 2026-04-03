@@ -1,4 +1,4 @@
-﻿services:
+services:
 
   # ===========================================================================
   # DAPS — Omejdn + nginx (imágenes exactas del IDS Testbed)
@@ -209,6 +209,8 @@
       - TZ=Europe/Rome
       - LLM_ENDPOINT=${LLM_ENDPOINT}
       - LLM_MODEL=${LLM_MODEL}
+      - API_USER=${API_USER}
+      - API_PASS=${API_PASS}
     volumes:
       - ./ia-dataapp/data/worker1:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -308,6 +310,8 @@
       - TZ=Europe/Rome
       - LLM_ENDPOINT=${LLM_ENDPOINT}
       - LLM_MODEL=${LLM_MODEL}
+      - API_USER=${API_USER}
+      - API_PASS=${API_PASS}
     volumes:
       - ./ia-dataapp/data/worker2:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -407,6 +411,8 @@
       - TZ=Europe/Rome
       - LLM_ENDPOINT=${LLM_ENDPOINT}
       - LLM_MODEL=${LLM_MODEL}
+      - API_USER=${API_USER}
+      - API_PASS=${API_PASS}
     volumes:
       - ./ia-dataapp/data/worker3:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -513,6 +519,8 @@
       - TZ=Europe/Rome
       - LLM_ENDPOINT=${LLM_ENDPOINT}
       - LLM_MODEL=${LLM_MODEL}
+      - API_USER=${API_USER}
+      - API_PASS=${API_PASS}
     volumes:
       - ./ia-dataapp/data/worker4:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log

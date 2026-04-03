@@ -84,8 +84,8 @@ BROKER_SPARQL_URL = "http://broker-fuseki:3030/connectorData/sparql"
 FL_OPT_OUT = os.getenv("FL_OPT_OUT", "false").lower() == "true"
 
 # Credenciales para la API interna del ECC
-API_USER = "apiUser"
-API_PASS = "passwordApiUser"
+API_USER = os.getenv("API_USER", "apiUser")
+API_PASS = os.getenv("API_PASS", "passwordApiUser")
 
 # Directorios
 DATA_DIR   = "/home/nobody/data"
@@ -344,8 +344,8 @@ def _security_token() -> dict:
     try:
         token_val = _get_dat_token()
     except Exception as e:
-        log.warning(f"[DAPS] No se pudo obtener token real: {e} -- usando DummyTokenValue")
-        token_val = "DummyTokenValue"
+        log.error(f"[DAPS] No se pudo obtener token real: {e} -- Abortando mensaje IDS")
+        raise RuntimeError(f"DAPS token unavailable: {e}")
     return {
         "@type"          : "ids:DynamicAttributeToken",
         "@id"            : f"https://w3id.org/idsa/autogen/dynamicAttributeToken/{uuid.uuid4()}",
@@ -649,21 +649,85 @@ def _dataapp_url_from_ecc(peer_ecc_url: str) -> str:
 def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
                                    artifact_bytes: bytes,
                                    config_bytes: bytes,
-                                   selected_csv: str | None = None) -> bool:
+                                   selected_csv: str | None = None,
+                                   transfer_contract: str | None = None) -> bool:
     """
-    Envia algorithm.py + fl_config.json al peer via DataApp-to-DataApp
-    (HTTPS interno Docker, puerto 8500) evitando el ECC:8889 bloqueado.
+    Envia algorithm.py + fl_config.json al peer via IDS.
+
+    Canal principal: ArtifactRequestMessage multipart a ecc-workerN:8889/data
+    (el ECC del peer valida el DAT token y reenvía al DataApp del peer).
+    El receptor procesa el payload en /data handler con artifact_type='fl_algorithm'.
+    Fallback: POST directo a be-dataapp-workerN:8500/fl/receive-algorithm si el
+    ECC no está disponible o devuelve error.
     """
+    algo_b64   = base64.b64encode(artifact_bytes).decode("utf-8")
+    config_b64 = base64.b64encode(config_bytes).decode("utf-8")
+    combined   = f"{algo_b64}||fl_config::{config_b64}"
+
+    payload_dict = {
+        "type"            : "fl_algorithm",
+        "content"         : algo_b64,
+        "config"          : config_b64,
+        "selected_csv"    : selected_csv,
+        "coordinator_uri" : CONNECTOR_URI,
+        "coordinator_ecc" : f"https://{ECC_HOSTNAME}:8889/data",
+        "from_coordinator": True,
+    }
+
+    # --- Canal IDS: ArtifactRequestMessage direct to peer DataApp /data ---
+    # Para la demo enviamos un mensaje IDS real multipart, pero entregándolo
+    # directamente al endpoint /data del peer (como hace /fl/negotiate).
     peer_dataapp = _dataapp_url_from_ecc(peer_ecc_url)
     if not peer_dataapp:
         log.error(f"[coordinator] No se pudo derivar DataApp URL de {peer_ecc_url}")
         return False
+        
+    forward_target = f"{peer_dataapp}/data"
 
-    log.info(f"[coordinator] Enviando algoritmo a {peer_dataapp} (peer {peer_conn_uri})")
+    log.info(
+        f"[coordinator->IDS] Enviando algoritmo via IDS ArtifactRequestMessage\n"
+        f"  Destino IDS : {forward_target}\n"
+        f"  Peer URI    : {peer_conn_uri}\n"
+        f"  CSV asignado: {selected_csv or '(auto)'}"
+    )
     try:
-        algo_b64   = base64.b64encode(artifact_bytes).decode("utf-8")
-        config_b64 = base64.b64encode(config_bytes).decode("utf-8")
+        ids_result = _ids_send(
+            forward_to_url       = forward_target,
+            forward_to_connector = peer_conn_uri,
+            message_type         = "ids:ArtifactRequestMessage",
+            transfer_contract    = transfer_contract,
+            payload              = payload_dict,
+            extra_header         = {"ids:contentVersion": f"fl_algorithm::{combined}"},
+        )
+        status_ok = (
+            ids_result.get("status") in ("everything_received", "ok")
+            or "ArtifactResponse" in ids_result.get("@type", "")
+        )
+        if status_ok:
+            log.info(
+                f"[coordinator->IDS] algorithm.py + fl_config.json entregados via IDS [OK]\n"
+                f"  Peer   : {peer_conn_uri}\n"
+                f"  CSV    : {selected_csv or '(auto)'}\n"
+                f"  Status : {ids_result.get('status', ids_result.get('@type', '?'))}"
+            )
+            return True
+        else:
+            log.warning(
+                f"[coordinator->IDS] Respuesta inesperada del peer via IDS: {str(ids_result)[:200]}\n"
+                f"  Intentando fallback DataApp-to-DataApp..."
+            )
+    except Exception as exc:
+        log.warning(
+            f"[coordinator->IDS] Error enviando algoritmo via IDS a {forward_target}: {exc}\n"
+            f"  Intentando fallback DataApp-to-DataApp..."
+        )
 
+    # --- Fallback: POST directo al DataApp (sin capa IDS multipart) ---
+    peer_dataapp = _dataapp_url_from_ecc(peer_ecc_url)
+    if not peer_dataapp:
+        log.error(f"[coordinator] No se pudo derivar DataApp URL de {peer_ecc_url}")
+        return False
+    try:
         resp = requests.post(
             f"{peer_dataapp}/fl/receive-algorithm",
             json={
@@ -677,12 +741,13 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
             verify=False,
         )
         resp.raise_for_status()
-        log.info(f"[coordinator] algorithm.py + fl_config.json -> {peer_dataapp} [OK]"
-                 + (f"  (CSV: {selected_csv})" if selected_csv else ""))
+        log.info(
+            f"[coordinator->HTTP] algorithm.py + fl_config.json -> {peer_dataapp} [OK (fallback)]"
+            + (f"  (CSV: {selected_csv})" if selected_csv else "")
+        )
         return True
-
     except Exception as exc:
-        log.error(f"[coordinator] Error enviando algoritmo a {peer_dataapp}: {exc}", exc_info=True)
+        log.error(f"[coordinator] Error enviando algoritmo (fallback) a {peer_dataapp}: {exc}", exc_info=True)
         return False
 
 
@@ -952,12 +1017,34 @@ def _train_local(global_weights_b64: str, round_num: int, csv_path: str | None =
 
 def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                           weights_b64: str, round_num: int):
+    import re as _re_gw
     peer_dataapp = _dataapp_url_from_ecc(peer_ecc_url)
     if not peer_dataapp:
         log.error(f"No se pudo derivar DataApp URL de {peer_ecc_url}")
         return
 
     payload_size = len(weights_b64) if weights_b64 else 0
+
+    # --- Canal WebSocket (data-plane): intentar primero si el túnel está activo ---
+    _m_gw = _re_gw.search(r"worker(\d+)", peer_ecc_url) or _re_gw.search(r"worker(\d+)", peer_conn_uri)
+    if _m_gw:
+        _peer_wid = _m_gw.group(1)
+        t_start = time.time()
+        if _send_global_weights_ws(_peer_wid, weights_b64, round_num):
+            elapsed_ms = (time.time() - t_start) * 1000
+            log.info(
+                f"  Pesos globales ronda {round_num} -> worker-{_peer_wid} "
+                f"[OK WS]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
+            )
+            _record_ws_perf("ws", elapsed_ms, payload_size, round_num, f"global->worker{_peer_wid}")
+            return
+        else:
+            log.info(
+                f"  [WS] Túnel no activo para worker-{_peer_wid} en ronda {round_num} "
+                f"-- fallback HTTP DataApp-to-DataApp"
+            )
+
+    # --- Fallback: HTTP directo al DataApp del peer ---
     t_start = time.time()
     try:
         resp = requests.post(
@@ -976,7 +1063,7 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
         elapsed_ms = (time.time() - t_start) * 1000
         log.info(
             f"  Pesos globales ronda {round_num} -> {peer_dataapp} "
-            f"[OK]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
+            f"[OK HTTP fallback]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
         )
         _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"global->{peer_dataapp}")
     except Exception as exc:
@@ -1730,7 +1817,9 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                 _peer_csvs = PEER_SELECTED_CSVS if PEER_SELECTED_CSVS else [None] * len(PEER_ECC_URLS)
                 futures = {
                     ex.submit(_negotiate_and_send_algorithm, p, u, algo_bytes,
-                              config_bytes or b"{}", csv): p
+                              config_bytes or b"{}", csv,
+                              next((w.get("transfer_contract") for w in _accepted_workers if w["connector_uri"] == u), None)
+                              ): p
                     for p, u, csv in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS, _peer_csvs)
                 }
                 for fut in concurrent.futures.as_completed(futures):
