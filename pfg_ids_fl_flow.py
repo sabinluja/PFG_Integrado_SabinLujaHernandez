@@ -1,39 +1,39 @@
 #!/usr/bin/env python3
 """
-pfg_ids_fl_flow.py  —  Demostración completa IDS + Federated Learning
+pfg_ids_fl_flow.py  --  Demostracion completa IDS + Federated Learning
 ======================================================================
 
   FASE 0  Resolver endpoints
-          ├─ GET /status            → ECC del coordinator (autoritativo)
-          └─ GET /broker/connectors  → peers vía SPARQL Fuseki (owl:sameAs)
+          - GET /status            -> ECC del coordinator (autoritativo)
+          - GET /broker/connectors  -> peers via SPARQL Fuseki (owl:sameAs)
 
   FASE 1  Coordinator obtiene el algoritmo via IDS
-          └─ POST /fl/fetch-algorithm
-             El coordinator actúa como CONSUMER IDS:
-               DescriptionRequestMessage → ContractRequestMessage
-               → ContractAgreementMessage → ArtifactRequestMessage
+          - POST /fl/fetch-algorithm
+             El coordinator actua como CONSUMER IDS:
+               DescriptionRequestMessage -> ContractRequestMessage
+               -> ContractAgreementMessage -> ArtifactRequestMessage
              El ECC fuente responde con algorithm.py + fl_config.json.
              El coordinator los guarda en disco y activa su rol.
              No hay intermediario externo ni lectura de ficheros locales.
 
-  FASE 2  Descubrimiento de peers (broker + match de columnas ≥ 95%)
-          └─ POST /broker/discover
+  FASE 2  Descubrimiento de peers (broker + match de columnas >= 95%)
+          - POST /broker/discover
              Para cada peer registrado en el Broker, el coordinator
              llama a GET /dataset/all-columns y escanea TODOS sus CSVs.
              Por cada CSV calcula ratio = columnas_comunes / columnas_propias.
-             Selecciona el CSV de mayor ratio; si ratio ≥ 80% → COMPATIBLE.
+             Selecciona el CSV de mayor ratio; si ratio >= 80% -> COMPATIBLE.
              El CSV ganador queda asignado a ese worker para el entrenamiento.
 
-  FASE 3  Negociación IDS coordinator → cada peer  (TODA la lógica IDS aqui)
-          └─ POST /fl/negotiate
-             ├─ Worker-1: Description → ContractRequest → ContractAgreement → ACEPTA
-             ├─ Worker-3: Description → ContractRequest → ContractAgreement → ACEPTA
-             └─ Worker-4: Description → ContractRequest → RejectionMessage  → RECHAZA
-                          (FL_OPT_OUT=true en docker-compose — soberanía del dato)
+  FASE 3  Negociacion IDS coordinator -> cada peer  (TODA la logica IDS aqui)
+          - POST /fl/negotiate
+             - Worker-1: Description -> ContractRequest -> ContractAgreement -> ACEPTA
+             - Worker-3: Description -> ContractRequest -> ContractAgreement -> ACEPTA
+             - Worker-4: Description -> ContractRequest -> RejectionMessage  -> RECHAZA
+                          (FL_OPT_OUT=true en docker-compose -- soberania del dato)
 
   FASE 4  Arranque del entrenamiento (omitir con --skip-fl)
-          └─ POST /fl/start
-             El coordinator envía selected_csv a cada worker en el payload
+          - POST /fl/start
+             El coordinator envia selected_csv a cada worker en el payload
              IDS para que cada worker entrene con el dataset correcto.
 
 Uso:
@@ -62,7 +62,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 # =============================================================================
-# Configuración
+# Configuracion
 # =============================================================================
 
 # Puerto del dataapp coordinator: convencion 5000 + N (p.ej. 5002 para worker-2)
@@ -102,7 +102,7 @@ def banner(title, subtitle=""):
 def phase(num, title, description=""):
     print()
     _sep("-", color=BLUE)
-    print(f"{BOLD}{BLUE}  FASE {num}  —  {title}{RESET}")
+    print(f"{BOLD}{BLUE}  FASE {num}  --  {title}{RESET}")
     if description:
         for line in description.splitlines():
             print(f"{GRAY}  {line}{RESET}")
@@ -110,7 +110,7 @@ def phase(num, title, description=""):
 
 
 def step(num, title):
-    print(f"\n{BOLD}{WHITE}  > Paso {num}  —  {title}{RESET}")
+    print(f"\n{BOLD}{WHITE}  > Paso {num}  --  {title}{RESET}")
 
 
 def substep(msg):
@@ -161,7 +161,7 @@ SESSION = requests.Session()
 SESSION.verify = False
 
 
-def http_get(url, timeout=60):
+def http_get(url, timeout=240):
     substep(f"GET  {url}")
     try:
         r = SESSION.get(url, timeout=timeout)
@@ -178,7 +178,7 @@ def http_get(url, timeout=60):
         fail(f"HTTP {exc.response.status_code} en {url}")
 
 
-def http_post(url, body, timeout=90):
+def http_post(url, body, timeout=240):
     substep(f"POST {url}")
     try:
         r = SESSION.post(url, json=body, timeout=timeout)
@@ -204,7 +204,7 @@ def http_post(url, body, timeout=90):
         fail(f"HTTP {exc.response.status_code} en {url}\n      {body_txt}")
 
 
-def http_post_raw(url, body, timeout=90):
+def http_post_raw(url, body, timeout=240):
     substep(f"POST {url}")
     try:
         r = SESSION.post(url, json=body, timeout=timeout)
@@ -228,7 +228,7 @@ def http_post_raw(url, body, timeout=90):
 
 
 # =============================================================================
-# Parser IDS — JSON puro o embebido en multipart
+# Parser IDS -- JSON puro o embebido en multipart
 # =============================================================================
 
 def parse_ids(raw, want_type=None):
@@ -266,13 +266,13 @@ def parse_ids(raw, want_type=None):
 
 
 # =============================================================================
-# FASE 0 — Resolver endpoints desde /status y Broker Fuseki
+# FASE 0 -- Resolver endpoints desde /status y Broker Fuseki
 # =============================================================================
 
 def _ecc_internal_url(endpoint_raw, connector_uri):
     """
     Convierte el endpoint publico del broker (puerto 8449 externo)
-    al endpoint interno Docker (puerto 8889 /data — Camel ECC receiver).
+    al endpoint interno Docker (puerto 8889 /data -- Camel ECC receiver).
     Mapeo: ecc-workerN:8889/data
     """
     if endpoint_raw:
@@ -306,15 +306,15 @@ def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
         f"Paso 0c: Extraer Worker-{cid} del Broker -> ECC URL y connector_uri sin hardcodear"
     )
 
-    # ── 0a: health check del DataApp coordinator ───────────────────────────────
-    step("0a", f"GET /status — health check del Worker-{cid}")
+    # -- 0a: health check del DataApp coordinator -------------------------------
+    step("0a", f"GET /status -- health check del Worker-{cid}")
     status = http_get(f"{coordinator_url}/status", timeout=req_timeout)
     ok(f"Worker-{cid} responde correctamente en {coordinator_url}")
     field("instance",        status.get("instance", "?"))
     field("role (actual)",   status.get("role",     "worker"))
 
-    # ── 0b: TODOS los conectores desde el broker (incluido el coordinator) ─────
-    step("0b", "GET /broker/connectors — todos los conectores del Broker Fuseki")
+    # -- 0b: TODOS los conectores desde el broker (incluido el coordinator) -----
+    step("0b", "GET /broker/connectors -- todos los conectores del Broker Fuseki")
     bd    = http_get(f"{coordinator_url}/broker/connectors", timeout=req_timeout)
     raw_p = bd.get("connectors", [])
     count = bd.get("count", len(raw_p))
@@ -343,8 +343,8 @@ def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
         all_entries[wid] = entry
 
         is_coord = (wid == str(cid))
-        tag = f"  {CYAN}← coordinator{RESET}" if is_coord else ""
-        print(f"    {GRAY}·  Worker-{wid}{RESET}{tag}")
+        tag = f"  {CYAN}<- coordinator{RESET}" if is_coord else ""
+        print(f"    {GRAY}*  Worker-{wid}{RESET}{tag}")
         field("  connector_uri",     uri,    indent=8)
         field("  endpoint (broker)", ep_raw, indent=8)
         field("  ecc_url (interno)", ecc_url, indent=8)
@@ -361,20 +361,20 @@ def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
             "      y que los workers se han auto-registrado."
         )
 
-    # ── 0c: Datos del Worker-{cid} extraidos del Broker ───────────────────────
+    # -- 0c: Datos del Worker-{cid} extraidos del Broker -----------------------
     step("0c", f"Datos del Worker-{cid} (coordinator) extraidos del Broker")
 
     coord_entry = all_entries.get(str(cid))
     if coord_entry:
-        ok(f"Worker-{cid} encontrado en el Broker — sin hardcodear")
+        ok(f"Worker-{cid} encontrado en el Broker -- sin hardcodear")
         field("connector_uri (broker)", coord_entry["connector_uri"])
         field("ecc_url      (broker)", coord_entry["ecc_url"])
         coordinator_entry = coord_entry
     else:
-        # Fallback solo si el worker-N no se registró aún en el broker
+        # Fallback solo si el worker-N no se registro aun en el broker
         warn(
             f"Worker-{cid} no encontrado en el Broker.\n"
-            f"      Puede que aun no se haya registrado — re-intenta en unos segundos.\n"
+            f"      Puede que aun no se haya registrado -- re-intenta en unos segundos.\n"
             f"      Usando connector_uri del /status como fallback."
         )
         fallback_ecc = f"https://ecc-worker{cid}:8889/data"
@@ -400,7 +400,7 @@ def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
 
 
 # =============================================================================
-# FASE 1 — Coordinator obtiene el algoritmo via IDS
+# FASE 1 -- Coordinator obtiene el algoritmo via IDS
 # =============================================================================
 
 def fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
@@ -413,19 +413,19 @@ def fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
 
     phase(
         1,
-        f"Worker-{cid} obtiene el algoritmo y el fichero de configuración",
-        "El DataApp tiene la soberanía del algoritmo y configuración localmente\n"
+        f"Worker-{cid} obtiene el algoritmo y el fichero de configuracion",
+        "El DataApp tiene la soberania del algoritmo y configuracion localmente\n"
         "sin necesidad de peticiones IDS contra su propio conector."
     )
 
-    step("1", "POST /fl/fetch-algorithm — init coordinator")
+    step("1", "POST /fl/fetch-algorithm -- init coordinator")
     info(f"Coordinator ({coord_label}) carga algorithm.py y fl_config.json desde su entorno local")
 
     result = http_post(f"{coordinator_url}/fl/fetch-algorithm", {}, timeout=req_timeout)
 
     status = result.get("status", "")
     if status == "everything_received":
-        ok("algorithm.py + fl_config.json leídos nativamente por el coordinator")
+        ok("algorithm.py + fl_config.json leidos nativamente por el coordinator")
         field("source", result.get("source_ecc", "local_filesystem"))
         cfg = result.get("fl_config") or {}
         if cfg:
@@ -440,7 +440,7 @@ def fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
 
 
 # =============================================================================
-# FASE 2 — Descubrimiento de peers compatibles
+# FASE 2 -- Descubrimiento de peers compatibles
 # =============================================================================
 
 def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
@@ -451,8 +451,8 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
         "Descubrimiento de peers compatibles  (multi-CSV, umbral 80%)",
         "POST /broker/discover\n"
         "  Para cada peer registrado en el Broker:\n"
-        "    GET /dataset/all-columns  → lista de todos sus CSVs con columnas\n"
-        "    Ollama evalúa cada CSV para saber su similitud\n"
+        "    GET /dataset/all-columns  -> lista de todos sus CSVs con columnas\n"
+        "    Ollama evalua cada CSV para saber su similitud\n"
         "    Elige el CSV de mayor ratio  frente a los demas comparados\n"
         "  El CSV seleccionado queda asignado al worker para el entrenamiento FL."
     )
@@ -485,13 +485,13 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
         ids_arrow("out", "ids:DescriptionRequestMessage",  coord_label, pl)
         ids_arrow("in",  "ids:DescriptionResponseMessage", pl, coord_label)
 
-        print(f"\n        {GRAY}Descubrimiento dinámico — Consultando Catálogo IDS del peer (Self-Description):{RESET}")
+        print(f"\n        {GRAY}Descubrimiento dinamico -- Consultando Catalogo IDS del peer (Self-Description):{RESET}")
         for ev in w.get("all_evaluated", []):
             fname_ev = ev["filename"]
             ratio_ev = ev["ratio"]
             common_c = ev.get("common_cols_count", 0)
             total_c  = ev.get("total_cols", 0)
-            print(f"          - Recurso en catálogo: {fname_ev:<30} (match: {ratio_ev:.0%} - {common_c}/{total_c} cols)")
+            print(f"          - Recurso en catalogo: {fname_ev:<30} (match: {ratio_ev:.0%} - {common_c}/{total_c} cols)")
 
         llm_rec  = w.get("llm_recommended")
         sel_csv  = w.get("selected_csv") or "(auto)"
@@ -500,12 +500,12 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
         if llm_rec:
             llm_conf = w.get("llm_confidence", 0)
             llm_mod  = w.get("llm_model", "Ollama")
-            llm_rsn  = w.get("llm_reasoning", "Decisión basada en esquema semántico.")
+            llm_rsn  = w.get("llm_reasoning", "Decision basada en esquema semantico.")
 
-            # ── Streaming WS del razonamiento LLM ─────────────────────────────
+            # -- Streaming WS del razonamiento LLM -----------------------------
             # Conectamos al /ws/llm-recommend del COORDINATOR pasando los CSVs
             # del PEER como query param (peer_csvs=<JSON URL-encoded>).
-            # Así el LLM razona sobre los ficheros correctos del peer y el
+            # Asi el LLM razona sobre los ficheros correctos del peer y el
             # streaming es visible en tiempo real, sin necesidad de que el peer
             # tenga un puerto expuesto directamente al script externo.
             _llm_streamed = False
@@ -544,7 +544,7 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
                             _ws_url, ssl=_ssl_ctx,
                             open_timeout=8, ping_interval=None
                         ) as _ws:
-                            print(f"\n        {MAGENTA}→ IA Local ({llm_mod}) razonando en tiempo real (via WS):{RESET}")
+                            print(f"\n        {MAGENTA}-> IA Local ({llm_mod}) razonando en tiempo real (via WS):{RESET}")
                             print(f"          {GRAY}", end="", flush=True)
                             async for _raw in _ws:
                                 try:
@@ -565,29 +565,30 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
                 _llm_streamed = bool(_asyncio.run(_stream_llm_tokens()))
 
             if not _llm_streamed:
-                # Fallback: mostrar los datos que ya devolvió /broker/discover
-                print(f"\n        {MAGENTA}→ Buscando el mejor CSV mediante IA Local ({llm_mod})...{RESET}")
-                print(f"          {GRAY}(Análisis semántico de columnas sin acceso a datos reales){RESET}")
+                # Fallback: mostrar los datos que ya devolvio /broker/discover
+                print(f"\n        {MAGENTA}-> Buscando el mejor CSV mediante IA Local ({llm_mod})...{RESET}")
+                print(f"          {GRAY}(Analisis semantico de columnas sin acceso a datos reales){RESET}")
 
             field(f"  IA ({llm_mod}) Sugerencia",    f"{CYAN}{llm_rec} (confianza: {llm_conf:.0%}){RESET}", indent=8)
+            field(f"  IA ({llm_mod}) Razonamiento",  f"{GRAY}{llm_rsn}{RESET}", indent=8)
 
             if llm_conf >= 0.80:
                 field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
             else:
-                print(f"        {YELLOW}⚠ Confianza de IA < 80%. Fallback a emparejamiento matemático.{RESET}")
+                print(f"        {YELLOW} Confianza de IA < 80%. Fallback a emparejamiento matematico.{RESET}")
                 field("  CSV (Seleccionado por columnas)", math_csv, indent=8)
                 field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
         else:
             field("  CSV (Seleccionado por columnas)", math_csv, indent=8)
             field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
 
-        info(f"     El coordinator usará {sel_csv!r} "
+        info(f"     El coordinator usara {sel_csv!r} "
              f"en worker-{wid} para el entrenamiento FL")
         print()
 
     if not compatible:
         warn(
-            "Ningún worker superó el umbral del 80% de coincidencia de columnas.\n"
+            "Ningun worker supero el umbral del 80% de coincidencia de columnas.\n"
             "      Verifica que los workers tienen al menos un CSV con las mismas "
             "columnas que el coordinator."
         )
@@ -596,7 +597,7 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
 
 
 # =============================================================================
-# FASE 3 — Negociación IDS coordinator → cada peer
+# FASE 3 -- Negociacion IDS coordinator -> cada peer
 # =============================================================================
 
 def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
@@ -657,8 +658,8 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
         pl     = peer.get("ecc_label") or f"ecc-worker{wid}:8889"
         pe     = peer.get("ecc_url")   or f"https://ecc-worker{wid}:8889/data"
 
-        # Si la razón es 'unexpected_ids_response', extrae el motivo real del mensaje
-        # (ocurre cuando el contenedor tiene cód. antiguo y no detecta el @type vacío)
+        # Si la razon es 'unexpected_ids_response', extrae el motivo real del mensaje
+        # (ocurre cuando el contenedor tiene cod. antiguo y no detecta el @type vacio)
         actual_reason = reason
         if reason == "unexpected_ids_response" and msg:
             try:
@@ -669,8 +670,8 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
                 pass
 
         reason_labels = {
-            "fl_opt_out"             : "FL_OPT_OUT=true (soberanía del dato) — IDS RejectionMessage",
-            "fl_participation_denied": "FL_AUTHORIZED_URIS vacío (no autorizado a participar)",
+            "fl_opt_out"             : "FL_OPT_OUT=true (soberania del dato) -- IDS RejectionMessage",
+            "fl_participation_denied": "FL_AUTHORIZED_URIS vacio (no autorizado a participar)",
             "unauthorized_consumer"  : "consumer URI no autorizada",
             "error"                  : "error de comunicacion",
         }
@@ -691,7 +692,7 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
             field("mensaje",     msg[:100])
         print()
 
-    # ── Resumen ───────────────────────────────────────────────────────────────
+    # -- Resumen ---------------------------------------------------------------
     _sep("-", color=BLUE)
     print(f"  {BOLD}Resumen de participacion FL:{RESET}\n")
 
@@ -716,7 +717,7 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
             except Exception:
                 pass
         reason_label = {
-            "fl_opt_out": "fl_opt_out (IDS soberanía)",
+            "fl_opt_out": "fl_opt_out (IDS soberania)",
             "unauthorized_consumer": "unauthorized (IDS)",
         }.get(reason, reason)
         print(f"    {RED}RECHAZADO   Worker-{wid}   {GRAY}{uri}  --  {reason_label}{RESET}")
@@ -727,7 +728,7 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
 
 
 # =============================================================================
-# Verificación del coordinator
+# Verificacion del coordinator
 # =============================================================================
 
 def verificar_coordinator(coordinator_url, cid, endpoints, req_timeout):
@@ -776,7 +777,7 @@ def verificar_coordinator(coordinator_url, cid, endpoints, req_timeout):
 
 
 # =============================================================================
-# FASE 4 — Arranque del entrenamiento FL
+# FASE 4 -- Arranque del entrenamiento FL
 # =============================================================================
 
 def fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout):
@@ -819,31 +820,31 @@ def fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout):
 
 
 # =============================================================================
-# FASE 5 — Monitorización del entrenamiento en tiempo real
+# FASE 5 -- Monitorizacion del entrenamiento en tiempo real
 # =============================================================================
 
 def _ids_log(direction, msg_type, src, dst):
-    arrow = "──▶" if direction == "out" else "──"
+    arrow = "--" if direction == "out" else "--"
     color = CYAN   if direction == "out" else GREEN
     short = msg_type.replace("ids:", "").replace("Message", "Msg")
-    print(f"      {color}[IDS {arrow}]  {short:<44}{GRAY}{src}  ↔  {dst}{RESET}")
+    print(f"      {color}[IDS {arrow}]  {short:<44}{GRAY}{src}    {dst}{RESET}")
 
 
 def _print_ronda_header(rnd_num, total_rounds, cid):
     print()
-    print(f"    {CYAN}{'═' * 54}{RESET}")
+    print(f"    {CYAN}{'' * 54}{RESET}")
     print(f"    {BOLD}{CYAN}  RONDA {rnd_num}/{total_rounds or '?'}  "
           f"[coordinator-{cid}]{RESET}")
-    print(f"    {CYAN}{'═' * 54}{RESET}")
+    print(f"    {CYAN}{'' * 54}{RESET}")
 
 
 def _print_handshake_algoritmo(rnd_num, wid, peer_lbl, cid):
     """
-    Handshake IDS completo para distribución de algorithm.py + fl_config.json.
+    Handshake IDS completo para distribucion de algorithm.py + fl_config.json.
     En app.py esto ocurre en _negotiate_and_send_algorithm, que se llama
-    en CADA ronda (el coordinator lo reenvía para asegurar sincronía).
+    en CADA ronda (el coordinator lo reenvia para asegurar sincronia).
     """
-    print(f"\n      {BOLD}→ Worker-{wid}{RESET}")
+    print(f"\n      {BOLD}-> Worker-{wid}{RESET}")
     _ids_log("out", "ids:DescriptionRequestMessage",
              f"coordinator-{cid}", peer_lbl)
     _ids_log("in",  "ids:DescriptionResponseMessage",
@@ -852,12 +853,12 @@ def _print_handshake_algoritmo(rnd_num, wid, peer_lbl, cid):
              f"coordinator-{cid}", peer_lbl)
     _ids_log("in",  "ids:ContractAgreementMessage",
              peer_lbl, f"coordinator-{cid}")
-    _ids_log("out", "ids:ContractAgreementMessage (confirmación)",
+    _ids_log("out", "ids:ContractAgreementMessage (confirmacion)",
              f"coordinator-{cid}", peer_lbl)
     _ids_log("in",  "ids:MessageProcessedNotificationMessage",
              peer_lbl, f"coordinator-{cid}")
     print(f"      {GRAY}[ronda {rnd_num}] algorithm.py + fl_config.json "
-          f"→ {peer_lbl}  {GREEN}✅{RESET}")
+          f"-> {peer_lbl}  {GREEN}{RESET}")
 
 
 def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
@@ -865,15 +866,15 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
     Monitoriza el entrenamiento FL en tiempo real via WebSocket /ws/fl-status.
 
     El coordinator emite eventos JSON por cada cambio de estado:
-      connected       → conexión establecida, estado inicial
-      fl_started      → FL arrancó (total_rounds, min_workers)
-      round_started   → inicio de ronda N
-      round_completed → ronda N cerrada con métricas (accuracy, auc, loss...)
-      fl_completed    → FL terminado con mejor ronda y métricas finales
-      fl_failed       → FL abortado (min_workers no alcanzado)
-      fl_update       → cambio de estado genérico
+      connected       -> conexion establecida, estado inicial
+      fl_started      -> FL arranco (total_rounds, min_workers)
+      round_started   -> inicio de ronda N
+      round_completed -> ronda N cerrada con metricas (accuracy, auc, loss...)
+      fl_completed    -> FL terminado con mejor ronda y metricas finales
+      fl_failed       -> FL abortado (min_workers no alcanzado)
+      fl_update       -> cambio de estado generico
 
-    Fallback: si websockets no está instalado o la conexión falla,
+    Fallback: si websockets no esta instalado o la conexion falla,
     vuelve al polling HTTP (GET /fl/status cada 5s).
     """
     accepted      = nego.get("accepted", [])
@@ -885,15 +886,15 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
 
     phase(
         5,
-        "Monitorización FL en tiempo real via WebSocket",
+        "Monitorizacion FL en tiempo real via WebSocket",
         f"ws://localhost:{coordinator_url.split(':')[-1]}/ws/fl-status\n"
-        f"Eventos: fl_started → round_started → round_completed → fl_completed\n"
+        f"Eventos: fl_started -> round_started -> round_completed -> fl_completed\n"
         f"Workers participantes: {', '.join('worker-' + w for w in accepted_wids)}\n"
-        f"Fallback automático a polling HTTP si WebSocket no está disponible."
+        f"Fallback automatico a polling HTTP si WebSocket no esta disponible."
     )
 
-    # ── Verificar estado real de los túneles WS ───────────────────────────────
-    step("WS-check", "GET /ws/tunnel-status — verificando túneles de comunicación activos")
+    # -- Verificar estado real de los tuneles WS -------------------------------
+    step("WS-check", "GET /ws/tunnel-status -- verificando tuneles de comunicacion activos")
     try:
         ts = SESSION.get(f"{coordinator_url}/ws/tunnel-status", timeout=10, verify=False)
         if ts.ok:
@@ -901,26 +902,26 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
             ws_status_clients  = td.get("fl_status_clients", 0)
             ws_workers_active  = td.get("worker_tunnels_active", [])
             ws_coord_tunnel    = td.get("coordinator_tunnel_active", False)
-            info(f"[WS] /ws/fl-status   → {ws_status_clients} cliente(s) de monitorización")
+            info(f"[WS] /ws/fl-status   -> {ws_status_clients} cliente(s) de monitorizacion")
             if ws_workers_active:
-                ok(f"[WS] Túneles High-Speed ACTIVOS → workers: {ws_workers_active}")
+                ok(f"[WS] Tuneles High-Speed ACTIVOS -> workers: {ws_workers_active}")
             else:
-                warn("[WS] Ningún túnel High-Speed WS activo aún — "
-                     "los pesos se enviarán vía IDS HTTP (fallback normal)")
-            info(f"[WS] Túnel hacia coordinator: {'Activo ✅' if ws_coord_tunnel else 'Inactivo (fallback HTTP)'}")
+                warn("[WS] Ningun tunel High-Speed WS activo aun -- "
+                     "los pesos se enviaran via IDS HTTP (fallback normal)")
+            info(f"[WS] Tunel hacia coordinator: {'Activo ' if ws_coord_tunnel else 'Inactivo (fallback HTTP)'}")
         else:
-            warn(f"GET /ws/tunnel-status respondió {ts.status_code}")
+            warn(f"GET /ws/tunnel-status respondio {ts.status_code}")
     except Exception as _te:
         warn(f"No se pudo consultar /ws/tunnel-status: {_te}")
 
-    # wss:// — el DataApp corre con TLS (uvicorn + ECDHE cipher suites, start.sh).
-    # https://localhost:5002 → wss://localhost:5002/ws/fl-status
+    # wss:// -- el DataApp corre con TLS (uvicorn + ECDHE cipher suites, start.sh).
+    # https://localhost:5002 -> wss://localhost:5002/ws/fl-status
     ws_url = coordinator_url.replace("https://", "wss://").replace("http://", "ws://")
     ws_url = f"{ws_url}/ws/fl-status"
 
     if not _WS_AVAILABLE:
         warn(
-            "librería 'websockets' no instalada — usando polling HTTP como fallback.\n"
+            "libreria 'websockets' no instalada -- usando polling HTTP como fallback.\n"
             "      Instala con: pip install websockets"
         )
         _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids)
@@ -936,7 +937,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
 
         while conn_attempts < max_attempts:
             try:
-                # wss:// con TLS — el DataApp usa ECDHE (start.sh con ssl_keyfile).
+                # wss:// con TLS -- el DataApp usa ECDHE (start.sh con ssl_keyfile).
                 # ssl_ctx con verify=False para certificado auto-firmado del DataApp.
                 import ssl as _ssl_fl
                 _ssl_fl_ctx = _ssl_fl.SSLContext(_ssl_fl.PROTOCOL_TLS_CLIENT)
@@ -950,11 +951,11 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                     open_timeout  = 15,
                 ) as ws:
                     ok(f"WebSocket conectado a {ws_url}")
-                    conn_attempts = 0   # reset en conexión exitosa
+                    conn_attempts = 0   # reset en conexion exitosa
 
                     seen_rounds   = 0
                     total_rounds  = None
-                    weights_shown = {}   # rnd → set de wids ya mostrados
+                    weights_shown = {}   # rnd -> set de wids ya mostrados
                     fl_done       = False
 
                     async for raw_msg in ws:
@@ -965,7 +966,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
 
                         event = evt.get("event", "")
 
-                        # ── connected ─────────────────────────────────────────
+                        # -- connected -----------------------------------------
                         if event == "connected":
                             role         = evt.get("role", "?")
                             status       = evt.get("status", "?")
@@ -973,18 +974,18 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                             total_rounds = evt.get("total_rounds") or total_rounds
 
                             print()
-                            ok(f"WebSocket activo — coordinator-{cid}  "
+                            ok(f"WebSocket activo -- coordinator-{cid}  "
                                f"role={role}  status={status}")
                             info(f"Canal WS: {ws_url}")
                             info(f"El servidor emite eventos IDS en tiempo real "
-                                 f"(fl_started → round_started → round_completed → fl_completed)")
+                                 f"(fl_started -> round_started -> round_completed -> fl_completed)")
 
                             if status in ("completed", "failed"):
-                                warn("El FL ya terminó antes de conectar — mostrando resultados")
+                                warn("El FL ya termino antes de conectar -- mostrando resultados")
                                 fl_done = True
                                 break
 
-                            # ── FIX race condition ronda 1 ────────────────────
+                            # -- FIX race condition ronda 1 --------------------
                             import re as _re_status
                             rnd_match = _re_status.match(r"round_(\d+)", status)
                             if rnd_match:
@@ -1004,16 +1005,16 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                                         pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
                                         _print_handshake_algoritmo(rnd_num, wid, pl, cid)
                                     print()
-                                    print(f"    {BOLD}[ronda {rnd_num}] 💨 Enviando pesos globales a peers via WebSocket (High-Speed Data Plane)...{RESET}")
+                                    print(f"    {BOLD}[ronda {rnd_num}]  Enviando pesos globales a peers via WebSocket (High-Speed Data Plane)...{RESET}")
                                     for w in accepted:
                                         uri = w.get("connector_uri", "")
                                         m   = re.search(r"worker(\d+)", uri)
                                         wid = m.group(1) if m else "?"
                                         pe  = endpoints["peers"].get(f"worker{wid}", {})
                                         pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
-                                        print(f"      {CYAN}[WS 💨]  fl_global_weights::round{rnd_num}  {GRAY}coordinator-{cid}  ──▶  {pl}{RESET}")
+                                        print(f"      {CYAN}[WS ]  fl_global_weights::round{rnd_num}  {GRAY}coordinator-{cid}  --  {pl}{RESET}")
                                         print(f"      {GRAY}Pesos globales ronda {rnd_num} "
-                                              f"→ {pl}  {GREEN}✅{RESET}")
+                                              f"-> {pl}  {GREEN}{RESET}")
                                     print()
                                     print(f"    {BOLD}[ronda {rnd_num}] Entrenando localmente "
                                           f"(coordinator-{cid})...{RESET}")
@@ -1021,18 +1022,18 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                                     print(f"    {GRAY}[WS] Esperando pesos... 1/{n_exp}  "
                                           f"(coordinator-{cid} local en progreso){RESET}")
 
-                        # ── fl_started ────────────────────────────────────────
+                        # -- fl_started ----------------------------------------
                         elif event == "fl_started":
                             total_rounds = evt.get("total_rounds")
                             min_workers  = evt.get("min_workers")
                             print()
-                            ok(f"[WS] FL arrancado — {total_rounds} rondas  "
+                            ok(f"[WS] FL arrancado -- {total_rounds} rondas  "
                                f"min_workers={min_workers}")
                             info(f"[WS] Workers participantes: "
                                  f"{', '.join('worker-' + w for w in accepted_wids)}")
                             info(f"[WS] Escuchando eventos en tiempo real...")
 
-                        # ── round_started ─────────────────────────────────────
+                        # -- round_started -------------------------------------
                         elif event == "round_started":
                             rnd_num      = evt.get("round", "?")
                             total_rounds = evt.get("total_rounds") or total_rounds
@@ -1043,10 +1044,10 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                             else:
                                 weights_shown.setdefault(rnd_num, set())
                                 print()
-                                info(f"[WS] Evento round_started recibido — ronda {rnd_num}")
+                                info(f"[WS] Evento round_started recibido -- ronda {rnd_num}")
                                 _print_ronda_header(rnd_num, total_rounds, cid)
 
-                                # Distribución de algorithm.py via IDS (en cada ronda)
+                                # Distribucion de algorithm.py via IDS (en cada ronda)
                                 print()
                                 print(f"    {BOLD}[ronda {rnd_num}] Distribuyendo algorithm.py + "
                                       f"fl_config.json a peers via IDS...{RESET}")
@@ -1059,16 +1060,16 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                                     _print_handshake_algoritmo(rnd_num, wid, pl, cid)
 
                                 print()
-                                print(f"    {BOLD}[ronda {rnd_num}] 💨 Enviando pesos globales a peers via WebSocket (High-Speed Data Plane)...{RESET}")
+                                print(f"    {BOLD}[ronda {rnd_num}]  Enviando pesos globales a peers via WebSocket (High-Speed Data Plane)...{RESET}")
                                 for w in accepted:
                                     uri = w.get("connector_uri", "")
                                     m   = re.search(r"worker(\d+)", uri)
                                     wid = m.group(1) if m else "?"
                                     pe  = endpoints["peers"].get(f"worker{wid}", {})
                                     pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
-                                    print(f"      {CYAN}[WS 💨]  fl_global_weights::round{rnd_num}  {GRAY}coordinator-{cid}  ──▶  {pl}{RESET}")
+                                    print(f"      {CYAN}[WS ]  fl_global_weights::round{rnd_num}  {GRAY}coordinator-{cid}  --  {pl}{RESET}")
                                     print(f"      {GRAY}Pesos globales ronda {rnd_num} "
-                                          f"→ {pl}  {GREEN}✅{RESET}")
+                                          f"-> {pl}  {GREEN}{RESET}")
 
                                 print()
                                 print(f"    {BOLD}[ronda {rnd_num}] Entrenando localmente "
@@ -1077,7 +1078,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                                 print(f"    {GRAY}[WS] Esperando pesos... 1/{n_exp}  "
                                       f"(coordinator-{cid} local en progreso){RESET}")
 
-                        # ── round_completed ───────────────────────────────────
+                        # -- round_completed -----------------------------------
                         elif event == "round_completed":
                             rnd_num  = evt.get("round", seen_rounds + 1)
                             elapsed  = evt.get("elapsed_seconds", 0)
@@ -1089,9 +1090,9 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                             def _fv(k):
                                 v = gm.get(k)
                                 return f"{v:.4f}" if isinstance(v, float) else (
-                                    str(v) if v is not None else "—")
+                                    str(v) if v is not None else "--")
 
-                            info(f"[WS] Evento round_completed — ronda {rnd_num}")
+                            info(f"[WS] Evento round_completed -- ronda {rnd_num}")
 
                             # Mostrar llegada de pesos de cada worker
                             already = weights_shown.get(rnd_num, set())
@@ -1103,15 +1104,15 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                                     pe  = endpoints["peers"].get(f"worker{wid}", {})
                                     pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
                                     print()
-                                    print(f"    {BOLD}[ronda {rnd_num}] 💨 Pesos locales "
+                                    print(f"    {BOLD}[ronda {rnd_num}]  Pesos locales "
                                           f"recibidos de worker-{wid} (WebSocket):{RESET}")
-                                    print(f"      {GREEN}[WS 💨]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  ──▶  coordinator-{cid}{RESET}")
-                                    print(f"    {GRAY}[WS] [fl_weights] ✅ Pesos de worker-{wid} "
+                                    print(f"      {GREEN}[WS ]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  --  coordinator-{cid}{RESET}")
+                                    print(f"    {GRAY}[WS] [fl_weights]  Pesos de worker-{wid} "
                                           f"ronda {rnd_num} acumulados "
                                           f"({total_so_far}/{n_exp}){RESET}")
                             weights_shown[rnd_num] = already
 
-                            # FedAvg + métricas de cierre de ronda
+                            # FedAvg + metricas de cierre de ronda
                             print()
                             print(f"    {GRAY}[ronda {rnd_num}] FedAvg sobre {workers} workers  "
                                   f"({samples:,} muestras totales){RESET}")
@@ -1121,7 +1122,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                                   f"rec={_fv('recall')}{RESET}")
                             seen_rounds += 1
 
-                        # ── fl_completed ──────────────────────────────────────
+                        # -- fl_completed --------------------------------------
                         elif event in ("fl_completed", "fl_finished"):
                             n_rounds    = evt.get("n_rounds", total_rounds or "?")
                             best_round  = evt.get("best_round", "?")
@@ -1129,7 +1130,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
 
                             print()
                             info(f"[WS] Evento fl_completed recibido")
-                            ok(f"✅ FL completado — {n_rounds} rondas")
+                            ok(f" FL completado -- {n_rounds} rondas")
                             if best_round != "?":
                                 field("Mejor ronda",   best_round)
                             for k in ("accuracy", "auc", "loss", "precision", "recall"):
@@ -1139,32 +1140,32 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                             fl_done = True
                             break
 
-                        # ── fl_failed ─────────────────────────────────────────
+                        # -- fl_failed -----------------------------------------
                         elif event == "fl_failed":
                             reason = evt.get("reason", "?")
                             rnd    = evt.get("round", "?")
                             print()
                             info(f"[WS] Evento fl_failed recibido")
-                            warn(f"❌ FL abortado en ronda {rnd} — {reason}")
+                            warn(f" FL abortado en ronda {rnd} -- {reason}")
                             fl_done = True
                             break
 
-                        # ── fl_update genérico ────────────────────────────────
+                        # -- fl_update generico --------------------------------
                         # Emitido por el polling interno de /ws/fl-status cuando
-                        # hay cambio de estado pero sin evento específico.
-                        # Solo actuamos si el FL terminó.
+                        # hay cambio de estado pero sin evento especifico.
+                        # Solo actuamos si el FL termino.
                         elif event == "fl_update":
                             status = evt.get("status", "?")
-                            # Silenciar los updates de ronda en curso — ya los
+                            # Silenciar los updates de ronda en curso -- ya los
                             # mostramos via round_started/round_completed.
-                            # Solo reaccionar si el FL terminó inesperadamente.
+                            # Solo reaccionar si el FL termino inesperadamente.
                             if status in ("completed", "failed"):
-                                info(f"[WS] fl_update: status={status} — FL terminado")
+                                info(f"[WS] fl_update: status={status} -- FL terminado")
                                 fl_done = True
                                 break
 
                     if fl_done:
-                        return   # éxito — salir del loop de reconexión
+                        return   # exito -- salir del loop de reconexion
 
             except websockets.exceptions.ConnectionClosed as exc:
                 conn_attempts += 1
@@ -1194,8 +1195,8 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
 
 def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids):
     """
-    Fallback de monitorización por polling HTTP (GET /fl/status cada 5s).
-    Se usa cuando websockets no está disponible o la conexión WS falla.
+    Fallback de monitorizacion por polling HTTP (GET /fl/status cada 5s).
+    Se usa cuando websockets no esta disponible o la conexion WS falla.
     """
     info("Monitorizando via polling HTTP GET /fl/status cada 5s...")
 
@@ -1218,7 +1219,7 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
 
     while True:
         if time.time() - t_start > 3600:
-            warn("Timeout de monitorización (1h)"); break
+            warn("Timeout de monitorizacion (1h)"); break
 
         try:
             r  = SESSION.get(f"{coordinator_url}/fl/status", timeout=10, verify=False)
@@ -1242,7 +1243,7 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
 
             def _fv(k):
                 v = gm.get(k)
-                return f"{v:.4f}" if isinstance(v, float) else (str(v) if v is not None else "—")
+                return f"{v:.4f}" if isinstance(v, float) else (str(v) if v is not None else "--")
 
             already = weights_shown.get(rnd_num, set())
             for wid in accepted_wids:
@@ -1253,13 +1254,13 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
                     pe   = endpoints["peers"].get(f"worker{wid}", {})
                     pl   = pe.get("ecc_label", f"ecc-worker{wid}:8889")
                     print()
-                    print(f"    {BOLD}[ronda {rnd_num}] 💨 Pesos recibidos de worker-{wid} (WebSocket):{RESET}")
-                    print(f"      {GREEN}[WS 💨]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  ──▶  coordinator-{cid}{RESET}")
-                    print(f"    {GRAY}✅ Pesos acumulados ({total_so_far}/{n_exp}){RESET}")
+                    print(f"    {BOLD}[ronda {rnd_num}]  Pesos recibidos de worker-{wid} (WebSocket):{RESET}")
+                    print(f"      {GREEN}[WS ]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  --  coordinator-{cid}{RESET}")
+                    print(f"    {GRAY} Pesos acumulados ({total_so_far}/{n_exp}){RESET}")
             weights_shown[rnd_num] = already
 
             print()
-            print(f"    {GRAY}[ronda {rnd_num}] FedAvg — {workers} workers, {samples:,} muestras{RESET}")
+            print(f"    {GRAY}[ronda {rnd_num}] FedAvg -- {workers} workers, {samples:,} muestras{RESET}")
             print(f"    {GREEN}Ronda {rnd_num} OK en {elapsed}s  "
                   f"acc={_fv('accuracy')}  auc={_fv('auc')}  loss={_fv('loss')}{RESET}")
             seen_rounds += 1
@@ -1282,14 +1283,14 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
                     _print_handshake_algoritmo(rnd_num, wid, pl, cid)
 
         if status == "completed" and seen_rounds >= (total_rounds or 0):
-            ok(f"✅ FL completado — {seen_rounds} rondas"); break
+            ok(f" FL completado -- {seen_rounds} rondas"); break
         elif status == "failed":
-            warn("❌ FL terminó con status=failed"); break
+            warn(" FL termino con status=failed"); break
 
         time.sleep(poll_interval)
 
 # =============================================================================
-# FASE 6 — Test de Acceso al Modelo Global (Soberanía de Datos)
+# FASE 6 -- Test de Acceso al Modelo Global (Soberania de Datos)
 # =============================================================================
 
 def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout):
@@ -1303,7 +1304,7 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
 
     try:
         fl_res = None
-        info("Esperando a que el recurso del modelo FL se publique en el catálogo IDS...")
+        info("Esperando a que el recurso del modelo FL se publique en el catalogo IDS...")
         for _ in range(15):
             r = SESSION.get(f"{coordinator_url}/ids/self-description", timeout=10, verify=False)
             if r.ok:
@@ -1322,7 +1323,7 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
             time.sleep(1)
             
         if not fl_res:
-            warn("No se encontro el recurso del modelo FL en el catálogo tras la espera")
+            warn("No se encontro el recurso del modelo FL en el catalogo tras la espera")
             return
             
         cid_val = ((fl_res.get("ids:contractOffer") or [{}])[0]).get("@id", "")
@@ -1342,10 +1343,10 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
         warn("No se pudo extraer la URL del coordinator desde el Broker para realizar la prueba.")
         return
     
-    # ── Extraer TODOS los peers descubiertos (aceptados, rechazados Y descartados) ──
-    # De este modo worker-4 (schema incompatible → descartado en discovery) también
+    # -- Extraer TODOS los peers descubiertos (aceptados, rechazados Y descartados) --
+    # De este modo worker-4 (schema incompatible -> descartado en discovery) tambien
     # se prueba y recibe un RejectionMessage real del coordinator porque su URI
-    # no está en la lista de autorizados del contrato FL.
+    # no esta en la lista de autorizados del contrato FL.
     accepted_uris = {re.search(r"worker(\d+)", w.get("connector_uri", "")).group(1)
                      for w in nego.get("accepted", [])
                      if re.search(r"worker(\d+)", w.get("connector_uri", ""))}
@@ -1355,7 +1356,7 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
         m = re.search(r"worker(\d+)", wid_key)
         if m:
             workers_to_test.append(m.group(1))
-    # Añadir los que puedan venir de nego pero no estén en endpoints["peers"]
+    # Anadir los que puedan venir de nego pero no esten en endpoints["peers"]
     for w in nego.get("accepted", []) + nego.get("rejected", []):
         m = re.search(r"worker(\d+)", w.get("connector_uri", ""))
         if m and m.group(1) not in workers_to_test:
@@ -1366,14 +1367,14 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
         warn("No hay peers descubiertos para probar en la Fase 6.")
         return
 
-    # ── Ejecutar el test de acceso global ──
+    # -- Ejecutar el test de acceso global --
     for target_wid in workers_to_test:
         if f"worker{target_wid}" not in endpoints["peers"]:
             continue
             
         w_url = f"https://localhost:{5000 + int(target_wid)}"
-        # ECC :8889 no es accesible desde DataApps — redirigir al DataApp coordinator
-        # que implementa la lógica del contrato IDS directamente en su endpoint /data.
+        # ECC :8889 no es accesible desde DataApps -- redirigir al DataApp coordinator
+        # que implementa la logica del contrato IDS directamente en su endpoint /data.
         _m_f6 = re.search(r"ecc-(worker\d+)", coord_ecc)
         _fwd_dataapp = (
             f"https://be-dataapp-{_m_f6.group(1)}:8500/data"
@@ -1381,7 +1382,7 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
         )
         payload = {
             "Forward-To"      : _fwd_dataapp,
-            "connectorUri"    : coord_uri,   # URI IDS explícita — evita inferencia incorrecta
+            "connectorUri"    : coord_uri,   # URI IDS explicita -- evita inferencia incorrecta
             "messageType"     : "ContractRequestMessage",
             "contractId"      : cid_val,
             "contractProvider": coord_uri,
@@ -1411,19 +1412,19 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
             elif ("Rejection" in ids_type or "ContractRejection" in ids_type
                   or parsed.get("status") == "rejected"
                   or parsed.get("reason") in ("unauthorized_consumer", "fl_opt_out")):
-                # ¿Era un rechazo ESPERADO? → worker no participó en el FL
+                # Era un rechazo ESPERADO? -> worker no participo en el FL
                 _is_expected_rejection = target_wid not in accepted_uris
 
                 if _is_expected_rejection:
-                    step("result", "IDS: Soberanía Aplicada — Acceso Denegado")
+                    step("result", "IDS: Soberania Aplicada -- Acceso Denegado")
                     _ids_log("in", "ids:RejectionMessage", f"coordinator-{cid}", f"worker-{target_wid}")
                     ok(
-                        f"Worker-{target_wid} -- acceso DENEGADO ✅  "
-                        f"(no participó en el FL — Soberanía IDS aplicada correctamente)"
+                        f"Worker-{target_wid} -- acceso DENEGADO   "
+                        f"(no participo en el FL -- Soberania IDS aplicada correctamente)"
                     )
                     _reason = parsed.get("reason") or parsed.get("ids:rejectionReason", "policy_enforcement")
                     field("Motivo de rechazo", str(_reason), indent=8)
-                    field("Política aplicada", "connector-restricted-policy (ids:rightOperand)", indent=8)
+                    field("Politica aplicada", "connector-restricted-policy (ids:rightOperand)", indent=8)
                 else:
                     step("result", f"IDS: Rejection Message (INESPERADO)")
                     _ids_log("in", "ids:RejectionMessage", f"coordinator-{cid}", f"worker-{target_wid}")
@@ -1476,7 +1477,7 @@ def main():
         print(f"{RED}Coordinator ID invalido: {cid!r}. Debe ser un numero entero (p.ej. 2).{RESET}")
         sys.exit(1)
 
-    # Puerto del coordinator: argumento explícito o convencion 5000+N
+    # Puerto del coordinator: argumento explicito o convencion 5000+N
     coordinator_port = args.coordinator_port if args.coordinator_port else 5000 + cid_int
     coordinator_url  = f"https://localhost:{coordinator_port}"
     req_timeout      = args.timeout

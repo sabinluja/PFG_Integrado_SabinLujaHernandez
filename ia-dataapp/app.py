@@ -1,30 +1,30 @@
 """
-app.py  —  IA DataApp Worker/Coordinator
+app.py  --  IA DataApp Worker/Coordinator
 =========================================
 
-Cualquier worker puede ser coordinator — se elige en Postman enviando el
+Cualquier worker puede ser coordinator -- se elige en Postman enviando el
 algoritmo (fl_algorithm) al worker destino via IDS/TRUE Connector.
 
 Flujo completo con Broker + DAPS (pasos Postman):
-  Pasos 1-4  — Negociación IDS manual (proxy â†’ ecc destino)
+  Pasos 1-4  -- Negociacion IDS manual (proxy -> ecc destino)
                El worker receptor recibe algorithm.py + fl_config.json
                y se convierte en COORDINATOR.
 
-  Paso 5a    — POST /broker/discover   â†’ coordinator consulta Fuseki SPARQL
+  Paso 5a    -- POST /broker/discover   -> coordinator consulta Fuseki SPARQL
                                           y descubre workers compatibles.
-  Paso 5b    — POST /fl/negotiate      â†’ coordinator negocia contratos IDS
+  Paso 5b    -- POST /fl/negotiate      -> coordinator negocia contratos IDS
                                           con los workers compatibles del broker.
-                                          Worker4 (FL_AUTHORIZED_URIS vacío) es
-                                          rechazado automáticamente.
-  Paso 5c    — POST /fl/start          â†’ coordinator envía algoritmo + pesos
+                                          Worker4 (FL_AUTHORIZED_URIS vacio) es
+                                          rechazado automaticamente.
+  Paso 5c    -- POST /fl/start          -> coordinator envia algoritmo + pesos
                                           a los workers aceptados y arranca FL.
 
-  Pasos 13-17 — Verificación del modelo publicado y control de acceso.
+  Pasos 13-17 -- Verificacion del modelo publicado y control de acceso.
                Worker4 no puede negociar contrato del recurso FL porque
                su CONNECTOR_URI no aparece en ids:rightOperand del constraint.
 
   El fl_config.json se guarda en /home/nobody/data/fl_config.json.
-  Los parámetros FL_ROUNDS y ROUND_TIMEOUT ya NO vienen de variables de entorno.
+  Los parametros FL_ROUNDS y ROUND_TIMEOUT ya NO vienen de variables de entorno.
 """
 
 import os
@@ -55,7 +55,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 # =============================================================================
-# Configuración
+# Configuracion
 # =============================================================================
 
 INSTANCE_ID   = os.getenv("INSTANCE_ID", "1")
@@ -76,7 +76,7 @@ PEER_CONNECTOR_URIS = [
     if u.strip()
 ]
 
-# Broker IDS — para descubrimiento dinámico de workers
+# Broker IDS -- para descubrimiento dinamico de workers
 BROKER_URL = os.getenv("BROKER_URL", "https://broker-reverseproxy/infrastructure")
 BROKER_SPARQL_URL = "http://broker-fuseki:3030/connectorData/sparql"
 
@@ -101,15 +101,15 @@ os.makedirs(INPUT_DIR,  exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # =============================================================================
-# Configuración LLM — para recomendación inteligente de datasets
-# Únicamente usando Ollama (local, air-gapped) por temas de soberanía de datos
+# Configuracion LLM -- para recomendacion inteligente de datasets
+# Unicamente usando Ollama (local, air-gapped) por temas de soberania de datos
 # =============================================================================
 LLM_ENDPOINT = os.getenv("LLM_ENDPOINT", "http://ollama:11434/api/generate")
 LLM_MODEL    = os.getenv("LLM_MODEL",    "llama3.2")
 
 
 # =============================================================================
-# Configuración FL — leída de fl_config.json (enviado desde Postman)
+# Configuracion FL -- leida de fl_config.json (enviado desde Postman)
 # =============================================================================
 
 def _load_fl_config() -> dict:
@@ -168,10 +168,10 @@ _round_weights: dict = {}
 _round_lock = threading.Lock()
 
 _my_selected_csv: str | None = None   # CSV elegido por el coordinator para este worker
-PEER_SELECTED_CSVS: list = []   # CSV seleccionado por cada peer (índice igual que PEER_ECC_URLS)
+PEER_SELECTED_CSVS: list = []   # CSV seleccionado por cada peer (indice igual que PEER_ECC_URLS)
 
 # =============================================================================
-# Métricas de rendimiento WebSocket vs HTTP
+# Metricas de rendimiento WebSocket vs HTTP
 # =============================================================================
 _ws_perf_stats = {
     "ws_sends": 0,
@@ -182,7 +182,7 @@ _ws_perf_stats = {
     "http_bytes": 0,
     "ws_failures": 0,
     "http_failures": 0,
-    "history": [],   # últimas 50 transferencias con detalle
+    "history": [],   # ultimas 50 transferencias con detalle
 }
 _ws_perf_lock = threading.Lock()
 
@@ -194,7 +194,7 @@ global_event_loop = None
 # =============================================================================
 
 app = FastAPI(
-    title=f"IA DataApp — Worker {INSTANCE_ID}",
+    title=f"IA DataApp -- Worker {INSTANCE_ID}",
     description=(
         "Sustituye al Java DataApp del TRUE Connector. "
         "POST /proxy para Postman. POST /data para el ECC."
@@ -205,28 +205,28 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def _startup_identity_log():
-    """Log de identidad IDS al arrancar — facilita debug con broker y DAPS."""
+    """Log de identidad IDS al arrancar -- facilita debug con broker y DAPS."""
     global global_event_loop
     global_event_loop = asyncio.get_running_loop()
     log.info("=" * 60)
-    log.info(f"  IA DataApp arrancando — Worker {INSTANCE_ID}")
+    log.info(f"  IA DataApp arrancando -- Worker {INSTANCE_ID}")
     log.info(f"  CONNECTOR_URI   : {CONNECTOR_URI}")
     log.info(f"  ECC_HOSTNAME    : {ECC_HOSTNAME}")
     log.info(f"  BROKER_URL      : {BROKER_URL}")
     log.info(f"  BROKER_SPARQL   : {BROKER_SPARQL_URL}")
-    log.info(f"  PEER_ECC_URLS   : {PEER_ECC_URLS or '(vacío — se rellenará via broker)'}")
-    log.info(f"  PEER_CONN_URIS  : {PEER_CONNECTOR_URIS or '(vacío — se rellenará via broker)'}")
+    log.info(f"  PEER_ECC_URLS   : {PEER_ECC_URLS or '(vacio -- se rellenara via broker)'}")
+    log.info(f"  PEER_CONN_URIS  : {PEER_CONNECTOR_URIS or '(vacio -- se rellenara via broker)'}")
     if FL_OPT_OUT:
         log.warning(
-            f"  FL_OPT_OUT      : True — "
-            f"worker-{INSTANCE_ID} NO participará en FL. "
-            "Los ContractRequestMessage de coordinators serán rechazados por política de datos."
+            f"  FL_OPT_OUT      : True -- "
+            f"worker-{INSTANCE_ID} NO participara en FL. "
+            "Los ContractRequestMessage de coordinators seran rechazados por politica de datos."
         )
     else:
-        log.info("  FL_OPT_OUT      : False (Participará en entrenamientos FL válidos).")
+        log.info("  FL_OPT_OUT      : False (Participara en entrenamientos FL validos).")
     log.info("=" * 60)
 
-    # Publicar datasets automáticamente dando tiempo al ECC a arrancar
+    # Publicar datasets automaticamente dando tiempo al ECC a arrancar
     asyncio.create_task(_delay_publish_datasets())
 
 async def _delay_publish_datasets():
@@ -251,7 +251,7 @@ async def _delay_publish_datasets():
         except Exception:
             pass
             
-    log.error("[startup] Error: El ECC no arrancó a tiempo. Datasets no publicados.")
+    log.error("[startup] Error: El ECC no arranco a tiempo. Datasets no publicados.")
 
 
 
@@ -336,7 +336,7 @@ def _get_dat_token() -> str:
     _dat_cache["token"] = token
     _dat_cache["exp"]   = decoded.get("exp", now + 3600)
 
-    log.info(f"[DAPS] Token DAT obtenido para worker-{INSTANCE_ID} — expira en {_dat_cache['exp'] - now}s")
+    log.info(f"[DAPS] Token DAT obtenido para worker-{INSTANCE_ID} -- expira en {_dat_cache['exp'] - now}s")
     return token
 
 
@@ -344,7 +344,7 @@ def _security_token() -> dict:
     try:
         token_val = _get_dat_token()
     except Exception as e:
-        log.warning(f"[DAPS] No se pudo obtener token real: {e} — usando DummyTokenValue")
+        log.warning(f"[DAPS] No se pudo obtener token real: {e} -- usando DummyTokenValue")
         token_val = "DummyTokenValue"
     return {
         "@type"          : "ids:DynamicAttributeToken",
@@ -434,7 +434,7 @@ async def proxy(request: Request):
     req_artifact      = body.get("requestedArtifact")
     req_element       = body.get("requestedElement")
     transfer_contract      = body.get("transferContract")
-    explicit_connector_uri = body.get("connectorUri")   # URI IDS explícita (fase 6, bypass inferencia)
+    explicit_connector_uri = body.get("connectorUri")   # URI IDS explicita (fase 6, bypass inferencia)
 
     contract_id_field  = body.get("contractId")
     contract_prov_field = body.get("contractProvider")
@@ -456,7 +456,7 @@ async def proxy(request: Request):
 
     dest_conn_uri = explicit_connector_uri or _infer_connector_uri(forward_to)
 
-    log.info(f"[/proxy] {message_type} â†’ {forward_to}")
+    log.info(f"[/proxy] {message_type} -> {forward_to}")
 
     try:
         corr_msg = body.get("correlationMessage") or transfer_contract or None
@@ -467,7 +467,7 @@ async def proxy(request: Request):
             config_b64 = payload_in.get("config",  "") or ""
             combined   = f"{algo_b64}||fl_config::{config_b64}" if config_b64 else algo_b64
             fl_extra   = {"ids:contentVersion": combined}
-            log.info(f"[/proxy] fl_algorithm detectado — content+config â†’ ids:contentVersion (config={'present' if config_b64 else 'absent'})")
+            log.info(f"[/proxy] fl_algorithm detectado -- content+config -> ids:contentVersion (config={'present' if config_b64 else 'absent'})")
 
         result = _ids_send(
             forward_to_url       = forward_to,
@@ -495,7 +495,7 @@ def _infer_connector_uri(ecc_url: str) -> str:
         if url in ecc_url or ecc_url in url:
             return uri
             
-    # Inferencia dinámica usando el catálogo del Broker en lugar de regex estática
+    # Inferencia dinamica usando el catalogo del Broker en lugar de regex estatica
     try:
         connectors = _get_registered_connectors()
         from urllib.parse import urlparse
@@ -508,13 +508,13 @@ def _infer_connector_uri(ecc_url: str) -> str:
             if c["connector_uri"] == ecc_url:
                 return c["connector_uri"]
     except Exception as e:
-        log.warning(f"Error infiriendo URI dinámicamente dinámicamente: {e}")
+        log.warning(f"Error infiriendo URI dinamicamente dinamicamente: {e}")
         
     return ecc_url
 
 
 # =============================================================================
-# Utilidades IDS — envío saliente
+# Utilidades IDS -- envio saliente
 # =============================================================================
 
 def _build_outgoing_header(message_type: str, dest_connector_uri: str,
@@ -589,7 +589,7 @@ def _ids_send(
         fields["payload"] = ("payload", payload_str, "application/json")
 
     encoder = MultipartEncoder(fields=fields)
-    log.info(f"[IDS OUT] {message_type} â†’ {forward_to_url}")
+    log.info(f"[IDS OUT] {message_type} -> {forward_to_url}")
 
     resp = requests.post(
         actual_url,
@@ -631,13 +631,13 @@ def _ids_send(
 
 
 # =============================================================================
-# Negociación IDS completa — coordinator â†’ peer
+# Negociacion IDS completa -- coordinator -> peer
 # =============================================================================
 
 def _dataapp_url_from_ecc(peer_ecc_url: str) -> str:
     """
     Deriva la URL interna del DataApp del peer a partir de su ECC URL.
-    Convención: https://ecc-workerN:8889/data â†’ https://be-dataapp-workerN:8500
+    Convencion: https://ecc-workerN:8889/data -> https://be-dataapp-workerN:8500
     """
     import re as _re_da
     m = _re_da.search(r"ecc-worker(\d+)", peer_ecc_url)
@@ -651,7 +651,7 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
                                    config_bytes: bytes,
                                    selected_csv: str | None = None) -> bool:
     """
-    Envía algorithm.py + fl_config.json al peer via DataApp-to-DataApp
+    Envia algorithm.py + fl_config.json al peer via DataApp-to-DataApp
     (HTTPS interno Docker, puerto 8500) evitando el ECC:8889 bloqueado.
     """
     peer_dataapp = _dataapp_url_from_ecc(peer_ecc_url)
@@ -677,7 +677,7 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
             verify=False,
         )
         resp.raise_for_status()
-        log.info(f"[coordinator] algorithm.py + fl_config.json â†’ {peer_dataapp} [OK]"
+        log.info(f"[coordinator] algorithm.py + fl_config.json -> {peer_dataapp} [OK]"
                  + (f"  (CSV: {selected_csv})" if selected_csv else ""))
         return True
 
@@ -692,14 +692,14 @@ def _activate_coordinator_from_local() -> bool:
     este conector (baked en la imagen o previamente recibido via IDS).
 
     Este es el mecanismo correcto para el self-fetch del coordinator:
-    el conector TIENE el artefacto (en el contexto IDS, está disponible
-    como recurso en su propio catálogo). No necesita pedirse a sí mismo
-    a través del ECC (lo que causaría un self-loop rechazado por DAPS).
+    el conector TIENE el artefacto (en el contexto IDS, esta disponible
+    como recurso en su propio catalogo). No necesita pedirse a si mismo
+    a traves del ECC (lo que causaria un self-loop rechazado por DAPS).
 
-    El handshake IDS completo (Description â†’ Contract â†’ Artifact) tiene
+    El handshake IDS completo (Description -> Contract -> Artifact) tiene
     sentido cuando el consumer ES DIFERENTE del provider. Para la
-    activación del coordinator (mismo conector), la carga directa es
-    semantícamente equivalente y arquitectónicamente correcta.
+    activacion del coordinator (mismo conector), la carga directa es
+    semanticamente equivalente y arquitectonicamente correcta.
     """
     global is_coordinator
     algo_src = _algo_path()  # IDS path primero, luego baked
@@ -714,7 +714,7 @@ def _activate_coordinator_from_local() -> bool:
         with open(algo_src, "rb") as f:
             algo_bytes = f.read()
 
-        # Si ya está en ALGO_IDS_PATH no hace falta copiar;
+        # Si ya esta en ALGO_IDS_PATH no hace falta copiar;
         # si viene de ALGO_BAKED_PATH, guardarlo en ALGO_IDS_PATH
         if algo_src == ALGO_BAKED_PATH and algo_src != ALGO_IDS_PATH:
             _save_algorithm(algo_bytes)
@@ -727,8 +727,8 @@ def _activate_coordinator_from_local() -> bool:
 
         is_coordinator = True
         log.info(
-            f"â˜... algorithm.py cargado desde propio conector "
-            f"({len(algo_bytes)} bytes) — worker-{INSTANCE_ID} = COORDINATOR\n"
+            f"~... algorithm.py cargado desde propio conector "
+            f"({len(algo_bytes)} bytes) -- worker-{INSTANCE_ID} = COORDINATOR\n"
             f"  Fuente: {algo_src}"
         )
         return True
@@ -739,13 +739,13 @@ def _activate_coordinator_from_local() -> bool:
 
 
 # =============================================================================
-# Obtención del algoritmo via IDS — coordinator como CONSUMER (de otro conector)
+# Obtencion del algoritmo via IDS -- coordinator como CONSUMER (de otro conector)
 # =============================================================================
 
 def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) -> bool:
     """
-    El worker que quiere ser coordinator actúa como consumer IDS:
-    ejecuta el handshake completo (Description â†’ ContractRequest â†’ Agreement â†’
+    El worker que quiere ser coordinator actua como consumer IDS:
+    ejecuta el handshake completo (Description -> ContractRequest -> Agreement ->
     ArtifactRequest) contra el ECC fuente para obtener algorithm.py +
     fl_config.json. Al terminar, activa is_coordinator = True.
 
@@ -768,7 +768,7 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
         contract_artifact = instance.get(
             "@id", "http://w3id.org/engrd/connector/artifact/1"
         )
-        log.info(f"[fetch-algorithm] 1/4 Description OK — artifact={contract_artifact}")
+        log.info(f"[fetch-algorithm] 1/4 Description OK -- artifact={contract_artifact}")
 
         agreement = _ids_send(
             source_ecc_url, source_connector_uri, "ids:ContractRequestMessage",
@@ -784,7 +784,7 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
             },
         )
         transfer_contract = agreement.get("@id", "")
-        log.info(f"[fetch-algorithm] 2/4 ContractAgreement OK — transfer={transfer_contract}")
+        log.info(f"[fetch-algorithm] 2/4 ContractAgreement OK -- transfer={transfer_contract}")
 
         _ids_send(
             source_ecc_url, source_connector_uri, "ids:ContractAgreementMessage",
@@ -801,7 +801,7 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
             transfer_contract=transfer_contract,
             correlation_message=transfer_contract,
         )
-        log.info(f"[fetch-algorithm] 4/4 ArtifactResponse recibida — type={resp.get('type','?')!r}")
+        log.info(f"[fetch-algorithm] 4/4 ArtifactResponse recibida -- type={resp.get('type','?')!r}")
 
         algo_b64   = resp.get("content", "")
         config_b64 = resp.get("config")
@@ -825,7 +825,7 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
                 log.warning(f"[fetch-algorithm] No se pudo guardar fl_config.json: {e}")
         else:
             log.warning(
-                "[fetch-algorithm] fl_config.json no incluido en la respuesta — "
+                "[fetch-algorithm] fl_config.json no incluido en la respuesta -- "
                 "guardando valores por defecto en disco"
             )
             _save_config(json.dumps(_load_fl_config()).encode())
@@ -833,8 +833,8 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
 
         is_coordinator = True
         log.info(
-            f"â˜... algorithm.py + config obtenidos via IDS desde {source_ecc_url} "
-            f"— worker-{INSTANCE_ID} = COORDINATOR"
+            f"~... algorithm.py + config obtenidos via IDS desde {source_ecc_url} "
+            f"-- worker-{INSTANCE_ID} = COORDINATOR"
         )
         return True
 
@@ -844,7 +844,7 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
 
 
 # =============================================================================
-# Lógica FL
+# Logica FL
 # =============================================================================
 
 def _algo_path() -> str:
@@ -930,19 +930,19 @@ def _save_local_metrics(result: dict, round_num: int):
         with open(metrics_path, "w") as f:
             json.dump(history, f, indent=2)
     except Exception as e:
-        log.error(f"Error guardando métricas locales: {e}")
+        log.error(f"Error guardando metricas locales: {e}")
 
 
 def _train_local(global_weights_b64: str, round_num: int, csv_path: str | None = None) -> dict:
     _csv = csv_path or _my_selected_csv or _csv_path()
-    log.info(f"[train] Ronda {round_num} — usando CSV: {os.path.basename(_csv)}")
+    log.info(f"[train] Ronda {round_num} -- usando CSV: {os.path.basename(_csv)}")
     result = _load_algorithm().run(
         _csv,
         global_weights_b64=global_weights_b64,
         config_path=CONFIG_PATH
     )
     log.info(
-        f"Ronda {round_num} — local OK  "
+        f"Ronda {round_num} -- local OK  "
         f"acc={result['metrics']['accuracy']:.4f}  "
         f"auc={result['metrics']['auc']:.4f}"
     )
@@ -975,10 +975,10 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
         resp.raise_for_status()
         elapsed_ms = (time.time() - t_start) * 1000
         log.info(
-            f"ðŸ›ï¸  Pesos globales ronda {round_num} â†’ {peer_dataapp} "
+            f"  Pesos globales ronda {round_num} -> {peer_dataapp} "
             f"[OK]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
         )
-        _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"globalâ†’{peer_dataapp}")
+        _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"global->{peer_dataapp}")
     except Exception as exc:
         with _ws_perf_lock:
             _ws_perf_stats["http_failures"] += 1
@@ -1010,10 +1010,10 @@ def _send_local_weights(weights_b64: str, n_samples: int,
     if _send_local_weights_ws(_ws_payload):
         elapsed_ms = (time.time() - t_start) * 1000
         log.info(
-            f"ðŸ›ï¸  Pesos locales ronda {round_num} â†’ coordinator (WS) "
+            f"  Pesos locales ronda {round_num} -> coordinator (WS) "
             f"[OK]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
         )
-        _record_ws_perf("ws", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}â†’coord")
+        _record_ws_perf("ws", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}->coord")
         return
 
     t_start = time.time()
@@ -1027,10 +1027,10 @@ def _send_local_weights(weights_b64: str, n_samples: int,
         resp.raise_for_status()
         elapsed_ms = (time.time() - t_start) * 1000
         log.info(
-            f"ðŸ›ï¸  Pesos locales ronda {round_num} â†’ coordinator {coord_dataapp} "
+            f"  Pesos locales ronda {round_num} -> coordinator {coord_dataapp} "
             f"[OK]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
         )
-        _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}â†’coord")
+        _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}->coord")
     except Exception as exc:
         with _ws_perf_lock:
             _ws_perf_stats["http_failures"] += 1
@@ -1060,7 +1060,7 @@ def _publish_fl_model_as_ids_resource(
         sd       = requests.get(f"{ecc_base}/api/selfDescription/", verify=False, auth=basic_api, timeout=10).json()
         catalogs = sd.get("ids:resourceCatalog", [])
         if not catalogs:
-            log.error("[publish] No se encontró ningún catalog")
+            log.error("[publish] No se encontro ningun catalog")
             return
         catalog_id = catalogs[0].get("@id", "")
 
@@ -1068,7 +1068,7 @@ def _publish_fl_model_as_ids_resource(
         resource_body = {
             "@id"             : resource_id,
             "@type"           : "ids:TextResource",
-            "ids:title"       : [{"@value": f"FL Global Model — Coordinator {INSTANCE_ID} — {ts_readable}",
+            "ids:title"       : [{"@value": f"FL Global Model -- Coordinator {INSTANCE_ID} -- {ts_readable}",
                                   "@type": "http://www.w3.org/2001/XMLSchema#string"}],
             "ids:description" : [{"@value":
                 f"Modelo federado final tras {n_rounds} rondas. "
@@ -1091,12 +1091,12 @@ def _publish_fl_model_as_ids_resource(
             log.error(f"[publish] Error creando recurso: {resp.status_code}")
             return
 
-        log.info("[publish] Añadiendo contrato restringido a peers...")
+        log.info("[publish] Anadiendo contrato restringido a peers...")
         # FIX 1: Usar snapshot inmutable de URIs aceptados en el momento del FL,
         # no el global PEER_CONNECTOR_URIS que puede haber cambiado (race condition).
         _authorized = peer_connector_uris if peer_connector_uris is not None else PEER_CONNECTOR_URIS
         if not _authorized:
-            log.warning("[publish] peer_connector_uris vacío — el contrato FL no tendrá restricción de peers")
+            log.warning("[publish] peer_connector_uris vacio -- el contrato FL no tendra restriccion de peers")
         log.info(f"[publish] Peers autorizados en el contrato FL: {_authorized}")
         allowed_uris = [{"@value": u, "@type": "http://www.w3.org/2001/XMLSchema#anyURI"}
                         for u in _authorized]
@@ -1135,7 +1135,7 @@ def _publish_fl_model_as_ids_resource(
         global _published_fl_contract
         _published_fl_contract = contract_body
 
-        log.info("[publish] Añadiendo representación con pesos finales...")
+        log.info("[publish] Anadiendo representacion con pesos finales...")
         repr_body = {
             "@id"          : repr_id,
             "@type"        : "ids:TextRepresentation",
@@ -1155,11 +1155,11 @@ def _publish_fl_model_as_ids_resource(
             json=repr_body, verify=False, auth=basic_api, timeout=10
         )
         if not resp.ok:
-            log.error(f"[publish] Error creando representación: {resp.status_code}")
+            log.error(f"[publish] Error creando representacion: {resp.status_code}")
             return
 
         log.info(
-            f"ðŸŽ‰ Modelo FL publicado como recurso IDS en coordinator-{INSTANCE_ID}\n"
+            f" Modelo FL publicado como recurso IDS en coordinator-{INSTANCE_ID}\n"
             f"   Resource  : {resource_id}\n"
             f"   Contrato  : {contract_id} (restringido a {len(_authorized)} peers)"
         )
@@ -1209,7 +1209,7 @@ def _get_all_local_csvs() -> list:
 
 
 # =============================================================================
-# LLM — Recomendación inteligente de datasets
+# LLM -- Recomendacion inteligente de datasets
 # =============================================================================
 
 def _llm_recommend_dataset(
@@ -1220,17 +1220,17 @@ def _llm_recommend_dataset(
 ) -> dict | None:
     """
     Interroga al LLM configurado (Ollama local o OpenAI) para que elija
-    el dataset más adecuado para un entrenamiento de Federated Learning
-    de detección de intrusiones de red.
+    el dataset mas adecuado para un entrenamiento de Federated Learning
+    de deteccion de intrusiones de red.
 
-    Parámetros:
-        csvs     : lista de {filename, columns, count} — los candidatos
+    Parametros:
+        csvs     : lista de {filename, columns, count} -- los candidatos
         context  : texto adicional de contexto (p.ej. worker de referencia)
-        timeout  : segundos máximos de espera (default 30s)
+        timeout  : segundos maximos de espera (default 30s)
 
     Devuelve:
         {"filename": str, "reasoning": str, "confidence": float}
-        o None si el LLM no está disponible (fallback a column-matching).
+        o None si el LLM no esta disponible (fallback a column-matching).
     """
     if not csvs:
         return None
@@ -1265,7 +1265,7 @@ def _llm_recommend_dataset(
     prompt = (
         "You are an AI assistant specialized in Federated Learning and dataset schema matching.\n"
         "Your task: evaluate the candidate datasets below and select the BEST candidate for training.\n"
-        "Ignore filenames — they can be misleading. ONLY schema (column names) matters.\n\n"
+        "Ignore filenames -- they can be misleading. ONLY schema (column names) matters.\n\n"
         f"{context_text}\n"
         f"{schema_instruction}\n"
         "CANDIDATE datasets in this worker:\n"
@@ -1313,25 +1313,29 @@ def _llm_recommend_dataset(
         # Verificar que el filename devuelto existe en los candidatos
         valid_names = {c["filename"] for c in csvs}
         if filename not in valid_names:
-            # Intento de corrección: buscar coincidencia parcial
+            # Intento de correccion: buscar coincidencia parcial
             for vn in valid_names:
                 if filename.lower() in vn.lower() or vn.lower() in filename.lower():
                     filename = vn
                     break
             else:
                 log.warning(
-                    f"[llm-recommend] LLM devolvió fichero desconocido: {filename!r} "
-                    f"— ignorando recomendación (candidatos: {valid_names})"
+                    f"[llm-recommend] LLM devolvio fichero desconocido: {filename!r} "
+                    f"-- ignorando recomendacion (candidatos: {valid_names})"
                 )
                 return None
 
-        log.info(f"[llm-recommend] [OK] Recomendación {filename!r} (confianza={confidence:.0%}) computada silenciosamente en backend.")
+        log.info(
+            f"[llm-recommend] [OK] Recomendacion: {filename!r} "
+            f"(confianza={confidence:.0%})\n"
+            f"  Razonamiento: {reasoning}"
+        )
         return {"filename": filename, "reasoning": reasoning, "confidence": confidence}
 
     except requests.exceptions.ConnectionError:
         log.warning(
-            f"[llm-recommend] Error de conexión a Ollama en {LLM_ENDPOINT} "
-            f"— usando column-matching como fallback"
+            f"[llm-recommend] Error de conexion a Ollama en {LLM_ENDPOINT} "
+            f"-- usando column-matching como fallback"
         )
         return None
     except requests.exceptions.Timeout:
@@ -1344,8 +1348,8 @@ def _llm_recommend_dataset(
 
 def _get_my_columns() -> list:
     """
-    Devuelve las columnas del CSV local con más columnas (referencia del coordinator).
-    Si hay un único CSV, lo usa directamente.
+    Devuelve las columnas del CSV local con mas columnas (referencia del coordinator).
+    Si hay un unico CSV, lo usa directamente.
     """
     csvs = _get_all_local_csvs()
     if not csvs:
@@ -1382,8 +1386,8 @@ def _get_registered_connectors() -> list:
             uri      = b.get("connector", {}).get("value", "")
             endpoint = b.get("endpoint",  {}).get("value", "")
             if uri and uri != CONNECTOR_URI:
-                # El puerto 8889 (ECC-to-ECC) está bloqueado en WS_ECC=true.
-                # Se debe usar la API IDS pública en el 8449.
+                # El puerto 8889 (ECC-to-ECC) esta bloqueado en WS_ECC=true.
+                # Se debe usar la API IDS publica en el 8449.
                 connectors.append({"connector_uri": uri, "endpoint": endpoint})
         log.info(f"[broker-discover] {len(connectors)} conectores encontrados en el broker")
         return connectors
@@ -1394,8 +1398,8 @@ def _get_registered_connectors() -> list:
 
 def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
     """
-    Escanea TODOS los recursos del catálogo IDS del peer y extrae
-    su esquema semántico (CSV metadata representation) para elegir
+    Escanea TODOS los recursos del catalogo IDS del peer y extrae
+    su esquema semantico (CSV metadata representation) para elegir
     el que mayor coincidencia tenga con my_set.
 
     Devuelve (best_cols, real_uri, best_filename, best_ratio).
@@ -1403,17 +1407,20 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
     real_uri = connector_uri
     desc = {}
     try:
-        # â”€â”€ Obtener Catálogo del Peer via IDS DescriptionRequestMessage â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Obtener Catalogo del Peer via IDS DescriptionRequestMessage ---------
         # El puerto 8889 (ECC-to-ECC) puede estar bloqueado para DataApps por el
-        # firewall del ECC. Si falla, usamos la REST API pública del peer (puerto 8449)
-        # que está accesible desde cualquier cliente en la red Docker.
+        # firewall del ECC. Si falla, usamos la REST API publica del peer (puerto 8449)
+        # que esta accesible desde cualquier cliente en la red Docker.
         try:
             desc     = _ids_send(ecc_url, connector_uri, "ids:DescriptionRequestMessage")
             real_uri = desc.get("@id", "") or connector_uri
-            log.info(f"[broker-discover] [OK] Catálogo IDS obtenido de {ecc_url}")
+            log.info(f"[broker-discover] [OK] Catalogo IDS obtenido de {ecc_url}")
         except Exception as e:
-            log.info(f"[broker-discover] IDS DescriptionRequest a {ecc_url} derivado a REST API pública (puerto 8449)")
-            # â”€â”€ Fallback: REST API pública del ECC peer (puerto 8449) â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            log.warning(
+                f"[broker-discover] IDS DescriptionRequest fallo para {ecc_url} -- "
+                f"intentando REST API publica (puerto 8449)...\n  Causa: {e}"
+            )
+            # -- Fallback: REST API publica del ECC peer (puerto 8449) ---------
             try:
                 from urllib.parse import urlparse
                 from requests.auth import HTTPBasicAuth
@@ -1429,19 +1436,19 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
                     real_uri = desc.get("@id", "") or connector_uri
                     log.info(
                         f"[broker-discover] [OK] REST API OK para {_hostname} "
-                        f"— recursos: {len(desc.get('ids:resourceCatalog', []))}"
+                        f"-- recursos: {len(desc.get('ids:resourceCatalog', []))}"
                     )
                 else:
                     log.warning(
-                        f"[broker-discover] REST API respondió HTTP {_r.status_code} "
+                        f"[broker-discover] REST API respondio HTTP {_r.status_code} "
                         f"para {_rest_url}"
                     )
             except Exception as e2:
                 log.warning(
-                    f"[broker-discover] Fallback REST también falló para {ecc_url}: {e2}"
+                    f"[broker-discover] Fallback REST tambien fallo para {ecc_url}: {e2}"
                 )
 
-        # â”€â”€ Obtener lista completa de CSVs a través del Information Model â”€â”€â”€â”€â”€â”€â”€
+        # -- Obtener lista completa de CSVs a traves del Information Model -------
         import re as _re
         all_csvs = []
         
@@ -1450,18 +1457,18 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
             resources = cat.get("ids:offeredResource", [])
             for res in resources:
                 meta_id = None
-                # Buscamos la representación semántica que contenga "meta_"
+                # Buscamos la representacion semantica que contenga "meta_"
                 for rep in res.get("ids:representation", []):
                     rep_uri = rep.get("@id", "")
                     if "meta_" in rep_uri:
                         meta_id = rep_uri
                         
-                        # El catálogo base del TrueConnector ya incluye recursivamente las representaciones y sus descripciones
+                        # El catalogo base del TrueConnector ya incluye recursivamente las representaciones y sus descripciones
                         try:
                             desc_texts = rep.get("ids:description", [])
                             if desc_texts:
                                 full_desc = desc_texts[0].get("@value", "")
-                                # Extraemos usando Regex del texto semántico libre
+                                # Extraemos usando Regex del texto semantico libre
                                 m_n = _re.search(r"[-:]? Nombre de Fichero:\s*(.+?)\n", full_desc)
                                 m_c = _re.search(r"[-:]? Nombres de Columnas:\s*(.+)", full_desc)
                                 if m_n and m_c:
@@ -1474,10 +1481,10 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
                             
                         break
 
-        log.info(f"[broker-discover] {real_uri} — {len(all_csvs)} CSV(s) descubiertos en catálogo IDS")
+        log.info(f"[broker-discover] {real_uri} -- {len(all_csvs)} CSV(s) descubiertos en catalogo IDS")
 
         if not all_csvs:
-            log.warning(f"[broker-discover] No se pudo obtener ningún CSV de {real_uri}")
+            log.warning(f"[broker-discover] No se pudo obtener ningun CSV de {real_uri}")
             return [], real_uri, None, 0.0, None, []
 
         best_cols, best_filename, best_ratio = [], None, 0.0
@@ -1500,7 +1507,7 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
             log.info(
                 f"[broker-discover]   {fname}: {len(p_set)} cols, "
                 f"{len(common)} comunes, ratio={ratio:.0%}"
-                + (" â† MEJOR" if is_best else "")
+                + (" <- MEJOR" if is_best else "")
             )
             if is_best:
                 best_ratio    = ratio
@@ -1531,11 +1538,11 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
             llm_rec_with_math["math_filename"] = best_filename
 
             if llm_confidence >= 0.80:
-                # â”€â”€ LLM tiene confianza suficiente — validar ratio antes de sobrescribir â”€â”€
-                # El LLM puede hacer una elección semánticamente correcta pero cuyo schema
-                # real no tiene columnas en común con el coordinator. Verificamos el ratio
-                # ANTES de sobrescribir: si no supera el umbral, la elección del LLM es
-                # inválida para FL aunque la confianza sea alta.
+                # -- LLM tiene confianza suficiente -- validar ratio antes de sobrescribir --
+                # El LLM puede hacer una eleccion semanticamente correcta pero cuyo schema
+                # real no tiene columnas en comun con el coordinator. Verificamos el ratio
+                # ANTES de sobrescribir: si no supera el umbral, la eleccion del LLM es
+                # invalida para FL aunque la confianza sea alta.
                 if llm_filename != best_filename:
                     llm_csv_info = next(
                         (c for c in all_csvs if c.get("filename") == llm_filename), None
@@ -1545,42 +1552,42 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
                     llm_ratio = len(set(llm_cols) & my_set) / len(my_set) if my_set else 0.0
 
                     if llm_ratio >= MATCH_THRESHOLD:
-                        # LLM elige un CSV con schema compatible — puede sobrescribir
+                        # LLM elige un CSV con schema compatible -- puede sobrescribir
                         log.info(
                             f"[llm-recommend] [OK] LLM elige {llm_filename!r} "
                             f"(confianza={llm_confidence:.0%} >= 80%, ratio={llm_ratio:.0%} >= umbral) "
-                            f"— matemática sugería {best_filename!r} â†’ LLM SOBRESCRIBE"
+                            f"-- matematica sugeria {best_filename!r} -> LLM SOBRESCRIBE"
                         )
                         best_cols     = llm_cols
                         best_filename = llm_filename
                         best_ratio    = llm_ratio
                     else:
-                        # LLM eligió un CSV cuyo schema es incompatible — matemática gana
+                        # LLM eligio un CSV cuyo schema es incompatible -- matematica gana
                         log.warning(
-                            f"[llm-recommend] [WARN]  LLM eligió {llm_filename!r} "
+                            f"[llm-recommend] [WARN]  LLM eligio {llm_filename!r} "
                             f"(confianza={llm_confidence:.0%}) pero ratio={llm_ratio:.0%} < "
-                            f"umbral {MATCH_THRESHOLD:.0%} — schema incompatible para FL.\n"
-                            f"  â†’ FALLBACK a matemática: {best_filename!r} ({best_ratio:.0%}).\n"
-                            f"  (El LLM razonó por nombre/semántica sin acceso al schema real)"
+                            f"umbral {MATCH_THRESHOLD:.0%} -- schema incompatible para FL.\n"
+                            f"  -> FALLBACK a matematica: {best_filename!r} ({best_ratio:.0%}).\n"
+                            f"  (El LLM razono por nombre/semantica sin acceso al schema real)"
                         )
                 else:
-                    # LLM confirma la misma elección que la matemática
+                    # LLM confirma la misma eleccion que la matematica
                     log.info(
-                        f"[llm-recommend] [OK] LLM confirma la selección matemática: "
-                        f"{best_filename!r} (confianza={llm_confidence:.0%}) — LLM decide"
+                        f"[llm-recommend] [OK] LLM confirma la seleccion matematica: "
+                        f"{best_filename!r} (confianza={llm_confidence:.0%}) -- LLM decide"
                     )
             else:
-                # LLM sin confianza suficiente — matemática gana
+                # LLM sin confianza suficiente -- matematica gana
                 log.info(
-                    f"[llm-recommend] [WARN]  LLM sugiere {llm_filename!r} "
-                    f"(confianza={llm_confidence:.0%} < 80%) — "
-                    f"FALLBACK a matemática: {best_filename!r} ({best_ratio:.0%})"
+                    f"[llm-recommend] [WARN]  LLM sugiere {llm_filename!r} "
+                    f"(confianza={llm_confidence:.0%} < 80%) -- "
+                    f"FALLBACK a matematica: {best_filename!r} ({best_ratio:.0%})"
                 )
         else:
-            # LLM no disponible — matemática es el fallback
+            # LLM no disponible -- matematica es el fallback
             log.info(
-                f"[llm-recommend] LLM no disponible — "
-                f"FALLBACK a selección matemática: {best_filename!r} ({best_ratio:.0%})"
+                f"[llm-recommend] LLM no disponible -- "
+                f"FALLBACK a seleccion matematica: {best_filename!r} ({best_ratio:.0%})"
             )
 
         return best_cols, real_uri, best_filename, best_ratio, llm_rec_with_math, all_evaluated
@@ -1597,11 +1604,11 @@ def _ecc_url_from_connector_uri(connector_uri: str, endpoint: str) -> str:
         if parsed.hostname:
             return f"https://{parsed.hostname}:8889/data"
     
-    # El regex rígido fue eliminado para favorecer la parametrización pura del DAPS/Broker.
+    # El regex rigido fue eliminado para favorecer la parametrizacion pura del DAPS/Broker.
     return ""
 
 
-MATCH_THRESHOLD = 0.80  # 80% de coincidencia mínima de columnas
+MATCH_THRESHOLD = 0.80  # 80% de coincidencia minima de columnas
 
 
 def _discover_compatible_workers(my_columns: list) -> list:
@@ -1623,24 +1630,24 @@ def _discover_compatible_workers(my_columns: list) -> list:
             log.warning(f"[broker-discover] No se pudo derivar ECC URL para {uri}")
             continue
 
-        # Saltar propio coordinator (por URI o por ECC URL) — dinámico vía ECC_HOSTNAME
+        # Saltar propio coordinator (por URI o por ECC URL) -- dinamico via ECC_HOSTNAME
         if uri == CONNECTOR_URI or ecc_url == my_ecc_url:
             log.info(f"[broker-discover] Saltando propio connector: {uri}")
             continue
 
-        log.info(f"[broker-discover] Evaluando {uri} — escaneando todos sus CSVs...")
+        log.info(f"[broker-discover] Evaluando {uri} -- escaneando todos sus CSVs...")
         best_cols, real_uri, best_filename, best_ratio, llm_rec, all_evaluated = _get_peer_best_csv(
             ecc_url, uri, my_set
         )
         if real_uri != uri:
-            log.info(f"[broker-discover] URI broker {uri!r} â†’ URI IDS real {real_uri!r}")
+            log.info(f"[broker-discover] URI broker {uri!r} -> URI IDS real {real_uri!r}")
 
         common = my_set & set(c.lower() for c in best_cols)
         log.info(
             f"[broker-discover] {real_uri}\n"
             f"  mejor CSV: {best_filename!r}  comunes: {len(common)}/{len(my_set)}  "
             f"ratio: {best_ratio:.0%}  (umbral: {MATCH_THRESHOLD:.0%})  "
-            + ("[OK] COMPATIBLE" if best_ratio >= MATCH_THRESHOLD else "âŒ DESCARTADO")
+            + ("[OK] COMPATIBLE" if best_ratio >= MATCH_THRESHOLD else "OK DESCARTADO")
         )
 
         if best_ratio >= MATCH_THRESHOLD:
@@ -1699,9 +1706,9 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
             pass
 
     for round_num in range(1, n_rounds + 1):
-        log.info(f"{'â•'*56}")
+        log.info(f"{'='*56}")
         log.info(f"  RONDA {round_num}/{n_rounds}  [coordinator-{INSTANCE_ID}]")
-        log.info(f"{'â•'*56}")
+        log.info(f"{'='*56}")
 
         with _fl_lock:
             fl_state["current_round"] = round_num
@@ -1718,7 +1725,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         t0 = time.time()
 
         if algo_bytes:
-            log.info(f"[ronda {round_num}] Distribuyendo algorithm.py + fl_config.json a peersâ€¦")
+            log.info(f"[ronda {round_num}] Distribuyendo algorithm.py + fl_config.json a peers...")
             with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(PEER_ECC_URLS), 1)) as ex:
                 _peer_csvs = PEER_SELECTED_CSVS if PEER_SELECTED_CSVS else [None] * len(PEER_ECC_URLS)
                 futures = {
@@ -1730,14 +1737,14 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                     peer = futures[fut]
                     try:
                         ok = fut.result()
-                        log.info(f"  [ronda {round_num}] â†’ {peer}: {'[OK]' if ok else 'âŒ'}")
+                        log.info(f"  [ronda {round_num}] -> {peer}: {'[OK]' if ok else 'OK'}")
                     except Exception as exc:
-                        log.error(f"  [ronda {round_num}] â†’ {peer}: âŒ {exc}")
+                        log.error(f"  [ronda {round_num}] -> {peer}: OK {exc}")
 
         if algo_bytes:
             time.sleep(3)
 
-        # â”€â”€ Enviar pesos globales: WS high-speed primero, HTTP como fallback â”€â”€
+        # -- Enviar pesos globales: WS high-speed primero, HTTP como fallback --
         import re as _re_gw
         for peer_url, peer_uri in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS):
             _m_gw  = _re_gw.search(r"worker(\d+)", peer_url)
@@ -1750,13 +1757,13 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                 _ms_gw = (time.time() - _t0_gw) * 1000
                 _kb_gw = len(global_weights_b64) / 1024 if global_weights_b64 else 0
                 log.info(
-                    f"ðŸ›ï¸  Pesos globales ronda {round_num} "
-                    f"â†’ be-dataapp-worker{_wid_gw}:8500 "
+                    f"  Pesos globales ronda {round_num} "
+                    f"-> be-dataapp-worker{_wid_gw}:8500 "
                     f"[OK]  {_kb_gw:.0f} KB en {_ms_gw:.1f}ms [WS]"
                 )
                 _record_ws_perf(
                     "ws", _ms_gw, len(global_weights_b64 or ""),
-                    round_num, f"globalâ†’worker{_wid_gw}"
+                    round_num, f"global->worker{_wid_gw}"
                 )
             else:
                 threading.Thread(
@@ -1789,7 +1796,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
             results = list(_round_weights.values())
 
         if len(results) < min_workers:
-            log.error(f"Ronda {round_num}: solo {len(results)}/{min_workers} workers respondieron — abortando")
+            log.error(f"Ronda {round_num}: solo {len(results)}/{min_workers} workers respondieron -- abortando")
             with _fl_lock:
                 fl_state["status"] = "failed"
             _notify_ws_clients({
@@ -1868,7 +1875,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
     with open(os.path.join(OUTPUT_DIR, "fl_results.json"), "w") as f:
         json.dump(fl_state["history"], f, indent=2)
 
-    log.info(f"[OK] FL completado — {n_rounds} rondas. Mejor ronda: {best_round}")
+    log.info(f"[OK] FL completado -- {n_rounds} rondas. Mejor ronda: {best_round}")
 
     try:
         last_metrics = best_metrics if best_metrics else (fl_state["history"][-1]["global_metrics"] if fl_state["history"] else {})
@@ -1882,7 +1889,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         log.error(f"Error publicando modelo IDS: {exc}")
 
 # =============================================================================
-# POST /data — mensajes IDS entrantes del ECC
+# POST /data -- mensajes IDS entrantes del ECC
 # =============================================================================
 
 @app.post("/data")
@@ -1927,7 +1934,7 @@ async def ids_data(request: Request):
 
     mensaje = json.loads(header_val)
     tipo    = mensaje.get("@type", "")
-    log.info(f"â—€ Mensaje IDS: {tipo}")
+    log.info(f"<- Mensaje IDS: {tipo}")
 
     try:
         self_desc    = _get_self_description()
@@ -1966,8 +1973,8 @@ async def ids_data(request: Request):
 
         if FL_OPT_OUT:
             log.warning(
-                f"[ContractRequest] PARTICIPACIí“N DENEGADA — "
-                f"worker-{INSTANCE_ID} ha optado por no compartir datos (Soberanía)\n"
+                f"[ContractRequest] PARTICIPACION DENEGADA -- "
+                f"worker-{INSTANCE_ID} ha optado por no compartir datos (Soberania)\n"
                 f"  Solicitante: {consumer_uri!r}"
             )
             rejection_header = _resp(
@@ -1983,9 +1990,9 @@ async def ids_data(request: Request):
                 )
             }))
 
-        # â”€â”€ Verificar si el consumer está autorizado en el contrato FL restringido â”€â”€
+        # -- Verificar si el consumer esta autorizado en el contrato FL restringido --
         # El modelo FL publicado usa connector-restricted-policy con ids:constraint IN [peers].
-        # Si el solicitante no está en esa lista, rechazamos con unauthorized_consumer.
+        # Si el solicitante no esta en esa lista, rechazamos con unauthorized_consumer.
         if _published_fl_contract and consumer_uri:
             _perms      = _published_fl_contract.get("ids:permission", [])
             _perm       = (_perms or [{}])[0]
@@ -2000,8 +2007,8 @@ async def ids_data(request: Request):
                 ]
                 if _allowed_uris and consumer_uri not in _allowed_uris:
                     log.warning(
-                        f"[ContractRequest] ACCESO DENEGADO — {consumer_uri!r} "
-                        f"no está en la lista de peers autorizados del modelo FL.\n"
+                        f"[ContractRequest] ACCESO DENEGADO -- {consumer_uri!r} "
+                        f"no esta en la lista de peers autorizados del modelo FL.\n"
                         f"  Autorizados: {_allowed_uris}"
                     )
                     _rej_header = _resp(
@@ -2055,25 +2062,25 @@ async def ids_data(request: Request):
         except Exception:
             payload_dict = {}
 
-        # â”€â”€ FIX BUG 1: Solo parsear ids:contentVersion como fl_algorithm
+        # -- FIX BUG 1: Solo parsear ids:contentVersion como fl_algorithm
         #    si NO es fl_global_weights:: ni fl_weights::
-        #    Antes este bloque asumía que CUALQUIER contentVersion era fl_algorithm,
+        #    Antes este bloque asumia que CUALQUIER contentVersion era fl_algorithm,
         #    lo que causaba que los pesos globales sobreescribieran algorithm.py
-        #    y convirtieran al worker en coordinator erróneamente.
+        #    y convirtieran al worker en coordinator erroneamente.
         if not payload_dict.get("type"):
             content_version = mensaje.get("ids:contentVersion", "")
             if content_version and isinstance(content_version, str):
                 if (content_version.startswith("fl_global_weights::") or
                         content_version.startswith("fl_weights::")):
-                    # El tipo y datos vienen del payload JSON — parsear explícitamente
-                    log.info(f"[ArtifactRequest] ids:contentVersion={content_version[:40]}... — parseando payload JSON")
+                    # El tipo y datos vienen del payload JSON -- parsear explicitamente
+                    log.info(f"[ArtifactRequest] ids:contentVersion={content_version[:40]}... -- parseando payload JSON")
                     if payload_val:
                         try:
                             payload_dict = json.loads(payload_val)
                             log.info(f"[ArtifactRequest] payload_dict parseado desde payload_val: type={payload_dict.get('type','?')!r}")
                         except Exception as _pe:
                             log.error(f"[ArtifactRequest] Error parseando payload_val para {content_version[:30]}: {_pe}")
-                    # Si payload_val está vacío o falló el parse, intentar extraer
+                    # Si payload_val esta vacio o fallo el parse, intentar extraer
                     # el payload serializado en base64 dentro del contentVersion
                     # (canal de respaldo usado por _send_local_weights y _send_global_weights)
                     if not payload_dict.get("type"):
@@ -2086,20 +2093,20 @@ async def ids_data(request: Request):
                                 log.info(f"[ArtifactRequest] payload recuperado desde contentVersion b64: type={payload_dict.get('type','?')!r}")
                             except Exception as _e:
                                 log.error(f"[ArtifactRequest] Error decodificando payload b64 de contentVersion: {_e}")
-                    # Último recurso: inferir solo el tipo desde el prefijo
+                    # Ultimo recurso: inferir solo el tipo desde el prefijo
                     if not payload_dict.get("type"):
                         if content_version.startswith("fl_global_weights::"):
                             payload_dict["type"] = "fl_global_weights"
-                            log.warning("[ArtifactRequest] type inferido desde contentVersion: fl_global_weights (payload vacío)")
+                            log.warning("[ArtifactRequest] type inferido desde contentVersion: fl_global_weights (payload vacio)")
                         elif content_version.startswith("fl_weights::"):
                             payload_dict["type"] = "fl_weights"
-                            log.warning("[ArtifactRequest] type inferido desde contentVersion: fl_weights (payload vacío — pesos perdidos)")
+                            log.warning("[ArtifactRequest] type inferido desde contentVersion: fl_weights (payload vacio -- pesos perdidos)")
                 else:
-                    # Es fl_algorithm SOLO si parece payload IDS-FL válido:
+                    # Es fl_algorithm SOLO si parece payload IDS-FL valido:
                     # el codec IDS-FL incluye siempre al menos "||from_coordinator"
                     # o "||fl_config::" o un base64 largo (> 50 chars) sin "::" adicionales.
-                    # Si el ECC añade su propia value (p.ej. una URI o token corto),
-                    # lo ignoramos y dejamos artifact_type vacío â†’ modo fuente.
+                    # Si el ECC anade su propia value (p.ej. una URI o token corto),
+                    # lo ignoramos y dejamos artifact_type vacio -> modo fuente.
                     _looks_like_fl_algo = (
                         "||from_coordinator" in content_version
                         or "||fl_config::" in content_version
@@ -2169,7 +2176,7 @@ async def ids_data(request: Request):
             {"ids:transferContract": mensaje.get("ids:transferContract", {})}
         )
 
-        # fl_weights — pesos locales de un worker â†’ coordinator acumula
+        # fl_weights -- pesos locales de un worker -> coordinator acumula
         if artifact_type == "fl_weights":
             sender      = payload_dict.get("instance_id", "?")
             round_num   = payload_dict.get("round", 0)
@@ -2179,7 +2186,7 @@ async def ids_data(request: Request):
             log.info(f"Pesos de worker-{sender} (ronda {round_num})")
             if not weights_b64 or n_samples is None or metrics is None:
                 log.error(
-                    f"[fl_weights] Payload incompleto desde worker-{sender} ronda {round_num} — "
+                    f"[fl_weights] Payload incompleto desde worker-{sender} ronda {round_num} -- "
                     f"weights={'present' if weights_b64 else 'MISSING'}  "
                     f"n_samples={n_samples}  metrics={'present' if metrics else 'MISSING'}"
                 )
@@ -2197,7 +2204,7 @@ async def ids_data(request: Request):
             log.info(f"[fl_weights] [OK] Pesos de worker-{sender} ronda {round_num} acumulados ({len(_round_weights)} total)")
             return _multipart_response(resp_h, json.dumps({"status": "weights_received", "from": sender}))
 
-        # fl_global_weights — worker entrena localmente
+        # fl_global_weights -- worker entrena localmente
         if artifact_type == "fl_global_weights":
             round_num          = payload_dict.get("round", 1)
             global_weights_b64 = payload_dict.get("global_weights_b64")
@@ -2233,7 +2240,7 @@ async def ids_data(request: Request):
                         log.info(f"[fl_global_weights] Esperando algorithm.py... (ronda {round_num})")
                         time.sleep(1)
                     else:
-                        log.error(f"[fl_global_weights] algorithm.py no disponible tras 15s — ronda {round_num} abortada")
+                        log.error(f"[fl_global_weights] algorithm.py no disponible tras 15s -- ronda {round_num} abortada")
                         return
                     result = _train_local(global_weights_b64, round_num, _my_selected_csv)
                     _send_local_weights(result["weights_b64"], result["n_samples"],
@@ -2244,7 +2251,7 @@ async def ids_data(request: Request):
             threading.Thread(target=_train_and_reply, daemon=True).start()
             return _multipart_response(resp_h, json.dumps({"status": "training_started", "round": round_num}))
 
-        # fl_algorithm — guardar algorithm.py + fl_config.json
+        # fl_algorithm -- guardar algorithm.py + fl_config.json
         if artifact_type == "fl_algorithm":
             content_b64 = payload_dict.get("content", "")
             config_b64  = payload_dict.get("config")
@@ -2263,7 +2270,7 @@ async def ids_data(request: Request):
                 except Exception as e:
                     log.warning(f"No se pudo guardar fl_config.json: {e}")
             else:
-                log.warning("fl_config.json no recibido — usando valores por defecto")
+                log.warning("fl_config.json no recibido -- usando valores por defecto")
 
             if payload_dict.get("from_coordinator"):
                 global _my_selected_csv
@@ -2274,17 +2281,17 @@ async def ids_data(request: Request):
                         _my_selected_csv = full_path
                         log.info(
                             f"[fl_algorithm] CSV seleccionado por coordinator: "
-                            f"{sel_csv} â†’ {full_path}"
+                            f"{sel_csv} -> {full_path}"
                         )
                     else:
                         log.warning(
                             f"[fl_algorithm] CSV '{sel_csv}' no encontrado en {INPUT_DIR}"
-                            f" — se usará selección automática"
+                            f" -- se usara seleccion automatica"
                         )
-                log.info(f"âœ” algorithm.py + config recibidos del coordinator — worker-{INSTANCE_ID} = WORKER")
+                log.info(f"OK algorithm.py + config recibidos del coordinator -- worker-{INSTANCE_ID} = WORKER")
             else:
                 is_coordinator = True
-                log.info(f"â˜... algorithm.py + config recibidos desde Postman — worker-{INSTANCE_ID} = COORDINATOR")
+                log.info(f"~... algorithm.py + config recibidos desde Postman -- worker-{INSTANCE_ID} = COORDINATOR")
 
             cfg = _load_fl_config()
             return _multipart_response(
@@ -2303,9 +2310,9 @@ async def ids_data(request: Request):
                 }),
             )
 
-        # â”€â”€ Modo fuente: servir algorithm.py a otro coordinator que lo solicita â”€â”€
-        # Cuando el artifact_type es desconocido/vacío y el artefacto solicitado
-        # no es de tipo fl_weights/fl_global_weights, este DataApp actúa como
+        # -- Modo fuente: servir algorithm.py a otro coordinator que lo solicita --
+        # Cuando el artifact_type es desconocido/vacio y el artefacto solicitado
+        # no es de tipo fl_weights/fl_global_weights, este DataApp actua como
         # PROVEEDOR y devuelve su algorithm.py (baked o recibido previamente).
         req_art_hdr = mensaje.get("ids:requestedArtifact", {})
         req_art_id  = req_art_hdr.get("@id", "") if isinstance(req_art_hdr, dict) else str(req_art_hdr)
@@ -2332,7 +2339,7 @@ async def ids_data(request: Request):
                     requester = mensaje.get("ids:issuerConnector", {}).get("@id", "?")
                     log.info(
                         f"[ArtifactRequest SOURCE] Sirviendo algorithm.py "
-                        f"({len(algo_bytes_src)} bytes) â†’ {requester}"
+                        f"({len(algo_bytes_src)} bytes) -> {requester}"
                     )
                     return _multipart_response(resp_h, json.dumps({
                         "type"    : "fl_algorithm",
@@ -2359,11 +2366,11 @@ async def ids_data_get():
 
 
 # =============================================================================
-# Endpoints de control y monitorización
+# Endpoints de control y monitorizacion
 # =============================================================================
 
 # =============================================================================
-# POST /fl/fetch-algorithm — coordinator solicita el algoritmo via IDS
+# POST /fl/fetch-algorithm -- coordinator solicita el algoritmo via IDS
 # =============================================================================
 
 @app.post("/fl/fetch-algorithm")
@@ -2373,11 +2380,11 @@ async def fl_fetch_algorithm(request: Request):
     Ejecuta el handshake IDS completo contra el ECC fuente para obtener
     algorithm.py + fl_config.json y activar el rol coordinator.
 
-    Por defecto (body vacío) hace un **IDS self-fetch**:
-      el coordinator actúa como CONSUMER Y PROVIDER de su propio ECC.
-      DescriptionRequestMessage â†’ ContractRequestMessage
-      â†’ ContractAgreementMessage â†’ ArtifactRequestMessage
-      El ECC reenvía al /data local que sirve el algorithm.py baked.
+    Por defecto (body vacio) hace un **IDS self-fetch**:
+      el coordinator actua como CONSUMER Y PROVIDER de su propio ECC.
+      DescriptionRequestMessage -> ContractRequestMessage
+      -> ContractAgreementMessage -> ArtifactRequestMessage
+      El ECC reenvia al /data local que sirve el algorithm.py baked.
 
     Body JSON (todos opcionales):
       source_ecc_url:       URL del ECC fuente. Si se omite, se usa el
@@ -2410,9 +2417,9 @@ async def fl_fetch_algorithm(request: Request):
         success = True
         source_ecc_url = "local_filesystem"
     else:
-        # â”€â”€ MODO IDS: Fetch desde otro conector (Si fuera necesario) â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- MODO IDS: Fetch desde otro conector (Si fuera necesario) ---------
         log.info(
-            f"[/fl/fetch-algorithm] Iniciando fetch vía IDS —\n"
+            f"[/fl/fetch-algorithm] Iniciando fetch via IDS --\n"
             f"  source_ecc_url       : {source_ecc_url}\n"
             f"  source_connector_uri : {source_connector_uri}"
         )
@@ -2437,7 +2444,7 @@ async def fl_fetch_algorithm(request: Request):
                     "batch_size"   : cfg["batch_size"],
                     "learning_rate": cfg["learning_rate"],
                 },
-                "next_step": "POST /broker/discover â†’ POST /fl/negotiate â†’ POST /fl/start",
+                "next_step": "POST /broker/discover -> POST /fl/negotiate -> POST /fl/start",
             }
         )
     else:
@@ -2448,7 +2455,7 @@ async def fl_fetch_algorithm(request: Request):
                 "source_ecc": source_ecc_url,
                 "hint"      : (
                     "Self-fetch: comprueba que el ECC acepta mensajes del propio conector "
-                    "y que algorithm.py está disponible en el DataApp fuente."
+                    "y que algorithm.py esta disponible en el DataApp fuente."
                 ),
             }
         )
@@ -2461,14 +2468,14 @@ async def fl_start(request: Request):
     if not is_coordinator:
         return JSONResponse(
             status_code=400,
-            content={"error": "Este worker no es coordinator. Envía el algoritmo primero (pasos 1-4)."}
+            content={"error": "Este worker no es coordinator. Envia el algoritmo primero (pasos 1-4)."}
         )
 
     algo_path = ALGO_IDS_PATH if os.path.exists(ALGO_IDS_PATH) else ALGO_BAKED_PATH
     if not os.path.exists(algo_path):
         return JSONResponse(
             status_code=400,
-            content={"error": "algorithm.py no encontrado. Envía el algoritmo primero (pasos 1-4)."}
+            content={"error": "algorithm.py no encontrado. Envia el algoritmo primero (pasos 1-4)."}
         )
 
     cfg           = _load_fl_config()
@@ -2504,7 +2511,7 @@ async def fl_start(request: Request):
         peer_uris = PEER_CONNECTOR_URIS
         peer_csvs = PEER_SELECTED_CSVS if PEER_SELECTED_CSVS else [None] * len(peer_urls)
         log.warning(
-            f"[/fl/start] /fl/negotiate no fue ejecutado — usando PEER_ECC_URLS del .env: {peer_urls}"
+            f"[/fl/start] /fl/negotiate no fue ejecutado -- usando PEER_ECC_URLS del .env: {peer_urls}"
         )
 
     if not peer_urls:
@@ -2512,12 +2519,12 @@ async def fl_start(request: Request):
             status_code=400,
             content={
                 "error": "No hay workers disponibles. Ejecuta /fl/negotiate primero.",
-                "hint" : "POST /broker/discover â†’ POST /fl/negotiate â†’ POST /fl/start"
+                "hint" : "POST /broker/discover -> POST /fl/negotiate -> POST /fl/start"
             }
         )
 
     log.info(
-        f"[/fl/start] Arrancando FL — coordinator-{INSTANCE_ID}\n"
+        f"[/fl/start] Arrancando FL -- coordinator-{INSTANCE_ID}\n"
         f"  rounds={rounds}  round_timeout={round_timeout}s  min_workers={min_workers}\n"
         f"  peers={peer_urls}"
     )
@@ -2552,7 +2559,7 @@ async def fl_start(request: Request):
 @app.get("/dataset/llm-recommend")
 def dataset_llm_recommend():
     """
-    Endpoint de prueba para verificar la recomendación del LLM.
+    Endpoint de prueba para verificar la recomendacion del LLM.
     Devuelve la sugerencia del LLM evaluando todos los CSVs locales.
     """
     csvs = _get_all_local_csvs()
@@ -2578,7 +2585,7 @@ def dataset_llm_recommend():
     if not rec:
         return JSONResponse(
             status_code=503,
-            content={"error": "LLM no disponible o falló la recomendación. Revisa los logs y asegúrate de que OPENAI_API_KEY esté configurada."}
+            content={"error": "LLM no disponible o fallo la recomendacion. Revisa los logs y asegurate de que OPENAI_API_KEY este configurada."}
         )
     
     return {
@@ -2593,16 +2600,16 @@ def dataset_llm_recommend():
 @app.websocket("/ws/llm-recommend")
 async def ws_llm_recommend(websocket: WebSocket):
     """
-    Realiza una consulta a Ollama simulando streaming y envía la salida
-    token a token por el WebSocket, mejorando drásticamente el User Experience
+    Realiza una consulta a Ollama simulando streaming y envia la salida
+    token a token por el WebSocket, mejorando drasticamente el User Experience
     y simulando una IA "pensando en tiempo real".
 
     Query params opcionales:
-        peer_worker_id : ID numérico del worker peer que se está evaluando
+        peer_worker_id : ID numerico del worker peer que se esta evaluando
                          (p.ej. "1", "3"). Si se omite, usa los CSVs locales.
         peer_csvs      : JSON con lista de {filename, columns, count} del peer,
                          serializado y URL-encoded. Tiene prioridad sobre
-                         peer_worker_id cuando está presente.
+                         peer_worker_id cuando esta presente.
 
     Con peer_csvs el coordinator puede pasar exactamente la lista de candidatos
     que ya obtuvo durante el discovery, sin necesidad de que el peer tenga
@@ -2627,11 +2634,11 @@ async def ws_llm_recommend(websocket: WebSocket):
                 f"(recibidos por query param peer_csvs)"
             )
         except Exception as e:
-            log.warning(f"[ws/llm-recommend] Error parseando peer_csvs: {e} — usando CSVs locales")
+            log.warning(f"[ws/llm-recommend] Error parseando peer_csvs: {e} -- usando CSVs locales")
 
     if not candidates and peer_worker_id:
         # Intentar leer los CSVs del peer desde su DataApp (misma red Docker)
-        # Puerto convención: 8500 interno, be-dataapp-workerN como hostname
+        # Puerto convencion: 8500 interno, be-dataapp-workerN como hostname
         try:
             _peer_url = f"https://be-dataapp-worker{peer_worker_id}:8500/dataset/all-columns"
             _r = requests.get(_peer_url, timeout=8, verify=False)
@@ -2647,12 +2654,12 @@ async def ws_llm_recommend(websocket: WebSocket):
                 ]
                 log.info(
                     f"[ws/llm-recommend] {len(candidates)} CSVs obtenidos del peer "
-                    f"worker-{peer_worker_id} vía REST interno"
+                    f"worker-{peer_worker_id} via REST interno"
                 )
         except Exception as e:
             log.warning(
                 f"[ws/llm-recommend] No se pudo obtener CSVs de peer worker-{peer_worker_id}: {e}"
-                f" — usando CSVs locales como fallback"
+                f" -- usando CSVs locales como fallback"
             )
 
     if not candidates:
@@ -2665,7 +2672,7 @@ async def ws_llm_recommend(websocket: WebSocket):
         if peer_worker_id:
             log.warning(
                 f"[ws/llm-recommend] Fallback a CSVs locales (worker-{INSTANCE_ID}) "
-                f"para peer worker-{peer_worker_id} — los resultados mostrarán los "
+                f"para peer worker-{peer_worker_id} -- los resultados mostraran los "
                 f"ficheros correctos del peer si los nombres contienen 'worker_{peer_worker_id}'"
             )
 
@@ -2677,7 +2684,7 @@ async def ws_llm_recommend(websocket: WebSocket):
     target_worker = peer_worker_id or INSTANCE_ID
     context_str   = (
         f"El coordinator (worker-{INSTANCE_ID}) usa UNSW-NB15 como referencia. "
-        f"Estás evaluando los datasets del worker-{target_worker}."
+        f"Estas evaluando los datasets del worker-{target_worker}."
     )
 
     csv_descriptions = [
@@ -2689,23 +2696,23 @@ async def ws_llm_recommend(websocket: WebSocket):
 
     prompt = (
         "Eres un experto en Machine Learning y Federated Learning para ciberseguridad.\n"
-        "Tu tarea es seleccionar el dataset MÁS ADECUADO para un entrenamiento de "
-        "detección de intrusiones de red (Network Intrusion Detection) en un entorno "
+        "Tu tarea es seleccionar el dataset MAS ADECUADO para un entrenamiento de "
+        "deteccion de intrusiones de red (Network Intrusion Detection) en un entorno "
         "de Federated Learning basado en el ecosistema IDS.\n"
         f"Contexto adicional: {context_str}\n\n"
-        f"A continuación tienes los datasets disponibles en el worker-{target_worker}:\n"
+        f"A continuacion tienes los datasets disponibles en el worker-{target_worker}:\n"
         f"{chr(10).join(csv_descriptions)}\n\n"
         "Razona tu respuesta paso a paso detalladamente de forma concisa y SIEMPRE termina tu respuesta "
-        "con un bloque en formato JSON EXACTAMENTE así:\n"
+        "con un bloque en formato JSON EXACTAMENTE asi:\n"
         "```json\n"
-        "{\"filename\": \"<nombre_exacto>\", \"reasoning\": \"<explicación>\", \"confidence\": <número_0_1>}\n"
+        "{\"filename\": \"<nombre_exacto>\", \"reasoning\": \"<explicacion>\", \"confidence\": <numero_0_1>}\n"
         "```\n"
-        "No añadas texto después del JSON."
+        "No anadas texto despues del JSON."
     )
     
     log.info(
         f"[ws/llm-recommend] Iniciando streaming con {LLM_MODEL} "
-        f"— evaluando CSVs de worker-{target_worker} ({len(candidates)} candidatos)"
+        f"-- evaluando CSVs de worker-{target_worker} ({len(candidates)} candidatos)"
     )
     
     loop = asyncio.get_running_loop()
@@ -2722,8 +2729,8 @@ async def ws_llm_recommend(websocket: WebSocket):
                         except json.JSONDecodeError:
                             continue
         except requests.exceptions.RequestException as req_err:
-            log.warning(f"[LLM] Error de conexión con Ollama en ws_llm_recommend: {req_err}")
-            yield json.dumps({"error": f"Error de conexión con Ollama: {req_err}"})
+            log.warning(f"[LLM] Error de conexion con Ollama en ws_llm_recommend: {req_err}")
+            yield json.dumps({"error": f"Error de conexion con Ollama: {req_err}"})
 
     import queue
     q = queue.Queue()
@@ -2743,7 +2750,7 @@ async def ws_llm_recommend(websocket: WebSocket):
             if item is None:
                 break
             if isinstance(item, Exception):
-                await websocket.send_json({"error": "Error de conexión con Ollama", "detail": str(item)})
+                await websocket.send_json({"error": "Error de conexion con Ollama", "detail": str(item)})
                 break
             try:
                 chunk = json.loads(item)
@@ -2762,7 +2769,7 @@ async def ws_llm_recommend(websocket: WebSocket):
 
 
 def _publish_local_csvs() -> dict:
-    """Registra todos los CSVs locales como recursos en el catálogo del worker."""
+    """Registra todos los CSVs locales como recursos en el catalogo del worker."""
     from requests.auth import HTTPBasicAuth
     
     basic_api = HTTPBasicAuth(API_USER, API_PASS)
@@ -2776,10 +2783,10 @@ def _publish_local_csvs() -> dict:
         sd = requests.get(f"{ecc_base}/api/selfDescription/", verify=False, auth=basic_api, timeout=10).json()
         catalogs = sd.get("ids:resourceCatalog", [])
         if not catalogs:
-            return {"error": "No se encontró ningún resourceCatalog en el ECC"}
+            return {"error": "No se encontro ningun resourceCatalog en el ECC"}
         catalog_id = catalogs[0].get("@id", "")
     except Exception as e:
-        return {"error": f"Error obteniendo catálogo: {e}"}
+        return {"error": f"Error obteniendo catalogo: {e}"}
 
     published = []
     
@@ -2810,10 +2817,10 @@ def _publish_local_csvs() -> dict:
             metadata_repr_id = f"https://w3id.org/idsa/autogen/representation/meta_{uuid.uuid4()}"
             cols_str = ", ".join(c["columns"])
             metadata_desc = (
-                f"Información exhaustiva del Dataset para evaluación IA/Ollama:\n"
+                f"Informacion exhaustiva del Dataset para evaluacion IA/Ollama:\n"
                 f"- Nombre de Fichero: {fname}\n"
-                f"- Número Total de Filas (Registros): {c.get('rows', 'Desconocido')}\n"
-                f"- Tamaño en Disco: {c.get('size_mb', '0')} MB\n"
+                f"- Numero Total de Filas (Registros): {c.get('rows', 'Desconocido')}\n"
+                f"- Tamano en Disco: {c.get('size_mb', '0')} MB\n"
                 f"- Total de Columnas (Features): {len(c['columns'])}\n"
                 f"- Nombres de Columnas: {cols_str}"
             )
@@ -2840,7 +2847,7 @@ def _publish_local_csvs() -> dict:
                 "@id": exec_repr_id,
                 "@type": "ids:TextRepresentation",
                 "ids:title": [{"@value": "Execution Representation", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
-                "ids:description": [{"@value": "Instancia del dataset en sí para entrenamiento FL", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
+                "ids:description": [{"@value": "Instancia del dataset en si para entrenamiento FL", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
                 "ids:mediaType": {"@id": "https://w3id.org/idsa/code/CSV"},
                 "ids:instance": [{
                     "@type": "ids:Artifact",
@@ -2894,8 +2901,8 @@ def _publish_local_csvs() -> dict:
 @app.post("/catalog/publish-datasets")
 async def catalog_publish_datasets():
     """
-    Endpoint manual para forzar la publicación de los CSVs locales
-    en el catálogo IDS (con las 2 representaciones pedidas).
+    Endpoint manual para forzar la publicacion de los CSVs locales
+    en el catalogo IDS (con las 2 representaciones pedidas).
     """
     import asyncio
     loop = asyncio.get_event_loop()
@@ -2929,7 +2936,7 @@ def dataset_info():
 @app.get("/dataset/all-columns")
 def dataset_all_columns():
     """
-    Devuelve todos los CSVs locales con sus columnas, filas y tamaño.
+    Devuelve todos los CSVs locales con sus columnas, filas y tamano.
     Usado por /ws/llm-recommend de otros workers para obtener los candidatos
     del peer sin necesidad de pasar por el ECC (red Docker interna, puerto 8500).
     """
@@ -2968,7 +2975,7 @@ async def broker_discover_post():
     if not is_coordinator:
         return JSONResponse(
             status_code=400,
-            content={"error": "Solo el coordinator puede hacer descubrimiento. Envía el algoritmo primero (pasos 1-4)."}
+            content={"error": "Solo el coordinator puede hacer descubrimiento. Envia el algoritmo primero (pasos 1-4)."}
         )
 
     my_cols    = _get_my_columns()
@@ -3044,7 +3051,7 @@ async def fl_receive_global_weights(request: Request):
     if coord_uri:
         coordinator_conn_uri = coord_uri
 
-    log.info(f"[/fl/receive-global-weights] ðŸ’¨ Pesos globales ronda {round_num} recibidos del coordinator")
+    log.info(f"[/fl/receive-global-weights]  Pesos globales ronda {round_num} recibidos del coordinator")
 
     def _train_and_reply():
         try:
@@ -3063,7 +3070,7 @@ async def fl_receive_global_weights(request: Request):
 async def fl_receive_local_weights(request: Request):
     """
     Recibe los pesos locales de un worker (endpoint del coordinator).
-    Almacena los pesos en _round_weights para la agregación FedAvg.
+    Almacena los pesos en _round_weights para la agregacion FedAvg.
     """
     body = await request.json()
 
@@ -3084,7 +3091,7 @@ async def fl_receive_local_weights(request: Request):
         }
 
     log.info(
-        f"[/fl/receive-local-weights] ðŸ’¨ Pesos locales recibidos: "
+        f"[/fl/receive-local-weights]  Pesos locales recibidos: "
         f"worker-{sender} ronda {round_num}  ({n_samples} samples)"
     )
     return {"status": "ok", "round": round_num, "worker_id": INSTANCE_ID}
@@ -3093,12 +3100,12 @@ async def fl_receive_local_weights(request: Request):
 @app.post("/fl/accept-negotiation")
 async def fl_accept_negotiation(request: Request):
     """
-    Endpoint interno Docker (puerto 8500) — usado por el coordinator para
-    negociar la participación en FL sin pasar por el ECC ni el puerto 8889.
+    Endpoint interno Docker (puerto 8500) -- usado por el coordinator para
+    negociar la participacion en FL sin pasar por el ECC ni el puerto 8889.
 
     El coordinator llama a http://be-dataapp-workerN:8500/fl/accept-negotiation
-    directamente por la red Docker interna. El peer responde con su decisión
-    basándose en FL_OPT_OUT y devuelve su connector_uri real.
+    directamente por la red Docker interna. El peer responde con su decision
+    basandose en FL_OPT_OUT y devuelve su connector_uri real.
 
     Body JSON (opcional):
         coordinator_uri  : URI IDS del coordinator
@@ -3119,7 +3126,7 @@ async def fl_accept_negotiation(request: Request):
 
     if FL_OPT_OUT:
         log.warning(
-            f"[/fl/accept-negotiation] RECHAZADO — FL_OPT_OUT=true en worker-{INSTANCE_ID}\n"
+            f"[/fl/accept-negotiation] RECHAZADO -- FL_OPT_OUT=true en worker-{INSTANCE_ID}\n"
             f"  Coordinator: {coord_uri}"
         )
         return JSONResponse(content={
@@ -3129,7 +3136,7 @@ async def fl_accept_negotiation(request: Request):
             "connector_uri": CONNECTOR_URI,
             "message"      : (
                 f"Worker-{INSTANCE_ID} ha optado por no participar en FL "
-                "(FL_OPT_OUT=true — soberanía del dato)."
+                "(FL_OPT_OUT=true -- soberania del dato)."
             ),
         })
 
@@ -3139,11 +3146,11 @@ async def fl_accept_negotiation(request: Request):
     if coord_uri:
         coordinator_conn_uri = coord_uri
 
-    # Iniciar túnel WS hacia el coordinator en background (si no está ya activo)
+    # Iniciar tunel WS hacia el coordinator en background (si no esta ya activo)
     _start_worker_ws_client()
 
     log.info(
-        f"[/fl/accept-negotiation] ACEPTADO — worker-{INSTANCE_ID} participará en FL\n"
+        f"[/fl/accept-negotiation] ACEPTADO -- worker-{INSTANCE_ID} participara en FL\n"
         f"  Coordinator: {coord_uri}  |  CSV asignado: {sel_csv or '(auto)'}"
     )
     return JSONResponse(content={
@@ -3163,7 +3170,7 @@ async def fl_negotiate():
     if not is_coordinator:
         return JSONResponse(
             status_code=400,
-            content={"error": "Solo el coordinator puede negociar. Envía el algoritmo primero (pasos 1-4)."}
+            content={"error": "Solo el coordinator puede negociar. Envia el algoritmo primero (pasos 1-4)."}
         )
 
     my_cols    = _get_my_columns()
@@ -3196,7 +3203,7 @@ async def fl_negotiate():
         else:
             log.warning(
                 f"[/fl/negotiate] No se pudo derivar worker_id de {uri} / {ecc_url} "
-                f"— saltando peer"
+                f"-- saltando peer"
             )
             rejected.append({
                 "connector_uri": uri,
@@ -3208,7 +3215,7 @@ async def fl_negotiate():
 
         log.info(
             f"[/fl/negotiate] Negociando con worker-{peer_worker_id} "
-            f"vía IDS ContractRequestMessage â†’ {peer_dataapp_url}/data"
+            f"via IDS ContractRequestMessage -> {peer_dataapp_url}/data"
         )
 
         try:
@@ -3235,7 +3242,7 @@ async def fl_negotiate():
 
             if "ContractAgreement" in ids_type:
                 transfer_contract_id = ids_result.get("@id", f"ids-agreement-worker{peer_worker_id}")
-                log.info(f"[/fl/negotiate] worker-{peer_worker_id} ACEPTí“ [OK]  IDS ContractAgreement={transfer_contract_id}")
+                log.info(f"[/fl/negotiate] worker-{peer_worker_id} ACEPTO [OK]  IDS ContractAgreement={transfer_contract_id}")
                 accepted.append({
                     "connector_uri"    : uri,
                     "ecc_url"          : ecc_url,
@@ -3243,8 +3250,8 @@ async def fl_negotiate():
                     "transfer_contract": transfer_contract_id,
                     "selected_csv"     : sel_csv,
                 })
-                # â”€â”€ Notificar al peer sus datos de coordinator para que abra el túnel WS â”€â”€
-                # (solo si el peer lo soporta — ignorar errores)
+                # -- Notificar al peer sus datos de coordinator para que abra el tunel WS --
+                # (solo si el peer lo soporta -- ignorar errores)
                 try:
                     requests.post(
                         f"{peer_dataapp_url}/fl/accept-negotiation",
@@ -3257,7 +3264,7 @@ async def fl_negotiate():
                         verify=False,
                     )
                 except Exception:
-                    pass   # El túnel WS se iniciará en /fl/start de todos modos
+                    pass   # El tunel WS se iniciara en /fl/start de todos modos
 
             elif ("Rejection" in ids_type
                   or "rejection" in ids_result.get("reason", "")
@@ -3265,7 +3272,7 @@ async def fl_negotiate():
                 reason = ids_result.get("reason", "ids_rejection")
                 msg    = ids_result.get("message", str(ids_result.get("ids:rejectionReason", "")))
                 log.warning(
-                    f"[/fl/negotiate] worker-{peer_worker_id} RECHAZí“ (IDS) — {reason}: {msg}"
+                    f"[/fl/negotiate] worker-{peer_worker_id} RECHAZO (IDS) -- {reason}: {msg}"
                 )
                 rejected.append({
                     "connector_uri": uri,
@@ -3275,10 +3282,10 @@ async def fl_negotiate():
                 })
 
             else:
-                # Respuesta inesperada — tratar como error
+                # Respuesta inesperada -- tratar como error
                 log.warning(
                     f"[/fl/negotiate] worker-{peer_worker_id} respuesta IDS inesperada: "
-                    f"{ids_type!r} — {str(ids_result)[:200]}"
+                    f"{ids_type!r} -- {str(ids_result)[:200]}"
                 )
                 rejected.append({
                     "connector_uri": uri,
@@ -3401,14 +3408,14 @@ def fl_results():
     if os.path.exists(results_path):
         with open(results_path) as f:
             return json.load(f)
-    return JSONResponse(status_code=404, content={"error": "Sin resultados todavía"})
+    return JSONResponse(status_code=404, content={"error": "Sin resultados todavia"})
 
 
 @app.get("/fl/model")
 def fl_model():
     model_path = os.path.join(OUTPUT_DIR, "global_model.json")
     if not os.path.exists(model_path):
-        return JSONResponse(status_code=404, content={"error": "Sin modelo todavía"})
+        return JSONResponse(status_code=404, content={"error": "Sin modelo todavia"})
     with open(model_path) as f:
         data = json.load(f)
     return {
@@ -3420,10 +3427,10 @@ def fl_model():
 
 
 # =============================================================================
-# WebSocket — Gestión de conexiones en tiempo real
+# WebSocket -- Gestion de conexiones en tiempo real
 # =============================================================================
 
-# Túnel High-Speed para Federación de Pesos (Bypass IDS payload bottleneck)
+# Tunel High-Speed para Federacion de Pesos (Bypass IDS payload bottleneck)
 class FLTrainingWSManager:
     def __init__(self):
         self.active_workers: dict[str, WebSocket] = {}
@@ -3432,8 +3439,8 @@ class FLTrainingWSManager:
         await websocket.accept()
         self.active_workers[worker_id] = websocket
         log.info(
-            f"[WS FL-Train] ðŸš€ TÚNEL ESTABLECIDO: Worker-{worker_id} â†’ Coordinator-{INSTANCE_ID}\n"
-            f"  Túneles activos: {list(self.active_workers.keys())}\n"
+            f"[WS FL-Train]  TUNEL ESTABLECIDO: Worker-{worker_id} -> Coordinator-{INSTANCE_ID}\n"
+            f"  Tuneles activos: {list(self.active_workers.keys())}\n"
             f"  Total: {len(self.active_workers)} worker(s) en data-plane WS"
         )
 
@@ -3441,8 +3448,8 @@ class FLTrainingWSManager:
         if worker_id in self.active_workers:
             del self.active_workers[worker_id]
             log.info(
-                f"[WS FL-Train] [WARN] TÚNEL CERRADO: Worker-{worker_id}\n"
-                f"  Túneles activos restantes: {list(self.active_workers.keys())}"
+                f"[WS FL-Train] [WARN] TUNEL CERRADO: Worker-{worker_id}\n"
+                f"  Tuneles activos restantes: {list(self.active_workers.keys())}"
             )
 
 fl_ws_manager = FLTrainingWSManager()
@@ -3450,7 +3457,7 @@ fl_ws_manager = FLTrainingWSManager()
 
 def _record_ws_perf(channel: str, elapsed_ms: float, payload_bytes: int,
                     round_num: int, label: str):
-    """Registra una transferencia en las métricas de rendimiento WS vs HTTP."""
+    """Registra una transferencia en las metricas de rendimiento WS vs HTTP."""
     with _ws_perf_lock:
         key = "ws" if channel == "ws" else "http"
         _ws_perf_stats[f"{key}_sends"] += 1
@@ -3487,11 +3494,11 @@ async def ws_fl_training(websocket: WebSocket, worker_id: str):
                         "n_samples"  : n_samples,
                         "metrics"    : metrics,
                     }
-                log.info(f"[WS FL-Train] ðŸ’¨ Pesos locales recibidos vía WS: worker-{sender} ronda {round_num}")
+                log.info(f"[WS FL-Train]  Pesos locales recibidos via WS: worker-{sender} ronda {round_num}")
     except WebSocketDisconnect:
         fl_ws_manager.disconnect(worker_id)
     except Exception as e:
-        log.error(f"[WS FL-Train] Error en conexión WS para worker-{worker_id}: {e}")
+        log.error(f"[WS FL-Train] Error en conexion WS para worker-{worker_id}: {e}")
         fl_ws_manager.disconnect(worker_id)
 
 def _send_global_weights_ws(worker_id: str, weights_b64: str, round_num: int) -> bool:
@@ -3523,7 +3530,7 @@ async def _fl_worker_ws_client_connect():
     coord_id = m.group(1)
     if str(coord_id) == str(INSTANCE_ID):
         return # Auto-loop
-    # wss:// — el DataApp corre con TLS también dentro de Docker (start.sh + ECDHE).
+    # wss:// -- el DataApp corre con TLS tambien dentro de Docker (start.sh + ECDHE).
     # Las DataApps internas usan certificados auto-firmados en /cert/dataapp/
     # ssl_ctx con verify=False para aceptar certificados auto-firmados.
     ws_url = f"wss://be-dataapp-worker{coord_id}:8500/ws/fl-training/{INSTANCE_ID}"
@@ -3536,11 +3543,11 @@ async def _fl_worker_ws_client_connect():
             ws_url, ssl=_ssl_ctx_worker, max_size=None, ping_timeout=None
         )
         log.info(
-            f"[WS FL-Train] ðŸš€ TÚNEL WORKERâ†’COORDINATOR ESTABLECIDO\n"
-            f"  Worker-{INSTANCE_ID} â”€â”€WSâ”€â”€â†’ Coordinator (worker{coord_id})\n"
+            f"[WS FL-Train]  TUNEL WORKER->COORDINATOR ESTABLECIDO\n"
+            f"  Worker-{INSTANCE_ID} --WS---> Coordinator (worker{coord_id})\n"
             f"  URL: {ws_url}\n"
             f"  Canal: ws:// (data-plane interno Docker, sin TLS overhead)\n"
-            f"  Modo: Bypass IDS — pesos viajarán por WS en lugar de HTTP multipart"
+            f"  Modo: Bypass IDS -- pesos viajaran por WS en lugar de HTTP multipart"
         )
         
         while True:
@@ -3550,7 +3557,7 @@ async def _fl_worker_ws_client_connect():
                 if payload.get("type") == "fl_global_weights":
                     round_num = payload.get("round", 1)
                     global_weights = payload.get("global_weights_b64")
-                    log.info(f"[WS FL-Train] ðŸ’¨ Pesos globales recibidos vía WS — ronda {round_num}")
+                    log.info(f"[WS FL-Train]  Pesos globales recibidos via WS -- ronda {round_num}")
                     
                     def _train_and_reply_ext():
                         try:
@@ -3565,10 +3572,10 @@ async def _fl_worker_ws_client_connect():
                 
     except Exception as e:
         log.warning(
-            f"[WS FL-Train] âŒ TÚNEL WS NO DISPONIBLE\n"
+            f"[WS FL-Train] OK TUNEL WS NO DISPONIBLE\n"
             f"  URL: {ws_url}\n"
             f"  Error: {e}\n"
-            f"  Fallback: Los pesos se enviarán por IDS/HTTP multipart (más lento)"
+            f"  Fallback: Los pesos se enviaran por IDS/HTTP multipart (mas lento)"
         )
         fl_ws_client_conn = None
 
@@ -3588,7 +3595,7 @@ def _send_local_weights_ws(payload: dict) -> bool:
 class _WSConnectionManager:
     """
     Gestor de conexiones WebSocket activas.
-    Permite broadcast a todos los clientes conectados simultáneamente.
+    Permite broadcast a todos los clientes conectados simultaneamente.
     Usa threading.Lock para compatibilidad con Python 3.12+ donde
     asyncio.Lock() no puede crearse fuera del event loop.
     """
@@ -3600,16 +3607,16 @@ class _WSConnectionManager:
         await ws.accept()
         with self._lock:
             self._clients.append(ws)
-        log.info(f"[WS] Cliente conectado — total activos: {len(self._clients)}")
+        log.info(f"[WS] Cliente conectado -- total activos: {len(self._clients)}")
 
     async def disconnect(self, ws: WebSocket):
         with self._lock:
             if ws in self._clients:
                 self._clients.remove(ws)
-        log.info(f"[WS] Cliente desconectado — total activos: {len(self._clients)}")
+        log.info(f"[WS] Cliente desconectado -- total activos: {len(self._clients)}")
 
     async def broadcast(self, data: dict):
-        """Envía el mismo JSON a todos los clientes conectados."""
+        """Envia el mismo JSON a todos los clientes conectados."""
         dead = []
         with self._lock:
             clients_snapshot = list(self._clients)
@@ -3627,7 +3634,7 @@ _ws_manager = _WSConnectionManager()
 
 def _notify_ws_clients(data: dict):
     """
-    Helper síncrono para notificar desde código no-async (p.ej. _run_fl).
+    Helper sincrono para notificar desde codigo no-async (p.ej. _run_fl).
     Crea una tarea asyncio si hay un event loop corriendo.
     """
     try:
@@ -3639,8 +3646,8 @@ def _notify_ws_clients(data: dict):
 
 
 # =============================================================================
-# WebSocket endpoint — /ws/fl-status
-# Monitorización en tiempo real del estado del Federated Learning.
+# WebSocket endpoint -- /ws/fl-status
+# Monitorizacion en tiempo real del estado del Federated Learning.
 # El cliente recibe un JSON por cada cambio de ronda / estado.
 #
 # Uso desde Postman:
@@ -3658,9 +3665,9 @@ def _notify_ws_clients(data: dict):
 @app.get("/ws/tunnel-status")
 def ws_tunnel_status():
     """
-    Observabilidad de los túneles WebSocket activos.
+    Observabilidad de los tuneles WebSocket activos.
     Permite a pfg_ids_fl_flow.py verificar si los canales
-    de alta velocidad están realmente establecidos.
+    de alta velocidad estan realmente establecidos.
     """
     return {
         "instance"                : INSTANCE_ID,
@@ -3674,7 +3681,7 @@ def ws_tunnel_status():
 @app.get("/ws/performance")
 def ws_performance():
     """
-    Métricas de rendimiento comparando WebSocket vs HTTP para
+    Metricas de rendimiento comparando WebSocket vs HTTP para
     la transferencia de pesos del modelo en Federated Learning.
     Permite demostrar la ventaja del data-plane WS frente al
     control-plane IDS/HTTP multipart.
@@ -3713,9 +3720,9 @@ def ws_performance():
 async def ws_fl_status(websocket: WebSocket):
     """
     Stream WebSocket del estado del Federated Learning.
-    - Envía el estado inicial al conectar.
+    - Envia el estado inicial al conectar.
     - Emite un JSON cada vez que cambia la ronda o el estado.
-    - Cierra la conexión cuando el FL termina (completed / failed).
+    - Cierra la conexion cuando el FL termina (completed / failed).
     """
     await _ws_manager.connect(websocket)
     last_snapshot = None
@@ -3758,24 +3765,24 @@ async def ws_fl_status(websocket: WebSocket):
 
 
 # =============================================================================
-# WebSocket endpoint — /ws/ids-data
-# Canal de entrada para mensajes IDS enviados vía WebSocket por el ECC.
+# WebSocket endpoint -- /ws/ids-data
+# Canal de entrada para mensajes IDS enviados via WebSocket por el ECC.
 # Activo cuando WS_EDGE=true en el ECC (la DataApp se pone en modo WSS).
 #
-# El ECC envía un JSON {"header": "...", "payload": "..."} por el WebSocket
+# El ECC envia un JSON {"header": "...", "payload": "..."} por el WebSocket
 # en lugar de usar HTTP POST /data.
-# Este endpoint lo deserializa y delega en la misma lógica que /data.
+# Este endpoint lo deserializa y delega en la misma logica que /data.
 # =============================================================================
 
 @app.websocket("/ws/ids-data")
 async def ws_ids_data(websocket: WebSocket):
     """
     Receptor WebSocket de mensajes IDS (equivalente a POST /data pero por WSS).
-    El ECC conecta aquí cuando application.dataApp.websocket.isEnabled=true.
+    El ECC conecta aqui cuando application.dataApp.websocket.isEnabled=true.
     """
     await websocket.accept()
     client_host = websocket.client.host if websocket.client else "unknown"
-    log.info(f"[WS /ids-data] Conexión aceptada desde {client_host}")
+    log.info(f"[WS /ids-data] Conexion aceptada desde {client_host}")
     try:
         while True:
             raw = await websocket.receive_text()
@@ -3792,9 +3799,9 @@ async def ws_ids_data(websocket: WebSocket):
                 await websocket.send_text(json.dumps({"error": "missing header"}))
                 continue
 
-            # â”€â”€ Reutiliza la lógica de /data creando un Request sintético â”€â”€â”€â”€
-            # Para no duplicar código, construimos un multipart encoder
-            # simulando un POST request válido compatible con ids_data.
+            # -- Reutiliza la logica de /data creando un Request sintetico ----
+            # Para no duplicar codigo, construimos un multipart encoder
+            # simulando un POST request valido compatible con ids_data.
             _fields = {"header": ("header", header_val, "application/json")}
             if payload_val is not None:
                 _fields["payload"] = ("payload", payload_val, "text/plain")
@@ -3810,7 +3817,7 @@ async def ws_ids_data(websocket: WebSocket):
                 def headers(self):
                     return {"content-type": _encoder.content_type}
 
-            # Procesar con la misma lógica que el endpoint HTTP /data
+            # Procesar con la misma logica que el endpoint HTTP /data
             response = await ids_data(_FakeRequest())
             if hasattr(response, "body"):
                 await websocket.send_text(response.body.decode())
@@ -3825,4 +3832,3 @@ async def ws_ids_data(websocket: WebSocket):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8500, access_log=False)
-
