@@ -51,7 +51,9 @@ from fastapi.responses import JSONResponse
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 from requests_toolbelt.multipart.decoder import MultipartDecoder
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+TLS_CERT = "/cert/daps/ca.crt" if os.path.exists("/cert/daps/ca.crt") else False
+if not TLS_CERT:
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 # =============================================================================
@@ -82,6 +84,9 @@ BROKER_SPARQL_URL = "http://broker-fuseki:3030/connectorData/sparql"
 
 # Permite a un worker auto-excluirse del entrenamiento FL (Data Sovereignty)
 FL_OPT_OUT = os.getenv("FL_OPT_OUT", "false").lower() == "true"
+
+# Permite bypass de IDS (peticiones HTTP directas entre DataApps) si falla WebSockets
+ALLOW_IDS_BYPASS = os.getenv("ALLOW_IDS_BYPASS", "false").lower() == "true"
 
 # Credenciales para la API interna del ECC
 API_USER = os.getenv("API_USER", "apiUser")
@@ -170,6 +175,10 @@ _round_lock = threading.Lock()
 _my_selected_csv: str | None = None   # CSV elegido por el coordinator para este worker
 PEER_SELECTED_CSVS: list = []   # CSV seleccionado por cada peer (indice igual que PEER_ECC_URLS)
 
+# Cache del ultimo discovery -- /fl/negotiate lo reutiliza sin relanzar el LLM
+_compatible_workers_cache: list = []
+_compatible_workers_lock = threading.Lock()
+
 # =============================================================================
 # Metricas de rendimiento WebSocket vs HTTP
 # =============================================================================
@@ -243,7 +252,7 @@ async def _delay_publish_datasets():
         await asyncio.sleep(5)
         try:
             # PING al catalog_id
-            res = requests.get(f"{ecc_base}/api/selfDescription/", verify=False, auth=basic_api, timeout=5)
+            res = requests.get(f"{ecc_base}/api/selfDescription/", verify=TLS_CERT, auth=basic_api, timeout=5)
             if res.status_code == 200:
                 log.info(f"[startup] ECC levantado (intento {i+1}). Publicando datasets locales...")
                 _publish_local_csvs()
@@ -326,7 +335,7 @@ def _get_dat_token() -> str:
             "client_assertion"     : assertion,
             "scope"                : "idsc:IDS_CONNECTOR_ATTRIBUTES_ALL",
         },
-        verify=False,
+        verify=TLS_CERT,
         timeout=10,
     )
     resp.raise_for_status()
@@ -357,7 +366,7 @@ def _security_token() -> dict:
 def _get_self_description() -> dict:
     resp = requests.get(
         f"https://{ECC_HOSTNAME}:8449/api/selfDescription/",
-        verify=False, timeout=10,
+        verify=TLS_CERT, timeout=10,
         auth=("apiUser", "passwordApiUser")
     )
     resp.raise_for_status()
@@ -595,7 +604,7 @@ def _ids_send(
         actual_url,
         data=encoder,
         headers={"Content-Type": encoder.content_type},
-        verify=False,
+        verify=TLS_CERT,
         timeout=60,
     )
     resp.raise_for_status()
@@ -723,6 +732,10 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
         )
 
     # --- Fallback: POST directo al DataApp (sin capa IDS multipart) ---
+    if not ALLOW_IDS_BYPASS:
+        log.error("[coordinator->IDS] Fallo el envio via IDS y ALLOW_IDS_BYPASS=false. No se hara bypass HTTP al DataApp.")
+        return False
+
     peer_dataapp = _dataapp_url_from_ecc(peer_ecc_url)
     if not peer_dataapp:
         log.error(f"[coordinator] No se pudo derivar DataApp URL de {peer_ecc_url}")
@@ -738,7 +751,7 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
                 "coordinator_ecc" : f"https://{ECC_HOSTNAME}:8889/data",
             },
             timeout=30,
-            verify=False,
+            verify=TLS_CERT,
         )
         resp.raise_for_status()
         log.info(
@@ -1044,28 +1057,46 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                 f"-- fallback HTTP DataApp-to-DataApp"
             )
 
-    # --- Fallback: HTTP directo al DataApp del peer ---
+    # --- Fallback: IDS Multipart o HTTP directo al DataApp del peer ---
     t_start = time.time()
+    payload_dict = {
+        "round"             : round_num,
+        "global_weights_b64": weights_b64,
+        "from_coordinator"  : INSTANCE_ID,
+        "coordinator_ecc"   : f"https://{ECC_HOSTNAME}:8889/data",
+        "coordinator_uri"   : CONNECTOR_URI,
+    }
     try:
-        resp = requests.post(
-            f"{peer_dataapp}/fl/receive-global-weights",
-            json={
-                "round"             : round_num,
-                "global_weights_b64": weights_b64,
-                "from_coordinator"  : INSTANCE_ID,
-                "coordinator_ecc"   : f"https://{ECC_HOSTNAME}:8889/data",
-                "coordinator_uri"   : CONNECTOR_URI,
-            },
-            timeout=60,
-            verify=False,
-        )
-        resp.raise_for_status()
-        elapsed_ms = (time.time() - t_start) * 1000
-        log.info(
-            f"  Pesos globales ronda {round_num} -> {peer_dataapp} "
-            f"[OK HTTP fallback]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
-        )
-        _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"global->{peer_dataapp}")
+        if not ALLOW_IDS_BYPASS:
+            payload_dict["type"] = "fl_global_weights"
+            forward_target = f"{peer_dataapp}/data"
+            _ids_send(
+                forward_to_url       = forward_target,
+                forward_to_connector = peer_conn_uri,
+                message_type         = "ids:ArtifactRequestMessage",
+                payload              = payload_dict,
+                extra_header         = {"ids:contentVersion": f"fl_global_weights::{round_num}"},
+            )
+            elapsed_ms = (time.time() - t_start) * 1000
+            log.info(
+                f"  Pesos globales ronda {round_num} -> {forward_target} "
+                f"[OK IDS fallback]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
+            )
+            _record_ws_perf("http_ids", elapsed_ms, payload_size, round_num, f"global->{forward_target}")
+        else:
+            resp = requests.post(
+                f"{peer_dataapp}/fl/receive-global-weights",
+                json=payload_dict,
+                timeout=60,
+                verify=TLS_CERT,
+            )
+            resp.raise_for_status()
+            elapsed_ms = (time.time() - t_start) * 1000
+            log.info(
+                f"  Pesos globales ronda {round_num} -> {peer_dataapp} "
+                f"[OK HTTP fallback]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
+            )
+            _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"global->{peer_dataapp}")
     except Exception as exc:
         with _ws_perf_lock:
             _ws_perf_stats["http_failures"] += 1
@@ -1105,19 +1136,37 @@ def _send_local_weights(weights_b64: str, n_samples: int,
 
     t_start = time.time()
     try:
-        resp = requests.post(
-            f"{coord_dataapp}/fl/receive-local-weights",
-            json=_ws_payload,
-            timeout=60,
-            verify=False,
-        )
-        resp.raise_for_status()
-        elapsed_ms = (time.time() - t_start) * 1000
-        log.info(
-            f"  Pesos locales ronda {round_num} -> coordinator {coord_dataapp} "
-            f"[OK]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
-        )
-        _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}->coord")
+        if not ALLOW_IDS_BYPASS:
+            if not coordinator_conn_uri:
+                raise ValueError("coordinator_conn_uri no definido para enviar por IDS")
+            forward_target = f"{coord_dataapp}/data"
+            _ids_send(
+                forward_to_url       = forward_target,
+                forward_to_connector = coordinator_conn_uri,
+                message_type         = "ids:ArtifactRequestMessage",
+                payload              = _ws_payload,
+                extra_header         = {"ids:contentVersion": f"fl_weights::{INSTANCE_ID}::{round_num}"},
+            )
+            elapsed_ms = (time.time() - t_start) * 1000
+            log.info(
+                f"  Pesos locales ronda {round_num} -> {forward_target} "
+                f"[OK IDS fallback]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
+            )
+            _record_ws_perf("ws_fallback", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}->coord")
+        else:
+            resp = requests.post(
+                f"{coord_dataapp}/fl/receive-local-weights",
+                json=_ws_payload,
+                timeout=60,
+                verify=TLS_CERT,
+            )
+            resp.raise_for_status()
+            elapsed_ms = (time.time() - t_start) * 1000
+            log.info(
+                f"  Pesos locales ronda {round_num} -> coordinator {coord_dataapp} "
+                f"[OK]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
+            )
+            _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}->coord")
     except Exception as exc:
         with _ws_perf_lock:
             _ws_perf_stats["http_failures"] += 1
@@ -1144,7 +1193,7 @@ def _publish_fl_model_as_ids_resource(
 
     try:
         log.info("[publish] Obteniendo catalog ID del ECC...")
-        sd       = requests.get(f"{ecc_base}/api/selfDescription/", verify=False, auth=basic_api, timeout=10).json()
+        sd       = requests.get(f"{ecc_base}/api/selfDescription/", verify=TLS_CERT, auth=basic_api, timeout=10).json()
         catalogs = sd.get("ids:resourceCatalog", [])
         if not catalogs:
             log.error("[publish] No se encontro ningun catalog")
@@ -1172,7 +1221,7 @@ def _publish_fl_model_as_ids_resource(
         resp = requests.post(
             f"{ecc_base}/api/offeredResource/",
             headers={"catalog": catalog_id, "Content-Type": "application/json"},
-            json=resource_body, verify=False, auth=basic_api, timeout=10
+            json=resource_body, verify=TLS_CERT, auth=basic_api, timeout=10
         )
         if not resp.ok:
             log.error(f"[publish] Error creando recurso: {resp.status_code}")
@@ -1213,7 +1262,7 @@ def _publish_fl_model_as_ids_resource(
         resp = requests.post(
             f"{ecc_base}/api/contractOffer/",
             headers={"resource": resource_id, "Content-Type": "application/json"},
-            json=contract_body, verify=False, auth=basic_api, timeout=10
+            json=contract_body, verify=TLS_CERT, auth=basic_api, timeout=10
         )
         if not resp.ok:
             log.error(f"[publish] Error creando contrato: {resp.status_code}")
@@ -1239,7 +1288,7 @@ def _publish_fl_model_as_ids_resource(
         resp = requests.post(
             f"{ecc_base}/api/representation/",
             headers={"resource": resource_id, "Content-Type": "application/json"},
-            json=repr_body, verify=False, auth=basic_api, timeout=10
+            json=repr_body, verify=TLS_CERT, auth=basic_api, timeout=10
         )
         if not resp.ok:
             log.error(f"[publish] Error creando representacion: {resp.status_code}")
@@ -1336,35 +1385,45 @@ def _llm_recommend_dataset(
 
     if coordinator_cols:
         coord_cols_str = ", ".join(sorted(coordinator_cols))
+        task_instruction = (
+            "Your task: evaluate the candidate datasets strictly by their column name overlap with the COORDINATOR reference columns.\n"
+            "IGNORE filenames — they are misleading. ONLY the schema matters."
+        )
         schema_instruction = (
             "CRITICAL RULE: Evaluate datasets STRICTLY by their column name overlap with the COORDINATOR reference columns.\n"
             f"COORDINATOR reference columns ({len(coordinator_cols)} total):\n  {coord_cols_str}\n\n"
             "HOW TO DECIDE:\n"
-            "  1. Count how many columns of each candidate match the COORDINATOR reference columns.\n"
-            "  2. Select the candidate with the HIGHEST match count.\n"
+            "  1. Count exactly how many columns of each candidate match the COORDINATOR reference columns.\n"
+            "  2. Select the candidate with the HIGHEST match count."
         )
     else:
+        task_instruction = (
+            "Your task: evaluate the candidate datasets based purely on their structural relevance to the given context.\n"
+            "IGNORE filenames — use purely semantic NLP heuristics."
+        )
         schema_instruction = (
             "HOW TO DECIDE:\n"
-            "  - Select the dataset with the MOST RELEVANT schema for the given context.\n"
+            "  - Select the dataset with the MOST RELEVANT schema constraints and features for the given analytical context.\n"
+            "  - Give deep insight into why these selected columns are advantageous."
         )
 
     prompt = (
         "You are an AI assistant specialized in Federated Learning and dataset schema matching.\n"
-        "Your task: evaluate the candidate datasets below and select the BEST candidate for training.\n"
-        "Ignore filenames -- they can be misleading. ONLY schema (column names) matters.\n\n"
+        f"{task_instruction}\n\n"
         f"{context_text}\n"
-        f"{schema_instruction}\n"
+        f"{schema_instruction}\n\n"
         "CANDIDATE datasets in this worker:\n"
         f"{datasets_text}\n\n"
-        "STEP 1: Reason step-by-step about which dataset is the best fit, comparing their columns with the reference.\n"
-        "STEP 2: At the very end of your response, output a single JSON block with your final decision.\n"
-        "The JSON MUST follow this exact format and be wrapped in ```json ... ```:\n"
+        "RULES FOR RESPONSE:\n"
+        "1. Do not use generic statements like 'The dataset with the highest match count'\n"
+        "2. Break down your logical reasoning explicitly in your justification.\n"
+        "3. Output MUST be ONLY a valid JSON object block. NO extra text, NO greetings.\n\n"
+        "4. Always must mention which is the .csv that you have selected.\n\n"
         "```json\n"
         "{\n"
         "  \"filename\": \"<exact_name_from_list>\",\n"
-        "  \"reasoning\": \"<brief summary of your previous reasoning>\",\n"
-        "  \"confidence\": <0.0-1.0>\n"
+        "  \"reasoning\": \"<Detailed paragraph including exact analysis and justification>\",\n"
+        "  \"confidence\": <number between 0.0 and 1.0>\n"
         "}\n"
         "```"
     )
@@ -1379,7 +1438,7 @@ def _llm_recommend_dataset(
             LLM_ENDPOINT,
             json={"model": LLM_MODEL, "prompt": prompt, "stream": False},
             timeout=timeout,
-            verify=False,
+            verify=TLS_CERT,
         )
         resp.raise_for_status()
         raw_text = resp.json().get("response", "")
@@ -1415,7 +1474,6 @@ def _llm_recommend_dataset(
         log.info(
             f"[llm-recommend] [OK] Recomendacion: {filename!r} "
             f"(confianza={confidence:.0%})\n"
-            f"  Razonamiento: {reasoning}"
         )
         return {"filename": filename, "reasoning": reasoning, "confidence": confidence}
 
@@ -1503,9 +1561,9 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
             real_uri = desc.get("@id", "") or connector_uri
             log.info(f"[broker-discover] [OK] Catalogo IDS obtenido de {ecc_url}")
         except Exception as e:
-            log.warning(
-                f"[broker-discover] IDS DescriptionRequest fallo para {ecc_url} -- "
-                f"intentando REST API publica (puerto 8449)...\n  Causa: {e}"
+            log.info(
+                f"[broker-discover] Puerto ECC-to-ECC (8889) no accesible desde DataApp -- "
+                f"usando REST API publica del peer (puerto 8449)"
             )
             # -- Fallback: REST API publica del ECC peer (puerto 8449) ---------
             try:
@@ -1513,9 +1571,9 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
                 from requests.auth import HTTPBasicAuth
                 _hostname = urlparse(ecc_url).hostname
                 _rest_url = f"https://{_hostname}:8449/api/selfDescription/"
-                log.info(f"[broker-discover] Fallback REST: GET {_rest_url}")
+                log.info(f"[broker-discover] GET {_rest_url}")
                 _r = requests.get(
-                    _rest_url, verify=False, timeout=10,
+                    _rest_url, verify=TLS_CERT, timeout=10,
                     auth=HTTPBasicAuth(API_USER, API_PASS)
                 )
                 if _r.status_code == 200:
@@ -1762,7 +1820,6 @@ def _discover_compatible_workers(my_columns: list) -> list:
 def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
              algo_bytes: bytes = None, config_bytes: bytes = None):
     global fl_state
-    # FIX 1: Snapshot inmutable de los peers aceptados al inicio del FL.
     # Evita race condition si PEER_CONNECTOR_URIS cambia durante el entrenamiento.
     _peers_snapshot = list(PEER_CONNECTOR_URIS)
 
@@ -2047,7 +2104,7 @@ async def ids_data(request: Request):
         else:
             url  = f"https://{ECC_HOSTNAME}:8449/api/offeredResource/"
             hdrs = {"resource": mensaje["ids:requestedElement"]["@id"]}
-            body_resp = requests.get(url, headers=hdrs, verify=False, auth=basic_api, timeout=10).json()
+            body_resp = requests.get(url, headers=hdrs, verify=TLS_CERT, auth=basic_api, timeout=10).json()
 
         return _multipart_response(
             _resp("ids:DescriptionResponseMessage", "descriptionResponseMessage"),
@@ -2126,7 +2183,7 @@ async def ids_data(request: Request):
 
         url      = f"https://{ECC_HOSTNAME}:8449/api/contractOffer/"
         hdrs     = {"contractOffer": contract_offer_id}
-        contrato = requests.get(url, headers=hdrs, verify=False, auth=basic_api, timeout=10).json()
+        contrato = requests.get(url, headers=hdrs, verify=TLS_CERT, auth=basic_api, timeout=10).json()
 
         contrato["@type"]        = "ids:ContractAgreement"
         contrato["ids:consumer"] = mensaje["ids:issuerConnector"]
@@ -2730,7 +2787,7 @@ async def ws_llm_recommend(websocket: WebSocket):
         # Puerto convencion: 8500 interno, be-dataapp-workerN como hostname
         try:
             _peer_url = f"https://be-dataapp-worker{peer_worker_id}:8500/dataset/all-columns"
-            _r = requests.get(_peer_url, timeout=8, verify=False)
+            _r = requests.get(_peer_url, timeout=8, verify=TLS_CERT)
             if _r.status_code == 200:
                 _data = _r.json()
                 candidates = [
@@ -2807,7 +2864,7 @@ async def ws_llm_recommend(websocket: WebSocket):
     loop = asyncio.get_running_loop()
     def _stream_llm():
         try:
-            with requests.post(LLM_ENDPOINT, json={"model": LLM_MODEL, "prompt": prompt, "stream": True}, stream=True, verify=False, timeout=60) as r:
+            with requests.post(LLM_ENDPOINT, json={"model": LLM_MODEL, "prompt": prompt, "stream": True}, stream=True, verify=TLS_CERT, timeout=60) as r:
                 r.raise_for_status()
                 for line in r.iter_lines():
                     if line:
@@ -2869,7 +2926,7 @@ def _publish_local_csvs() -> dict:
         return {"error": "No hay CSVs locales para publicar"}
         
     try:
-        sd = requests.get(f"{ecc_base}/api/selfDescription/", verify=False, auth=basic_api, timeout=10).json()
+        sd = requests.get(f"{ecc_base}/api/selfDescription/", verify=TLS_CERT, auth=basic_api, timeout=10).json()
         catalogs = sd.get("ids:resourceCatalog", [])
         if not catalogs:
             return {"error": "No se encontro ningun resourceCatalog en el ECC"}
@@ -2900,7 +2957,7 @@ def _publish_local_csvs() -> dict:
                 "ids:version": "1.0.0",
                 "ids:contentType": {"@id": "https://w3id.org/idsa/code/SCHEMA_DEFINITION"}
             }
-            resp_res = requests.post(f"{ecc_base}/api/offeredResource/", headers={"catalog": catalog_id, "Content-Type": "application/json"}, json=res_body, verify=False, auth=basic_api, timeout=10)
+            resp_res = requests.post(f"{ecc_base}/api/offeredResource/", headers={"catalog": catalog_id, "Content-Type": "application/json"}, json=res_body, verify=TLS_CERT, auth=basic_api, timeout=10)
             
             # 2. Representation: Metadata
             metadata_repr_id = f"https://w3id.org/idsa/autogen/representation/meta_{uuid.uuid4()}"
@@ -2927,7 +2984,7 @@ def _publish_local_csvs() -> dict:
                     "ids:creationDate": {"@value": ts, "@type": "http://www.w3.org/2001/XMLSchema#dateTimeStamp"}
                 }]
             }
-            requests.post(f"{ecc_base}/api/representation/", headers={"resource": resource_id, "Content-Type": "application/json"}, json=meta_body, verify=False, auth=basic_api, timeout=10)
+            requests.post(f"{ecc_base}/api/representation/", headers={"resource": resource_id, "Content-Type": "application/json"}, json=meta_body, verify=TLS_CERT, auth=basic_api, timeout=10)
 
             # 3. Representation: Execution
             exec_repr_id = f"https://w3id.org/idsa/autogen/representation/exec_{uuid.uuid4()}"
@@ -2945,7 +3002,7 @@ def _publish_local_csvs() -> dict:
                     "ids:creationDate": {"@value": ts, "@type": "http://www.w3.org/2001/XMLSchema#dateTimeStamp"}
                 }]
             }
-            requests.post(f"{ecc_base}/api/representation/", headers={"resource": resource_id, "Content-Type": "application/json"}, json=exec_body, verify=False, auth=basic_api, timeout=10)
+            requests.post(f"{ecc_base}/api/representation/", headers={"resource": resource_id, "Content-Type": "application/json"}, json=exec_body, verify=TLS_CERT, auth=basic_api, timeout=10)
             
             # 4. Contract Offer (USE with Constraints)
             contract_id = f"https://w3id.org/idsa/autogen/contractOffer/dataset_{uuid.uuid4()}"
@@ -2976,7 +3033,7 @@ def _publish_local_csvs() -> dict:
                     "ids:target": {"@id": artifact_id}
                 }]
             }
-            requests.post(f"{ecc_base}/api/contractOffer/", headers={"resource": resource_id, "Content-Type": "application/json"}, json=c_body, verify=False, auth=basic_api, timeout=10)
+            requests.post(f"{ecc_base}/api/contractOffer/", headers={"resource": resource_id, "Content-Type": "application/json"}, json=c_body, verify=TLS_CERT, auth=basic_api, timeout=10)
             
             published.append({"filename": fname, "resource_id": resource_id})
             log.info(f"[publish-datasets] Publicado {fname}: {resource_id}")
@@ -3058,9 +3115,16 @@ def broker_connectors():
         "connectors"  : connectors,
     }
 
+@app.get("/metrics")
+def get_metrics():
+    with _ws_perf_lock:
+        return _ws_perf_stats
+
 
 @app.post("/broker/discover")
 async def broker_discover_post():
+    global _compatible_workers_cache
+
     if not is_coordinator:
         return JSONResponse(
             status_code=400,
@@ -3069,6 +3133,10 @@ async def broker_discover_post():
 
     my_cols    = _get_my_columns()
     compatible = _discover_compatible_workers(my_cols)
+
+    # Guardar resultado en cache para que /fl/negotiate no repita el discovery
+    with _compatible_workers_lock:
+        _compatible_workers_cache = compatible
 
     return {
         "coordinator"        : INSTANCE_ID,
@@ -3262,8 +3330,18 @@ async def fl_negotiate():
             content={"error": "Solo el coordinator puede negociar. Envia el algoritmo primero (pasos 1-4)."}
         )
 
-    my_cols    = _get_my_columns()
-    compatible = _discover_compatible_workers(my_cols)
+    # Reutilizar el resultado del /broker/discover -- NO relanzar el LLM ni el discovery.
+    # Si el cache esta vacio (se llamo /fl/negotiate sin /broker/discover previo),
+    # ejecutar el discovery una sola vez sin LLM como fallback.
+    with _compatible_workers_lock:
+        compatible = list(_compatible_workers_cache)
+
+    if not compatible:
+        log.warning("[/fl/negotiate] Cache de discovery vacio -- ejecutando discovery sin LLM como fallback")
+        my_cols    = _get_my_columns()
+        compatible = _discover_compatible_workers(my_cols)
+        with _compatible_workers_lock:
+            _compatible_workers_cache[:] = compatible
 
     if not compatible:
         return JSONResponse(
@@ -3350,7 +3428,7 @@ async def fl_negotiate():
                             "selected_csv"   : sel_csv,
                         },
                         timeout=10,
-                        verify=False,
+                        verify=TLS_CERT,
                     )
                 except Exception:
                     pass   # El tunel WS se iniciara en /fl/start de todos modos
@@ -3360,7 +3438,7 @@ async def fl_negotiate():
                   or ids_result.get("status") == "rejected"):
                 reason = ids_result.get("reason", "ids_rejection")
                 msg    = ids_result.get("message", str(ids_result.get("ids:rejectionReason", "")))
-                log.warning(
+                log.info(
                     f"[/fl/negotiate] worker-{peer_worker_id} RECHAZO (IDS) -- {reason}: {msg}"
                 )
                 rejected.append({
@@ -3621,7 +3699,7 @@ async def _fl_worker_ws_client_connect():
         return # Auto-loop
     # wss:// -- el DataApp corre con TLS tambien dentro de Docker (start.sh + ECDHE).
     # Las DataApps internas usan certificados auto-firmados en /cert/dataapp/
-    # ssl_ctx con verify=False para aceptar certificados auto-firmados.
+    # ssl_ctx con verify=TLS_CERT para aceptar certificados auto-firmados.
     ws_url = f"wss://be-dataapp-worker{coord_id}:8500/ws/fl-training/{INSTANCE_ID}"
     import ssl as _ssl_worker
     _ssl_ctx_worker = _ssl_worker.SSLContext(_ssl_worker.PROTOCOL_TLS_CLIENT)

@@ -48,6 +48,7 @@ import json
 import argparse
 import time
 import re
+import os
 
 import requests
 import urllib3
@@ -58,7 +59,9 @@ try:
 except ImportError:
     _WS_AVAILABLE = False
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+TLS_CERT = "./cert/daps/ca.crt" if os.path.exists("./cert/daps/ca.crt") else False
+if not TLS_CERT:
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 # =============================================================================
@@ -496,81 +499,28 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
         llm_rec  = w.get("llm_recommended")
         sel_csv  = w.get("selected_csv") or "(auto)"
         math_csv = w.get("math_filename") or sel_csv
-        
+
         if llm_rec:
             llm_conf = w.get("llm_confidence", 0)
             llm_mod  = w.get("llm_model", "Ollama")
             llm_rsn  = w.get("llm_reasoning", "Decision basada en esquema semantico.")
 
-            # -- Streaming WS del razonamiento LLM -----------------------------
-            # Conectamos al /ws/llm-recommend del COORDINATOR pasando los CSVs
-            # del PEER como query param (peer_csvs=<JSON URL-encoded>).
-            # Asi el LLM razona sobre los ficheros correctos del peer y el
-            # streaming es visible en tiempo real, sin necesidad de que el peer
-            # tenga un puerto expuesto directamente al script externo.
-            _llm_streamed = False
+            # -- Mostrar el razonamiento ya calculado por /broker/discover -----
+            # El LLM fue invocado UNA sola vez durante /broker/discover en el
+            # DataApp. Aqui se reproduce ese mismo razonamiento en modo
+            # "streaming simulado" caracter a caracter, sin relanzar el LLM.
+            # Esto garantiza que el log muestra siempre la misma decision y
+            # elimina los duplicados que aparecian en los logs del DataApp.
+            import time as _time
+            print(f"\n        {MAGENTA}-> IA Local ({llm_mod}) -- razonamiento (calculado en /broker/discover):{RESET}")
+            print(f"          {GRAY}", end="", flush=True)
+            for _ch in llm_rsn:
+                print(_ch, end="", flush=True)
+                _time.sleep(0.008)
+            print(f"{RESET}\n")
 
-            if _WS_AVAILABLE:
-                import asyncio as _asyncio
-                import ssl as _ssl
-                import urllib.parse as _urlparse
-
-                # Construir la lista de candidatos del peer para pasarla al WS
-                # Incluye las columnas reales que vienen en all_evaluated para
-                # que el LLM pueda razonar sobre el schema completo del peer.
-                _peer_csvs_list = [
-                    {
-                        "filename": ev["filename"],
-                        "columns" : ev.get("columns", []),
-                        "count"   : ev.get("count", ev.get("total_cols", 0)),
-                    }
-                    for ev in w.get("all_evaluated", [])
-                ]
-                _peer_csvs_json = _urlparse.quote(json.dumps(_peer_csvs_list))
-
-                _ws_url = (
-                    f"{coordinator_url.rstrip('/')}/ws/llm-recommend"
-                    f"?peer_worker_id={wid}&peer_csvs={_peer_csvs_json}"
-                )
-                _ws_url = _ws_url.replace("https://", "wss://").replace("http://", "ws://")
-
-                async def _stream_llm_tokens():
-                    _ssl_ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
-                    _ssl_ctx.check_hostname = False
-                    _ssl_ctx.verify_mode    = _ssl.CERT_NONE
-                    full_text = ""
-                    try:
-                        async with websockets.connect(
-                            _ws_url, ssl=_ssl_ctx,
-                            open_timeout=8, ping_interval=None
-                        ) as _ws:
-                            print(f"\n        {MAGENTA}-> IA Local ({llm_mod}) razonando en tiempo real (via WS):{RESET}")
-                            print(f"          {GRAY}", end="", flush=True)
-                            async for _raw in _ws:
-                                try:
-                                    _chunk = json.loads(_raw)
-                                    if _chunk.get("type") == "token":
-                                        tk = _chunk["token"]
-                                        print(tk, end="", flush=True)
-                                        full_text += tk
-                                    elif "error" in _chunk:
-                                        break
-                                except Exception:
-                                    pass
-                            print(f"{RESET}")
-                    except Exception:
-                        pass  # fallback silencioso a datos del /broker/discover
-                    return full_text
-
-                _llm_streamed = bool(_asyncio.run(_stream_llm_tokens()))
-
-            if not _llm_streamed:
-                # Fallback: mostrar los datos que ya devolvio /broker/discover
-                print(f"\n        {MAGENTA}-> Buscando el mejor CSV mediante IA Local ({llm_mod})...{RESET}")
-                print(f"          {GRAY}(Analisis semantico de columnas sin acceso a datos reales){RESET}")
-
-            field(f"  IA ({llm_mod}) Sugerencia",    f"{CYAN}{llm_rec} (confianza: {llm_conf:.0%}){RESET}", indent=8)
-            field(f"  IA ({llm_mod}) Razonamiento",  f"{GRAY}{llm_rsn}{RESET}", indent=8)
+            field(f"  IA ({llm_mod}) Sugerencia",   f"{CYAN}{llm_rec} (confianza: {llm_conf:.0%}){RESET}", indent=8)
+            field(f"  IA ({llm_mod}) Razonamiento", f"{GRAY}{llm_rsn}{RESET}", indent=8)
 
             if llm_conf >= 0.80:
                 field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
@@ -896,7 +846,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
     # -- Verificar estado real de los tuneles WS -------------------------------
     step("WS-check", "GET /ws/tunnel-status -- verificando tuneles de comunicacion activos")
     try:
-        ts = SESSION.get(f"{coordinator_url}/ws/tunnel-status", timeout=10, verify=False)
+        ts = SESSION.get(f"{coordinator_url}/ws/tunnel-status", timeout=10, verify=TLS_CERT)
         if ts.ok:
             td = ts.json()
             ws_status_clients  = td.get("fl_status_clients", 0)
@@ -938,7 +888,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
         while conn_attempts < max_attempts:
             try:
                 # wss:// con TLS -- el DataApp usa ECDHE (start.sh con ssl_keyfile).
-                # ssl_ctx con verify=False para certificado auto-firmado del DataApp.
+                # ssl_ctx con verify=TLS_CERT para certificado auto-firmado del DataApp.
                 import ssl as _ssl_fl
                 _ssl_fl_ctx = _ssl_fl.SSLContext(_ssl_fl.PROTOCOL_TLS_CLIENT)
                 _ssl_fl_ctx.check_hostname = False
@@ -1203,7 +1153,7 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
     # Esperar a que el FL arranque
     for _ in range(30):
         try:
-            r = SESSION.get(f"{coordinator_url}/fl/status", timeout=10, verify=False)
+            r = SESSION.get(f"{coordinator_url}/fl/status", timeout=10, verify=TLS_CERT)
             if r.ok and r.json().get("status") not in ("idle", ""):
                 ok("FL en marcha"); break
         except Exception:
@@ -1222,7 +1172,7 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
             warn("Timeout de monitorizacion (1h)"); break
 
         try:
-            r  = SESSION.get(f"{coordinator_url}/fl/status", timeout=10, verify=False)
+            r  = SESSION.get(f"{coordinator_url}/fl/status", timeout=10, verify=TLS_CERT)
             r.raise_for_status()
             fl = r.json()
         except Exception as e:
@@ -1306,7 +1256,7 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
         fl_res = None
         info("Esperando a que el recurso del modelo FL se publique en el catalogo IDS...")
         for _ in range(15):
-            r = SESSION.get(f"{coordinator_url}/ids/self-description", timeout=10, verify=False)
+            r = SESSION.get(f"{coordinator_url}/ids/self-description", timeout=10, verify=TLS_CERT)
             if r.ok:
                 sd = r.json()
                 cat = (sd.get("ids:resourceCatalog") or [{}])[0]
@@ -1539,6 +1489,54 @@ def main():
         print(f"  {RED}RECHAZADO   Worker-{wid}   {GRAY}{ecc}  --  {reason}{RESET}")
 
     print()
+
+    # --- METRICAS RENDIMIENTO ---
+    if not args.skip_fl:
+        try:
+            import json
+            import requests
+            raw_metrics = requests.get(f"{coordinator_url}/metrics", timeout=req_timeout, verify=TLS_CERT).text
+            perf = json.loads(raw_metrics)
+            
+            print(f"  {CYAN}📊 RENDIMIENTO DE TRANSFERENCIAS (Data Plane vs Control Plane IDS){RESET}")
+            print(f"  {CYAN}----------------------------------------------------------------------{RESET}")
+            
+            ws_sends  = perf.get("ws_sends", 0)
+            ws_ms     = perf.get("ws_total_ms", 0.0)
+            ws_bytes  = perf.get("ws_bytes", 0)
+
+            http_sends = perf.get("http_sends", 0)
+            http_ms    = perf.get("http_total_ms", 0.0)
+            http_bytes = perf.get("http_bytes", 0)
+
+            ws_fails   = perf.get("ws_failures", 0)
+            http_fails = perf.get("http_failures", 0)
+
+            print(f"  {BOLD}Túnel WebSocket (Data Plane){RESET}")
+            print(f"    Envíos exitosos : {ws_sends}   (Fallos: {ws_fails})")
+            if ws_sends > 0:
+                print(f"    Latencia Media  : {ws_ms / ws_sends:.1f} ms")
+                print(f"    Volumen total   : {ws_bytes / 1024:.1f} KB")
+
+            print()
+            print(f"  {BOLD}Fallback HTTP / IDS Multipart (Control Plane IDS){RESET}")
+            print(f"    Envíos exitosos : {http_sends}   (Fallos: {http_fails})")
+            if http_sends > 0:
+                print(f"    Latencia Media  : {http_ms / http_sends:.1f} ms")
+                print(f"    Volumen total   : {http_bytes / 1024:.1f} KB")
+
+            print()
+            if ws_sends > 0 and http_sends > 0:
+                ratio = (http_ms / http_sends) / (ws_ms / ws_sends)
+                print(f"  {GREEN}► CONCLUSIÓN: WebSockets fue {ratio:.1f}x más rápido (ahorró {100 - (1/ratio)*100:.1f}% de overhead).{RESET}")
+            elif http_sends > 0:
+                print(f"  {YELLOW}► CONCLUSIÓN: El entrenamiento FL fue realizado 100% sobre el túnel IDS.{RESET}")
+            elif ws_sends > 0:
+                print(f"  {GREEN}► CONCLUSIÓN: Velocidad máxima obtenida mediante túnel asíncrono WebSocket.{RESET}")
+            print()
+        except Exception as e:
+            warn(f"No se pudieron cargar las métricas de rendimiento: {e}")
+
     info(f"GET {coordinator_url}/fl/status")
     info(f"GET {coordinator_url}/fl/results")
     info(f"GET {coordinator_url}/fl/model")
