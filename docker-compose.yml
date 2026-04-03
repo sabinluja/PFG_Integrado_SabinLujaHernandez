@@ -1,4 +1,4 @@
-services:
+﻿services:
 
   # ===========================================================================
   # DAPS — Omejdn + nginx (imágenes exactas del IDS Testbed)
@@ -539,7 +539,7 @@ services:
     restart: always
     entrypoint: [ "/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull llama3.2 && wait" ]
     healthcheck:
-      test: ["CMD", "ollama", "show", "llama3.2"]
+      test: [ "CMD", "ollama", "show", "llama3.2" ]
       interval: 10s
       timeout: 5s
       retries: 40

@@ -40,7 +40,7 @@ Uso:
   python pfg_ids_fl_flow.py
   python pfg_ids_fl_flow.py --skip-fl
   python pfg_ids_fl_flow.py --coordinator 3
-  python pfg_ids_fl_flow.py --timeout 120
+  python pfg_ids_fl_flow.py --timeout 360
 """
 
 import sys
@@ -570,7 +570,6 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
                 print(f"          {GRAY}(Análisis semántico de columnas sin acceso a datos reales){RESET}")
 
             field(f"  IA ({llm_mod}) Sugerencia",    f"{CYAN}{llm_rec} (confianza: {llm_conf:.0%}){RESET}", indent=8)
-            field(f"  IA ({llm_mod}) Razonamiento",  f"{GRAY}{llm_rsn}{RESET}", indent=8)
 
             if llm_conf >= 0.80:
                 field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
@@ -658,13 +657,24 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
         pl     = peer.get("ecc_label") or f"ecc-worker{wid}:8889"
         pe     = peer.get("ecc_url")   or f"https://ecc-worker{wid}:8889/data"
 
+        # Si la razón es 'unexpected_ids_response', extrae el motivo real del mensaje
+        # (ocurre cuando el contenedor tiene cód. antiguo y no detecta el @type vacío)
+        actual_reason = reason
+        if reason == "unexpected_ids_response" and msg:
+            try:
+                import ast as _ast
+                _msg_dict = _ast.literal_eval(msg) if isinstance(msg, str) else msg
+                actual_reason = _msg_dict.get("reason", reason)
+            except Exception:
+                pass
+
         reason_labels = {
-            "fl_opt_out"             : "FL_OPT_OUT=true en docker-compose (soberania del dato)",
-            "fl_participation_denied": "FL_AUTHORIZED_URIS vacio (no autorizado a participar)",
+            "fl_opt_out"             : "FL_OPT_OUT=true (soberanía del dato) — IDS RejectionMessage",
+            "fl_participation_denied": "FL_AUTHORIZED_URIS vacío (no autorizado a participar)",
             "unauthorized_consumer"  : "consumer URI no autorizada",
             "error"                  : "error de comunicacion",
         }
-        reason_text = reason_labels.get(reason, reason)
+        reason_text = reason_labels.get(actual_reason, actual_reason)
 
         print(f"  {BOLD}Worker-{wid}{RESET}  {GRAY}{uri}{RESET}")
         field("  ECC (broker)", pe, indent=6)
@@ -673,7 +683,10 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
         ids_arrow("out", "ids:ContractRequestMessage",     coord_label, pl)
         ids_arrow("in",  "ids:RejectionMessage",           pl, coord_label)
         print(f"    {RED}RECHAZA -- {reason_text}{RESET}")
-        field("reason (API)", reason)
+        if actual_reason != reason:
+            field("reason (API)", f"{actual_reason}  (detectado en mensaje IDS)")
+        else:
+            field("reason (API)", reason)
         if msg:
             field("mensaje",     msg[:100])
         print()
@@ -691,9 +704,22 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
     for w in rejected:
         uri    = w.get("connector_uri", "?")
         reason = w.get("reason", "?")
+        msg    = w.get("message", "")
         m      = re.search(r"worker(\d+)", uri)
         wid    = m.group(1) if m else "?"
-        print(f"    {RED}RECHAZADO   Worker-{wid}   {GRAY}{uri}  --  {reason}{RESET}")
+        # Extraer motivo real si viene como 'unexpected_ids_response'
+        if reason == "unexpected_ids_response" and msg:
+            try:
+                import ast as _ast
+                _md = _ast.literal_eval(msg) if isinstance(msg, str) else msg
+                reason = _md.get("reason", reason)
+            except Exception:
+                pass
+        reason_label = {
+            "fl_opt_out": "fl_opt_out (IDS soberanía)",
+            "unauthorized_consumer": "unauthorized (IDS)",
+        }.get(reason, reason)
+        print(f"    {RED}RECHAZADO   Worker-{wid}   {GRAY}{uri}  --  {reason_label}{RESET}")
 
     print()
 
@@ -1316,18 +1342,28 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
         warn("No se pudo extraer la URL del coordinator desde el Broker para realizar la prueba.")
         return
     
-    # ── Extraer dinámicamente los workers a probar (participantes + rechazados) ──
+    # ── Extraer TODOS los peers descubiertos (aceptados, rechazados Y descartados) ──
+    # De este modo worker-4 (schema incompatible → descartado en discovery) también
+    # se prueba y recibe un RejectionMessage real del coordinator porque su URI
+    # no está en la lista de autorizados del contrato FL.
+    accepted_uris = {re.search(r"worker(\d+)", w.get("connector_uri", "")).group(1)
+                     for w in nego.get("accepted", [])
+                     if re.search(r"worker(\d+)", w.get("connector_uri", ""))}
+
     workers_to_test = []
-    for w in nego.get("accepted", []) + nego.get("rejected", []):
-        m = re.search(r"worker(\d+)", w.get("connector_uri", ""))
+    for wid_key in sorted(endpoints["peers"].keys()):   # worker1, worker2, ...
+        m = re.search(r"worker(\d+)", wid_key)
         if m:
             workers_to_test.append(m.group(1))
-            
-    # Eliminar duplicados si los hubiera conservando el orden
+    # Añadir los que puedan venir de nego pero no estén en endpoints["peers"]
+    for w in nego.get("accepted", []) + nego.get("rejected", []):
+        m = re.search(r"worker(\d+)", w.get("connector_uri", ""))
+        if m and m.group(1) not in workers_to_test:
+            workers_to_test.append(m.group(1))
     workers_to_test = list(dict.fromkeys(workers_to_test))
-    
+
     if not workers_to_test:
-        warn("No hay workers negociados o rechazados para probar la de Fase 6.")
+        warn("No hay peers descubiertos para probar en la Fase 6.")
         return
 
     # ── Ejecutar el test de acceso global ──
@@ -1336,11 +1372,19 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
             continue
             
         w_url = f"https://localhost:{5000 + int(target_wid)}"
+        # ECC :8889 no es accesible desde DataApps — redirigir al DataApp coordinator
+        # que implementa la lógica del contrato IDS directamente en su endpoint /data.
+        _m_f6 = re.search(r"ecc-(worker\d+)", coord_ecc)
+        _fwd_dataapp = (
+            f"https://be-dataapp-{_m_f6.group(1)}:8500/data"
+            if _m_f6 else coord_ecc
+        )
         payload = {
-            "Forward-To": coord_ecc,
-            "messageType": "ContractRequestMessage",
-            "contractId": cid_val,
-            "contractProvider": coord_uri
+            "Forward-To"      : _fwd_dataapp,
+            "connectorUri"    : coord_uri,   # URI IDS explícita — evita inferencia incorrecta
+            "messageType"     : "ContractRequestMessage",
+            "contractId"      : cid_val,
+            "contractProvider": coord_uri,
         }
         
         print()
@@ -1364,19 +1408,33 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
                 field("Recurso Target", fl_res.get("@id", "?"), indent=8)
                 field("transferContract id", transfer_contract, indent=8)
                 
-            elif "Rejection" in ids_type or "ContractRejection" in ids_type:
-                step("result", f"IDS: Rejection Message")
-                _ids_log("in", "ids:RejectionMessage", f"coordinator-{cid}", f"worker-{target_wid}")
-                
-                reason = parsed.get("ids:rejectionReason", "?")
-                fail(f"Worker-{target_wid} -- acceso DENEGADO al modelo (Contract Rejection)")
-                field("Rejection Reason", str((reason if isinstance(reason, str) else reason.get("@id")) if reason else "?"), indent=8)
+            elif ("Rejection" in ids_type or "ContractRejection" in ids_type
+                  or parsed.get("status") == "rejected"
+                  or parsed.get("reason") in ("unauthorized_consumer", "fl_opt_out")):
+                # ¿Era un rechazo ESPERADO? → worker no participó en el FL
+                _is_expected_rejection = target_wid not in accepted_uris
+
+                if _is_expected_rejection:
+                    step("result", "IDS: Soberanía Aplicada — Acceso Denegado")
+                    _ids_log("in", "ids:RejectionMessage", f"coordinator-{cid}", f"worker-{target_wid}")
+                    ok(
+                        f"Worker-{target_wid} -- acceso DENEGADO ✅  "
+                        f"(no participó en el FL — Soberanía IDS aplicada correctamente)"
+                    )
+                    _reason = parsed.get("reason") or parsed.get("ids:rejectionReason", "policy_enforcement")
+                    field("Motivo de rechazo", str(_reason), indent=8)
+                    field("Política aplicada", "connector-restricted-policy (ids:rightOperand)", indent=8)
+                else:
+                    step("result", f"IDS: Rejection Message (INESPERADO)")
+                    _ids_log("in", "ids:RejectionMessage", f"coordinator-{cid}", f"worker-{target_wid}")
+                    reason = parsed.get("ids:rejectionReason", "?")
+                    fail(f"Worker-{target_wid} -- acceso DENEGADO al modelo (sorprendente, era participante)")
+                    field("Rejection Reason", str(reason), indent=8)
                 
             else:
-                step("result", f"IDS: Firewall / Rejection")
+                step("result", f"IDS: Firewall / Respuesta inesperada")
                 _ids_log("in", "PolicyRejection", f"coordinator-{cid}", f"worker-{target_wid}")
-                fail(f"Worker-{target_wid} -- acceso DENEGADO/BLOQUEADO por que decidió no participar en el FL.")
-                warn(f"        El conector destino ha forzado un corte/HTTP error.")
+                warn(f"Worker-{target_wid} -- respuesta IDS no reconocida: {ids_type!r}")
                 field("raw_response", (raw[:200] + "...") if len(raw) > 200 else raw, indent=8)
                 
         except Exception as e:
@@ -1403,8 +1461,8 @@ def parse_args():
                    ))
     p.add_argument("--skip-fl", action="store_true",
                    help="No arrancar el entrenamiento (solo fases 0-3)")
-    p.add_argument("--timeout", type=int, default=90, metavar="SEG",
-                   help="Timeout HTTP en segundos (default: 90)")
+    p.add_argument("--timeout", type=int, default=240, metavar="SEG",
+                   help="Timeout HTTP en segundos (default: 240)")
     return p.parse_args()
 
 

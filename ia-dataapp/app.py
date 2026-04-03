@@ -6,17 +6,17 @@ Cualquier worker puede ser coordinator — se elige en Postman enviando el
 algoritmo (fl_algorithm) al worker destino via IDS/TRUE Connector.
 
 Flujo completo con Broker + DAPS (pasos Postman):
-  Pasos 1-4  — Negociación IDS manual (proxy → ecc destino)
+  Pasos 1-4  — Negociación IDS manual (proxy â†’ ecc destino)
                El worker receptor recibe algorithm.py + fl_config.json
                y se convierte en COORDINATOR.
 
-  Paso 5a    — POST /broker/discover   → coordinator consulta Fuseki SPARQL
+  Paso 5a    — POST /broker/discover   â†’ coordinator consulta Fuseki SPARQL
                                           y descubre workers compatibles.
-  Paso 5b    — POST /fl/negotiate      → coordinator negocia contratos IDS
+  Paso 5b    — POST /fl/negotiate      â†’ coordinator negocia contratos IDS
                                           con los workers compatibles del broker.
                                           Worker4 (FL_AUTHORIZED_URIS vacío) es
                                           rechazado automáticamente.
-  Paso 5c    — POST /fl/start          → coordinator envía algoritmo + pesos
+  Paso 5c    — POST /fl/start          â†’ coordinator envía algoritmo + pesos
                                           a los workers aceptados y arranca FL.
 
   Pasos 13-17 — Verificación del modelo publicado y control de acceso.
@@ -433,7 +433,8 @@ async def proxy(request: Request):
     payload_in        = body.get("payload", None)
     req_artifact      = body.get("requestedArtifact")
     req_element       = body.get("requestedElement")
-    transfer_contract = body.get("transferContract")
+    transfer_contract      = body.get("transferContract")
+    explicit_connector_uri = body.get("connectorUri")   # URI IDS explícita (fase 6, bypass inferencia)
 
     contract_id_field  = body.get("contractId")
     contract_prov_field = body.get("contractProvider")
@@ -453,9 +454,9 @@ async def proxy(request: Request):
     message_type = message_type_raw if message_type_raw.startswith("ids:") \
                    else f"ids:{message_type_raw}"
 
-    dest_conn_uri = _infer_connector_uri(forward_to)
+    dest_conn_uri = explicit_connector_uri or _infer_connector_uri(forward_to)
 
-    log.info(f"[/proxy] {message_type} → {forward_to}")
+    log.info(f"[/proxy] {message_type} â†’ {forward_to}")
 
     try:
         corr_msg = body.get("correlationMessage") or transfer_contract or None
@@ -466,7 +467,7 @@ async def proxy(request: Request):
             config_b64 = payload_in.get("config",  "") or ""
             combined   = f"{algo_b64}||fl_config::{config_b64}" if config_b64 else algo_b64
             fl_extra   = {"ids:contentVersion": combined}
-            log.info(f"[/proxy] fl_algorithm detectado — content+config → ids:contentVersion (config={'present' if config_b64 else 'absent'})")
+            log.info(f"[/proxy] fl_algorithm detectado — content+config â†’ ids:contentVersion (config={'present' if config_b64 else 'absent'})")
 
         result = _ids_send(
             forward_to_url       = forward_to,
@@ -588,7 +589,7 @@ def _ids_send(
         fields["payload"] = ("payload", payload_str, "application/json")
 
     encoder = MultipartEncoder(fields=fields)
-    log.info(f"[IDS OUT] {message_type} → {forward_to_url}")
+    log.info(f"[IDS OUT] {message_type} â†’ {forward_to_url}")
 
     resp = requests.post(
         actual_url,
@@ -630,13 +631,13 @@ def _ids_send(
 
 
 # =============================================================================
-# Negociación IDS completa — coordinator → peer
+# Negociación IDS completa — coordinator â†’ peer
 # =============================================================================
 
 def _dataapp_url_from_ecc(peer_ecc_url: str) -> str:
     """
     Deriva la URL interna del DataApp del peer a partir de su ECC URL.
-    Convención: https://ecc-workerN:8889/data → https://be-dataapp-workerN:8500
+    Convención: https://ecc-workerN:8889/data â†’ https://be-dataapp-workerN:8500
     """
     import re as _re_da
     m = _re_da.search(r"ecc-worker(\d+)", peer_ecc_url)
@@ -676,7 +677,7 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
             verify=False,
         )
         resp.raise_for_status()
-        log.info(f"[coordinator] algorithm.py + fl_config.json → {peer_dataapp} ✅"
+        log.info(f"[coordinator] algorithm.py + fl_config.json â†’ {peer_dataapp} [OK]"
                  + (f"  (CSV: {selected_csv})" if selected_csv else ""))
         return True
 
@@ -695,7 +696,7 @@ def _activate_coordinator_from_local() -> bool:
     como recurso en su propio catálogo). No necesita pedirse a sí mismo
     a través del ECC (lo que causaría un self-loop rechazado por DAPS).
 
-    El handshake IDS completo (Description → Contract → Artifact) tiene
+    El handshake IDS completo (Description â†’ Contract â†’ Artifact) tiene
     sentido cuando el consumer ES DIFERENTE del provider. Para la
     activación del coordinator (mismo conector), la carga directa es
     semantícamente equivalente y arquitectónicamente correcta.
@@ -726,7 +727,7 @@ def _activate_coordinator_from_local() -> bool:
 
         is_coordinator = True
         log.info(
-            f"★ algorithm.py cargado desde propio conector "
+            f"â˜... algorithm.py cargado desde propio conector "
             f"({len(algo_bytes)} bytes) — worker-{INSTANCE_ID} = COORDINATOR\n"
             f"  Fuente: {algo_src}"
         )
@@ -744,7 +745,7 @@ def _activate_coordinator_from_local() -> bool:
 def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) -> bool:
     """
     El worker que quiere ser coordinator actúa como consumer IDS:
-    ejecuta el handshake completo (Description → ContractRequest → Agreement →
+    ejecuta el handshake completo (Description â†’ ContractRequest â†’ Agreement â†’
     ArtifactRequest) contra el ECC fuente para obtener algorithm.py +
     fl_config.json. Al terminar, activa is_coordinator = True.
 
@@ -754,7 +755,6 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
     global is_coordinator
     log.info(f"[fetch-algorithm] Iniciando fetch desde {source_ecc_url} ({source_connector_uri})")
     try:
-        # ── Paso 1: DescriptionRequestMessage → catálogo del fuente ──────────
         desc     = _ids_send(source_ecc_url, source_connector_uri, "ids:DescriptionRequestMessage")
         catalogs = desc.get("ids:resourceCatalog", [{}])
         resource = (catalogs[0].get("ids:offeredResource", [{}]) or [{}])[0]
@@ -770,7 +770,6 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
         )
         log.info(f"[fetch-algorithm] 1/4 Description OK — artifact={contract_artifact}")
 
-        # ── Paso 2: ContractRequestMessage ───────────────────────────────────
         agreement = _ids_send(
             source_ecc_url, source_connector_uri, "ids:ContractRequestMessage",
             requested_element=contract_artifact,
@@ -787,7 +786,6 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
         transfer_contract = agreement.get("@id", "")
         log.info(f"[fetch-algorithm] 2/4 ContractAgreement OK — transfer={transfer_contract}")
 
-        # ── Paso 3: ContractAgreementMessage ─────────────────────────────────
         _ids_send(
             source_ecc_url, source_connector_uri, "ids:ContractAgreementMessage",
             requested_artifact=contract_artifact,
@@ -797,10 +795,6 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
         )
         log.info("[fetch-algorithm] 3/4 Acuerdo confirmado")
 
-        # ── Paso 4: ArtifactRequestMessage → recibir algorithm.py ────────────
-        # IMPORTANTE: No ponemos payload ni ids:contentVersion extra.
-        # El DataApp fuente (modo source) detecta el ArtifactRequest genérico
-        # y responde directamente con {type:fl_algorithm, content:<b64>, ...}.
         resp = _ids_send(
             source_ecc_url, source_connector_uri, "ids:ArtifactRequestMessage",
             requested_artifact=contract_artifact,
@@ -809,7 +803,6 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
         )
         log.info(f"[fetch-algorithm] 4/4 ArtifactResponse recibida — type={resp.get('type','?')!r}")
 
-        # ── Extraer y guardar algoritmo ───────────────────────────────────────
         algo_b64   = resp.get("content", "")
         config_b64 = resp.get("config")
 
@@ -840,7 +833,7 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
 
         is_coordinator = True
         log.info(
-            f"★ algorithm.py + config obtenidos via IDS desde {source_ecc_url} "
+            f"â˜... algorithm.py + config obtenidos via IDS desde {source_ecc_url} "
             f"— worker-{INSTANCE_ID} = COORDINATOR"
         )
         return True
@@ -982,10 +975,10 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
         resp.raise_for_status()
         elapsed_ms = (time.time() - t_start) * 1000
         log.info(
-            f"🛡️  Pesos globales ronda {round_num} → {peer_dataapp} "
-            f"✅  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
+            f"ðŸ›ï¸  Pesos globales ronda {round_num} â†’ {peer_dataapp} "
+            f"[OK]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
         )
-        _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"global→{peer_dataapp}")
+        _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"globalâ†’{peer_dataapp}")
     except Exception as exc:
         with _ws_perf_lock:
             _ws_perf_stats["http_failures"] += 1
@@ -1004,28 +997,40 @@ def _send_local_weights(weights_b64: str, n_samples: int,
         return
 
     payload_size = len(weights_b64) if weights_b64 else 0
+    _ws_payload = {
+        "type"       : "fl_weights",
+        "instance_id": INSTANCE_ID,
+        "round"      : round_num,
+        "weights_b64": weights_b64,
+        "n_samples"  : n_samples,
+        "metrics"    : metrics,
+    }
+
+    t_start = time.time()
+    if _send_local_weights_ws(_ws_payload):
+        elapsed_ms = (time.time() - t_start) * 1000
+        log.info(
+            f"ðŸ›ï¸  Pesos locales ronda {round_num} â†’ coordinator (WS) "
+            f"[OK]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
+        )
+        _record_ws_perf("ws", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}â†’coord")
+        return
+
     t_start = time.time()
     try:
         resp = requests.post(
             f"{coord_dataapp}/fl/receive-local-weights",
-            json={
-                "type"       : "fl_weights",
-                "instance_id": INSTANCE_ID,
-                "round"      : round_num,
-                "weights_b64": weights_b64,
-                "n_samples"  : n_samples,
-                "metrics"    : metrics,
-            },
+            json=_ws_payload,
             timeout=60,
             verify=False,
         )
         resp.raise_for_status()
         elapsed_ms = (time.time() - t_start) * 1000
         log.info(
-            f"🛡️  Pesos locales ronda {round_num} → coordinator {coord_dataapp} "
-            f"✅  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
+            f"ðŸ›ï¸  Pesos locales ronda {round_num} â†’ coordinator {coord_dataapp} "
+            f"[OK]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
         )
-        _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}→coord")
+        _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}â†’coord")
     except Exception as exc:
         with _ws_perf_lock:
             _ws_perf_stats["http_failures"] += 1
@@ -1154,7 +1159,7 @@ def _publish_fl_model_as_ids_resource(
             return
 
         log.info(
-            f"🎉 Modelo FL publicado como recurso IDS en coordinator-{INSTANCE_ID}\n"
+            f"ðŸŽ‰ Modelo FL publicado como recurso IDS en coordinator-{INSTANCE_ID}\n"
             f"   Resource  : {resource_id}\n"
             f"   Contrato  : {contract_id} (restringido a {len(_authorized)} peers)"
         )
@@ -1209,8 +1214,9 @@ def _get_all_local_csvs() -> list:
 
 def _llm_recommend_dataset(
     csvs: list,
+    coordinator_cols: list | None = None,
     context: str = "",
-    timeout: int = 30,
+    timeout: int = 180,
 ) -> dict | None:
     """
     Interroga al LLM configurado (Ollama local o OpenAI) para que elija
@@ -1229,34 +1235,51 @@ def _llm_recommend_dataset(
     if not csvs:
         return None
 
-    # ── Construir el prompt ───────────────────────────────────────────────────
     csv_descriptions = []
     for i, c in enumerate(csvs, 1):
-        cols_preview = ", ".join(c.get("columns", [])[:12])
+        cols_preview = ", ".join(c.get("columns", []))
         n_cols = c.get("count", len(c.get("columns", [])))
         csv_descriptions.append(
             f"  [{i}] {c['filename']}\n"
-            f"      Columnas ({n_cols}): {cols_preview}{'...' if n_cols > 12 else ''}"
+            f"      Columnas ({n_cols}): {cols_preview}{''}"
         )
 
     datasets_text = "\n".join(csv_descriptions)
     context_text  = f"\nContexto adicional: {context}" if context else ""
 
+    if coordinator_cols:
+        coord_cols_str = ", ".join(sorted(coordinator_cols))
+        schema_instruction = (
+            "CRITICAL RULE: Evaluate datasets STRICTLY by their column name overlap with the COORDINATOR reference columns.\n"
+            f"COORDINATOR reference columns ({len(coordinator_cols)} total):\n  {coord_cols_str}\n\n"
+            "HOW TO DECIDE:\n"
+            "  1. Count how many columns of each candidate match the COORDINATOR reference columns.\n"
+            "  2. Select the candidate with the HIGHEST match count.\n"
+        )
+    else:
+        schema_instruction = (
+            "HOW TO DECIDE:\n"
+            "  - Select the dataset with the MOST RELEVANT schema for the given context.\n"
+        )
+
     prompt = (
-        "Eres un experto en Machine Learning y Federated Learning para ciberseguridad.\n"
-        "Tu tarea es seleccionar el dataset MÁS ADECUADO para un entrenamiento de "
-        "detección de intrusiones de red (Network Intrusion Detection) en un entorno "
-        "de Federated Learning basado en el ecosistema IDS (International Data Spaces).\n"
+        "You are an AI assistant specialized in Federated Learning and dataset schema matching.\n"
+        "Your task: evaluate the candidate datasets below and select the BEST candidate for training.\n"
+        "Ignore filenames — they can be misleading. ONLY schema (column names) matters.\n\n"
         f"{context_text}\n"
-        "A continuación tienes los datasets disponibles en este worker:\n"
+        f"{schema_instruction}\n"
+        "CANDIDATE datasets in this worker:\n"
         f"{datasets_text}\n\n"
-        "Responde ÚNICAMENTE con un JSON válido con este formato exacto "
-        "(sin texto adicional fuera del JSON):\n"
-        "{\"filename\": \"<nombre_exacto_del_archivo>\", "
-        "\"reasoning\": \"<explicación_breve_en_español>\", "
-        "\"confidence\": <número_entre_0_y_1>}\n"
-        "Elige el dataset que mejor se ajuste a la tarea de detección de intrusiones "
-        "de red o que tenga mayor compatibilidad temática con UNSW-NB15."
+        "STEP 1: Reason step-by-step about which dataset is the best fit, comparing their columns with the reference.\n"
+        "STEP 2: At the very end of your response, output a single JSON block with your final decision.\n"
+        "The JSON MUST follow this exact format and be wrapped in ```json ... ```:\n"
+        "```json\n"
+        "{\n"
+        "  \"filename\": \"<exact_name_from_list>\",\n"
+        "  \"reasoning\": \"<brief summary of your previous reasoning>\",\n"
+        "  \"confidence\": <0.0-1.0>\n"
+        "}\n"
+        "```"
     )
 
     log.info(
@@ -1265,7 +1288,6 @@ def _llm_recommend_dataset(
     )
 
     try:
-        # ── Backend Ollama (local, soberanía del dato) ────────────────────────
         resp = requests.post(
             LLM_ENDPOINT,
             json={"model": LLM_MODEL, "prompt": prompt, "stream": False},
@@ -1275,11 +1297,13 @@ def _llm_recommend_dataset(
         resp.raise_for_status()
         raw_text = resp.json().get("response", "")
 
-        # ── Parsear respuesta JSON del LLM ────────────────────────────────────
         import re as _re_llm
-        # Extraer bloque JSON aunque el LLM incluya texto alrededor
-        match = _re_llm.search(r"\{[^{}]+\}", raw_text, _re_llm.DOTALL)
-        json_str = match.group(0) if match else raw_text.strip()
+        # Extraer bloque JSON admitiendo razonamiento de texto alrededor
+        match = _re_llm.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw_text, _re_llm.DOTALL)
+        if not match:
+             match = _re_llm.search(r"(\{.*\})", raw_text, _re_llm.DOTALL)
+             
+        json_str = match.group(1) if match else raw_text.strip()
         result   = json.loads(json_str)
 
         filename   = result.get("filename", "")
@@ -1301,11 +1325,7 @@ def _llm_recommend_dataset(
                 )
                 return None
 
-        log.info(
-            f"[llm-recommend] ✅ Recomendación: {filename!r} "
-            f"(confianza={confidence:.0%})\n"
-            f"  Razonamiento: {reasoning}"
-        )
+        log.info(f"[llm-recommend] [OK] Recomendación {filename!r} (confianza={confidence:.0%}) computada silenciosamente en backend.")
         return {"filename": filename, "reasoning": reasoning, "confidence": confidence}
 
     except requests.exceptions.ConnectionError:
@@ -1383,20 +1403,17 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
     real_uri = connector_uri
     desc = {}
     try:
-        # ── Obtener Catálogo del Peer via IDS DescriptionRequestMessage ─────────
+        # â”€â”€ Obtener Catálogo del Peer via IDS DescriptionRequestMessage â”€â”€â”€â”€â”€â”€â”€â”€â”€
         # El puerto 8889 (ECC-to-ECC) puede estar bloqueado para DataApps por el
         # firewall del ECC. Si falla, usamos la REST API pública del peer (puerto 8449)
         # que está accesible desde cualquier cliente en la red Docker.
         try:
             desc     = _ids_send(ecc_url, connector_uri, "ids:DescriptionRequestMessage")
             real_uri = desc.get("@id", "") or connector_uri
-            log.info(f"[broker-discover] ✅ Catálogo IDS obtenido de {ecc_url}")
+            log.info(f"[broker-discover] [OK] Catálogo IDS obtenido de {ecc_url}")
         except Exception as e:
-            log.warning(
-                f"[broker-discover] IDS DescriptionRequest falló para {ecc_url} — "
-                f"intentando REST API pública (puerto 8449)...\n  Causa: {e}"
-            )
-            # ── Fallback: REST API pública del ECC peer (puerto 8449) ─────────
+            log.info(f"[broker-discover] IDS DescriptionRequest a {ecc_url} derivado a REST API pública (puerto 8449)")
+            # â”€â”€ Fallback: REST API pública del ECC peer (puerto 8449) â”€â”€â”€â”€â”€â”€â”€â”€â”€
             try:
                 from urllib.parse import urlparse
                 from requests.auth import HTTPBasicAuth
@@ -1411,7 +1428,7 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
                     desc     = _r.json()
                     real_uri = desc.get("@id", "") or connector_uri
                     log.info(
-                        f"[broker-discover] ✅ REST API OK para {_hostname} "
+                        f"[broker-discover] [OK] REST API OK para {_hostname} "
                         f"— recursos: {len(desc.get('ids:resourceCatalog', []))}"
                     )
                 else:
@@ -1424,7 +1441,7 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
                     f"[broker-discover] Fallback REST también falló para {ecc_url}: {e2}"
                 )
 
-        # ── Obtener lista completa de CSVs a través del Information Model ───────
+        # â”€â”€ Obtener lista completa de CSVs a través del Information Model â”€â”€â”€â”€â”€â”€â”€
         import re as _re
         all_csvs = []
         
@@ -1463,7 +1480,6 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
             log.warning(f"[broker-discover] No se pudo obtener ningún CSV de {real_uri}")
             return [], real_uri, None, 0.0, None, []
 
-        # ── Evaluar cada CSV y elegir el de mayor match_ratio ─────────────────
         best_cols, best_filename, best_ratio = [], None, 0.0
         all_evaluated = []
         for csv_info in all_csvs:
@@ -1478,21 +1494,19 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
                 "ratio"            : ratio,
                 "common_cols_count": len(common),
                 "total_cols"       : len(my_set),
-                "columns"          : cols,          # columnas reales del peer — usadas por /ws/llm-recommend
+                "columns"          : cols,
                 "count"            : len(cols),
             })
             log.info(
                 f"[broker-discover]   {fname}: {len(p_set)} cols, "
                 f"{len(common)} comunes, ratio={ratio:.0%}"
-                + (" ← MEJOR" if is_best else "")
+                + (" â† MEJOR" if is_best else "")
             )
             if is_best:
                 best_ratio    = ratio
                 best_cols     = cols
                 best_filename = fname
 
-        # ── Consultar LLM como capa de razonamiento adicional ─────────────────
-        # El LLM actúa como asesor semántico: si falla, el column-matching gana.
         llm_candidates = [
             {"filename": c.get("filename", ""),
              "columns" : [col.lower().strip() for col in c.get("columns", [])],
@@ -1501,10 +1515,11 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
         ]
         llm_rec = _llm_recommend_dataset(
             llm_candidates,
+            coordinator_cols=list(my_set),
             context=(
-                f"El coordinator (worker-{INSTANCE_ID}) usa como referencia el dataset "
-                f"UNSW-NB15 (tráfico de red con atributos de intrusión). "
-                f"El peer evaluado es {real_uri}."
+                f"Este es un entrenamiento de Federated Learning. El coordinator (worker-{INSTANCE_ID}) "
+                f"ha proporcionado sus columnas de referencia. Selecciona el dataset del peer evaluado ({real_uri}) "
+                f"que mejor coincida."
             ),
         )
         llm_rec_with_math = None
@@ -1516,7 +1531,7 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
             llm_rec_with_math["math_filename"] = best_filename
 
             if llm_confidence >= 0.80:
-                # ── LLM tiene confianza suficiente — validar ratio antes de sobrescribir ──
+                # â”€â”€ LLM tiene confianza suficiente — validar ratio antes de sobrescribir â”€â”€
                 # El LLM puede hacer una elección semánticamente correcta pero cuyo schema
                 # real no tiene columnas en común con el coordinator. Verificamos el ratio
                 # ANTES de sobrescribir: si no supera el umbral, la elección del LLM es
@@ -1532,9 +1547,9 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
                     if llm_ratio >= MATCH_THRESHOLD:
                         # LLM elige un CSV con schema compatible — puede sobrescribir
                         log.info(
-                            f"[llm-recommend] ✅ LLM elige {llm_filename!r} "
+                            f"[llm-recommend] [OK] LLM elige {llm_filename!r} "
                             f"(confianza={llm_confidence:.0%} >= 80%, ratio={llm_ratio:.0%} >= umbral) "
-                            f"— matemática sugería {best_filename!r} → LLM SOBRESCRIBE"
+                            f"— matemática sugería {best_filename!r} â†’ LLM SOBRESCRIBE"
                         )
                         best_cols     = llm_cols
                         best_filename = llm_filename
@@ -1542,22 +1557,22 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
                     else:
                         # LLM eligió un CSV cuyo schema es incompatible — matemática gana
                         log.warning(
-                            f"[llm-recommend] ⚠ LLM eligió {llm_filename!r} "
+                            f"[llm-recommend] [WARN]  LLM eligió {llm_filename!r} "
                             f"(confianza={llm_confidence:.0%}) pero ratio={llm_ratio:.0%} < "
                             f"umbral {MATCH_THRESHOLD:.0%} — schema incompatible para FL.\n"
-                            f"  → FALLBACK a matemática: {best_filename!r} ({best_ratio:.0%}).\n"
+                            f"  â†’ FALLBACK a matemática: {best_filename!r} ({best_ratio:.0%}).\n"
                             f"  (El LLM razonó por nombre/semántica sin acceso al schema real)"
                         )
                 else:
                     # LLM confirma la misma elección que la matemática
                     log.info(
-                        f"[llm-recommend] ✅ LLM confirma la selección matemática: "
+                        f"[llm-recommend] [OK] LLM confirma la selección matemática: "
                         f"{best_filename!r} (confianza={llm_confidence:.0%}) — LLM decide"
                     )
             else:
                 # LLM sin confianza suficiente — matemática gana
                 log.info(
-                    f"[llm-recommend] ⚠ LLM sugiere {llm_filename!r} "
+                    f"[llm-recommend] [WARN]  LLM sugiere {llm_filename!r} "
                     f"(confianza={llm_confidence:.0%} < 80%) — "
                     f"FALLBACK a matemática: {best_filename!r} ({best_ratio:.0%})"
                 )
@@ -1618,14 +1633,14 @@ def _discover_compatible_workers(my_columns: list) -> list:
             ecc_url, uri, my_set
         )
         if real_uri != uri:
-            log.info(f"[broker-discover] URI broker {uri!r} → URI IDS real {real_uri!r}")
+            log.info(f"[broker-discover] URI broker {uri!r} â†’ URI IDS real {real_uri!r}")
 
         common = my_set & set(c.lower() for c in best_cols)
         log.info(
             f"[broker-discover] {real_uri}\n"
             f"  mejor CSV: {best_filename!r}  comunes: {len(common)}/{len(my_set)}  "
             f"ratio: {best_ratio:.0%}  (umbral: {MATCH_THRESHOLD:.0%})  "
-            + ("✅ COMPATIBLE" if best_ratio >= MATCH_THRESHOLD else "❌ DESCARTADO")
+            + ("[OK] COMPATIBLE" if best_ratio >= MATCH_THRESHOLD else "âŒ DESCARTADO")
         )
 
         if best_ratio >= MATCH_THRESHOLD:
@@ -1684,9 +1699,9 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
             pass
 
     for round_num in range(1, n_rounds + 1):
-        log.info(f"{'═'*56}")
+        log.info(f"{'â•'*56}")
         log.info(f"  RONDA {round_num}/{n_rounds}  [coordinator-{INSTANCE_ID}]")
-        log.info(f"{'═'*56}")
+        log.info(f"{'â•'*56}")
 
         with _fl_lock:
             fl_state["current_round"] = round_num
@@ -1703,7 +1718,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         t0 = time.time()
 
         if algo_bytes:
-            log.info(f"[ronda {round_num}] Distribuyendo algorithm.py + fl_config.json a peers…")
+            log.info(f"[ronda {round_num}] Distribuyendo algorithm.py + fl_config.json a peersâ€¦")
             with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(PEER_ECC_URLS), 1)) as ex:
                 _peer_csvs = PEER_SELECTED_CSVS if PEER_SELECTED_CSVS else [None] * len(PEER_ECC_URLS)
                 futures = {
@@ -1715,17 +1730,40 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                     peer = futures[fut]
                     try:
                         ok = fut.result()
-                        log.info(f"  [ronda {round_num}] → {peer}: {'✅' if ok else '❌'}")
+                        log.info(f"  [ronda {round_num}] â†’ {peer}: {'[OK]' if ok else 'âŒ'}")
                     except Exception as exc:
-                        log.error(f"  [ronda {round_num}] → {peer}: ❌ {exc}")
+                        log.error(f"  [ronda {round_num}] â†’ {peer}: âŒ {exc}")
 
         if algo_bytes:
             time.sleep(3)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(PEER_ECC_URLS)) as ex:
-            for peer_url, peer_uri in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS):
-                ex.submit(_send_global_weights, peer_url, peer_uri,
-                          global_weights_b64, round_num)
+        # â”€â”€ Enviar pesos globales: WS high-speed primero, HTTP como fallback â”€â”€
+        import re as _re_gw
+        for peer_url, peer_uri in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS):
+            _m_gw  = _re_gw.search(r"worker(\d+)", peer_url)
+            _wid_gw = _m_gw.group(1) if _m_gw else None
+            _t0_gw  = time.time()
+            _used_ws_gw = bool(_wid_gw and _send_global_weights_ws(
+                _wid_gw, global_weights_b64, round_num
+            ))
+            if _used_ws_gw:
+                _ms_gw = (time.time() - _t0_gw) * 1000
+                _kb_gw = len(global_weights_b64) / 1024 if global_weights_b64 else 0
+                log.info(
+                    f"ðŸ›ï¸  Pesos globales ronda {round_num} "
+                    f"â†’ be-dataapp-worker{_wid_gw}:8500 "
+                    f"[OK]  {_kb_gw:.0f} KB en {_ms_gw:.1f}ms [WS]"
+                )
+                _record_ws_perf(
+                    "ws", _ms_gw, len(global_weights_b64 or ""),
+                    round_num, f"globalâ†’worker{_wid_gw}"
+                )
+            else:
+                threading.Thread(
+                    target=_send_global_weights,
+                    args=(peer_url, peer_uri, global_weights_b64, round_num),
+                    daemon=True,
+                ).start()
 
         try:
             local = _train_local(global_weights_b64, round_num)
@@ -1830,7 +1868,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
     with open(os.path.join(OUTPUT_DIR, "fl_results.json"), "w") as f:
         json.dump(fl_state["history"], f, indent=2)
 
-    log.info(f"✅ FL completado — {n_rounds} rondas. Mejor ronda: {best_round}")
+    log.info(f"[OK] FL completado — {n_rounds} rondas. Mejor ronda: {best_round}")
 
     try:
         last_metrics = best_metrics if best_metrics else (fl_state["history"][-1]["global_metrics"] if fl_state["history"] else {})
@@ -1889,7 +1927,7 @@ async def ids_data(request: Request):
 
     mensaje = json.loads(header_val)
     tipo    = mensaje.get("@type", "")
-    log.info(f"◀ Mensaje IDS: {tipo}")
+    log.info(f"â—€ Mensaje IDS: {tipo}")
 
     try:
         self_desc    = _get_self_description()
@@ -1907,7 +1945,6 @@ async def ids_data(request: Request):
             h.update(extra)
         return h
 
-    # ── DescriptionRequestMessage ─────────────────────────────────────────────
     if tipo == "ids:DescriptionRequestMessage":
         if "ids:requestedElement" not in mensaje:
             body_resp = self_desc
@@ -1921,7 +1958,6 @@ async def ids_data(request: Request):
             json.dumps(body_resp)
         )
 
-    # ── ContractRequestMessage ────────────────────────────────────────────────
     elif tipo == "ids:ContractRequestMessage":
         payload_dict      = json.loads(payload_val) if payload_val else {}
         contract_offer_id = payload_dict.get("@id", "")
@@ -1930,7 +1966,7 @@ async def ids_data(request: Request):
 
         if FL_OPT_OUT:
             log.warning(
-                f"[ContractRequest] PARTICIPACIÓN DENEGADA — "
+                f"[ContractRequest] PARTICIPACIí“N DENEGADA — "
                 f"worker-{INSTANCE_ID} ha optado por no compartir datos (Soberanía)\n"
                 f"  Solicitante: {consumer_uri!r}"
             )
@@ -1947,7 +1983,7 @@ async def ids_data(request: Request):
                 )
             }))
 
-        # ── Verificar si el consumer está autorizado en el contrato FL restringido ──
+        # â”€â”€ Verificar si el consumer está autorizado en el contrato FL restringido â”€â”€
         # El modelo FL publicado usa connector-restricted-policy con ids:constraint IN [peers].
         # Si el solicitante no está en esa lista, rechazamos con unauthorized_consumer.
         if _published_fl_contract and consumer_uri:
@@ -2008,20 +2044,18 @@ async def ids_data(request: Request):
             json.dumps(contrato)
         )
 
-    # ── ContractAgreementMessage ──────────────────────────────────────────────
     elif tipo == "ids:ContractAgreementMessage":
         return _multipart_response(
             _resp("ids:MessageProcessedNotificationMessage", "messageProcessedNotificationMessage")
         )
 
-    # ── ArtifactRequestMessage ────────────────────────────────────────────────
     elif tipo == "ids:ArtifactRequestMessage":
         try:
             payload_dict = json.loads(payload_val) if payload_val else {}
         except Exception:
             payload_dict = {}
 
-        # ── FIX BUG 1: Solo parsear ids:contentVersion como fl_algorithm
+        # â”€â”€ FIX BUG 1: Solo parsear ids:contentVersion como fl_algorithm
         #    si NO es fl_global_weights:: ni fl_weights::
         #    Antes este bloque asumía que CUALQUIER contentVersion era fl_algorithm,
         #    lo que causaba que los pesos globales sobreescribieran algorithm.py
@@ -2065,7 +2099,7 @@ async def ids_data(request: Request):
                     # el codec IDS-FL incluye siempre al menos "||from_coordinator"
                     # o "||fl_config::" o un base64 largo (> 50 chars) sin "::" adicionales.
                     # Si el ECC añade su propia value (p.ej. una URI o token corto),
-                    # lo ignoramos y dejamos artifact_type vacío → modo fuente.
+                    # lo ignoramos y dejamos artifact_type vacío â†’ modo fuente.
                     _looks_like_fl_algo = (
                         "||from_coordinator" in content_version
                         or "||fl_config::" in content_version
@@ -2135,7 +2169,7 @@ async def ids_data(request: Request):
             {"ids:transferContract": mensaje.get("ids:transferContract", {})}
         )
 
-        # fl_weights — pesos locales de un worker → coordinator acumula
+        # fl_weights — pesos locales de un worker â†’ coordinator acumula
         if artifact_type == "fl_weights":
             sender      = payload_dict.get("instance_id", "?")
             round_num   = payload_dict.get("round", 0)
@@ -2160,7 +2194,7 @@ async def ids_data(request: Request):
                     "n_samples"  : n_samples,
                     "metrics"    : metrics,
                 }
-            log.info(f"[fl_weights] ✅ Pesos de worker-{sender} ronda {round_num} acumulados ({len(_round_weights)} total)")
+            log.info(f"[fl_weights] [OK] Pesos de worker-{sender} ronda {round_num} acumulados ({len(_round_weights)} total)")
             return _multipart_response(resp_h, json.dumps({"status": "weights_received", "from": sender}))
 
         # fl_global_weights — worker entrena localmente
@@ -2240,17 +2274,17 @@ async def ids_data(request: Request):
                         _my_selected_csv = full_path
                         log.info(
                             f"[fl_algorithm] CSV seleccionado por coordinator: "
-                            f"{sel_csv} → {full_path}"
+                            f"{sel_csv} â†’ {full_path}"
                         )
                     else:
                         log.warning(
                             f"[fl_algorithm] CSV '{sel_csv}' no encontrado en {INPUT_DIR}"
                             f" — se usará selección automática"
                         )
-                log.info(f"✔ algorithm.py + config recibidos del coordinator — worker-{INSTANCE_ID} = WORKER")
+                log.info(f"âœ” algorithm.py + config recibidos del coordinator — worker-{INSTANCE_ID} = WORKER")
             else:
                 is_coordinator = True
-                log.info(f"★ algorithm.py + config recibidos desde Postman — worker-{INSTANCE_ID} = COORDINATOR")
+                log.info(f"â˜... algorithm.py + config recibidos desde Postman — worker-{INSTANCE_ID} = COORDINATOR")
 
             cfg = _load_fl_config()
             return _multipart_response(
@@ -2269,7 +2303,7 @@ async def ids_data(request: Request):
                 }),
             )
 
-        # ── Modo fuente: servir algorithm.py a otro coordinator que lo solicita ──
+        # â”€â”€ Modo fuente: servir algorithm.py a otro coordinator que lo solicita â”€â”€
         # Cuando el artifact_type es desconocido/vacío y el artefacto solicitado
         # no es de tipo fl_weights/fl_global_weights, este DataApp actúa como
         # PROVEEDOR y devuelve su algorithm.py (baked o recibido previamente).
@@ -2298,7 +2332,7 @@ async def ids_data(request: Request):
                     requester = mensaje.get("ids:issuerConnector", {}).get("@id", "?")
                     log.info(
                         f"[ArtifactRequest SOURCE] Sirviendo algorithm.py "
-                        f"({len(algo_bytes_src)} bytes) → {requester}"
+                        f"({len(algo_bytes_src)} bytes) â†’ {requester}"
                     )
                     return _multipart_response(resp_h, json.dumps({
                         "type"    : "fl_algorithm",
@@ -2341,8 +2375,8 @@ async def fl_fetch_algorithm(request: Request):
 
     Por defecto (body vacío) hace un **IDS self-fetch**:
       el coordinator actúa como CONSUMER Y PROVIDER de su propio ECC.
-      DescriptionRequestMessage → ContractRequestMessage
-      → ContractAgreementMessage → ArtifactRequestMessage
+      DescriptionRequestMessage â†’ ContractRequestMessage
+      â†’ ContractAgreementMessage â†’ ArtifactRequestMessage
       El ECC reenvía al /data local que sirve el algorithm.py baked.
 
     Body JSON (todos opcionales):
@@ -2361,11 +2395,7 @@ async def fl_fetch_algorithm(request: Request):
     source_connector_uri = body.get("source_connector_uri", "")
 
     global is_coordinator
-    
-    # ── MODO NATIVO: Inicialización Local del Coordinator ────────────────────
-    # Si no se especifica source_ecc_url, significa que este worker es el
-    # dueño del algoritmo y quiere asumir el rol de coordinador.
-    # No usamos IDS "self-fetch" porque los ficheros ya viven en su disco.
+
     if not source_ecc_url:
         log.info(f"[/fl/fetch-algorithm] Coordinator nativo asumiendo rol. Cargando ficheros locales.")
         import shutil
@@ -2380,7 +2410,7 @@ async def fl_fetch_algorithm(request: Request):
         success = True
         source_ecc_url = "local_filesystem"
     else:
-        # ── MODO IDS: Fetch desde otro conector (Si fuera necesario) ─────────
+        # â”€â”€ MODO IDS: Fetch desde otro conector (Si fuera necesario) â”€â”€â”€â”€â”€â”€â”€â”€â”€
         log.info(
             f"[/fl/fetch-algorithm] Iniciando fetch vía IDS —\n"
             f"  source_ecc_url       : {source_ecc_url}\n"
@@ -2407,7 +2437,7 @@ async def fl_fetch_algorithm(request: Request):
                     "batch_size"   : cfg["batch_size"],
                     "learning_rate": cfg["learning_rate"],
                 },
-                "next_step": "POST /broker/discover → POST /fl/negotiate → POST /fl/start",
+                "next_step": "POST /broker/discover â†’ POST /fl/negotiate â†’ POST /fl/start",
             }
         )
     else:
@@ -2482,7 +2512,7 @@ async def fl_start(request: Request):
             status_code=400,
             content={
                 "error": "No hay workers disponibles. Ejecuta /fl/negotiate primero.",
-                "hint" : "POST /broker/discover → POST /fl/negotiate → POST /fl/start"
+                "hint" : "POST /broker/discover â†’ POST /fl/negotiate â†’ POST /fl/start"
             }
         )
 
@@ -2537,9 +2567,11 @@ def dataset_llm_recommend():
         for c in csvs
     ]
     
+    coordinator_cols = _get_my_columns()
     rec = _llm_recommend_dataset(
         candidates, 
-        context="El dataset de referencia ideal para este entorno es UNSW-NB15 (Intrusión de red).",
+        coordinator_cols=coordinator_cols,
+        context="Selecciona el dataset que mejor coincida con el dataset de referencia de este worker.",
         timeout=15,
     )
     
@@ -2578,11 +2610,9 @@ async def ws_llm_recommend(websocket: WebSocket):
     """
     await websocket.accept()
 
-    # ── Leer query params ──────────────────────────────────────────────────────
     peer_worker_id = websocket.query_params.get("peer_worker_id", "")
     peer_csvs_raw  = websocket.query_params.get("peer_csvs", "")
 
-    # ── Resolver lista de candidatos ───────────────────────────────────────────
     # Prioridad: peer_csvs (JSON inline) > peer_worker_id > CSVs propios
     candidates: list = []
 
@@ -2644,7 +2674,6 @@ async def ws_llm_recommend(websocket: WebSocket):
         await websocket.close()
         return
 
-    # ── Construir el prompt con los CSVs del peer correcto ────────────────────
     target_worker = peer_worker_id or INSTANCE_ID
     context_str   = (
         f"El coordinator (worker-{INSTANCE_ID}) usa UNSW-NB15 como referencia. "
@@ -2987,7 +3016,7 @@ async def fl_receive_algorithm(request: Request):
             coordinator_conn_uri = coord_uri
 
         log.info(
-            f"[/fl/receive-algorithm] ✅ algorithm.py recibido del coordinator\n"
+            f"[/fl/receive-algorithm] [OK] algorithm.py recibido del coordinator\n"
             f"  CSV asignado: {selected_csv or '(auto)'}  |  coordinator: {coord_uri}"
         )
         return {"status": "ok", "worker_id": INSTANCE_ID}
@@ -3015,7 +3044,7 @@ async def fl_receive_global_weights(request: Request):
     if coord_uri:
         coordinator_conn_uri = coord_uri
 
-    log.info(f"[/fl/receive-global-weights] 💨 Pesos globales ronda {round_num} recibidos del coordinator")
+    log.info(f"[/fl/receive-global-weights] ðŸ’¨ Pesos globales ronda {round_num} recibidos del coordinator")
 
     def _train_and_reply():
         try:
@@ -3055,7 +3084,7 @@ async def fl_receive_local_weights(request: Request):
         }
 
     log.info(
-        f"[/fl/receive-local-weights] 💨 Pesos locales recibidos: "
+        f"[/fl/receive-local-weights] ðŸ’¨ Pesos locales recibidos: "
         f"worker-{sender} ronda {round_num}  ({n_samples} samples)"
     )
     return {"status": "ok", "round": round_num, "worker_id": INSTANCE_ID}
@@ -3156,9 +3185,6 @@ async def fl_negotiate():
         ecc_url  = worker["ecc_url"]
         sel_csv  = worker.get("selected_csv")
 
-        # ── Derivar worker_id y hostname Docker del peer ───────────────────────
-        # La convención es: ecc-workerN → be-dataapp-workerN:8500
-        # Funciona porque todos los contenedores comparten la red Docker "idsa".
         import re as _re_neg
         _m = _re_neg.search(r"ecc-worker(\d+)", ecc_url)
         if not _m:
@@ -3182,49 +3208,83 @@ async def fl_negotiate():
 
         log.info(
             f"[/fl/negotiate] Negociando con worker-{peer_worker_id} "
-            f"vía DataApp interno {peer_dataapp_url}"
+            f"vía IDS ContractRequestMessage â†’ {peer_dataapp_url}/data"
         )
 
         try:
-            # ── Llamada directa DataApp → DataApp (red Docker interna) ─────────
-            # Evita el ECC en :8889 (bloqueado para DataApps) pasando directamente
-            # al endpoint /fl/accept-negotiation del peer en su puerto 8500.
-            # El peer aplica FL_OPT_OUT y devuelve su connector_uri real.
-            resp = requests.post(
-                f"{peer_dataapp_url}/fl/accept-negotiation",
-                json={
-                    "coordinator_uri": CONNECTOR_URI,
-                    "coordinator_ecc": my_ecc_url,
-                    "selected_csv"   : sel_csv,
+            # El peer aplica FL_OPT_OUT en su handler ContractRequestMessage
+            # y responde con ContractAgreementMessage (aceptado) o
+            # RejectionMessage (rechazado / opt-out).
+            # Usamos be-dataapp-workerN:8500/data como destino (no ECC 8889).
+            ids_result = _ids_send(
+                forward_to_url       = f"{peer_dataapp_url}/data",
+                forward_to_connector = uri,
+                message_type         = "ids:ContractRequestMessage",
+                payload={
+                    "@context"      : _ids_context(),
+                    "@type"         : "ids:ContractRequest",
+                    "@id"           : f"https://w3id.org/idsa/autogen/contractRequest/fl_nego_{uuid.uuid4()}",
+                    "ids:permission": [],
+                    "ids:provider"  : {"@id": uri},
+                    "ids:obligation": [], "ids:prohibition": [],
+                    "ids:consumer"  : {"@id": CONNECTOR_URI},
                 },
-                timeout=15,
-                verify=False,
             )
-            resp.raise_for_status()
-            result = resp.json()
 
-            if result.get("accepted"):
-                # Usar el connector_uri real que devuelve el peer (no el del broker)
-                real_uri = result.get("connector_uri") or uri
-                log.info(f"[/fl/negotiate] worker-{peer_worker_id} ACEPTÓ ✅  uri={real_uri}")
+            ids_type = ids_result.get("@type", "")
+
+            if "ContractAgreement" in ids_type:
+                transfer_contract_id = ids_result.get("@id", f"ids-agreement-worker{peer_worker_id}")
+                log.info(f"[/fl/negotiate] worker-{peer_worker_id} ACEPTí“ [OK]  IDS ContractAgreement={transfer_contract_id}")
                 accepted.append({
-                    "connector_uri": real_uri,
-                    "ecc_url"      : ecc_url,
-                    "match_ratio"  : worker["match_ratio"],
-                    "transfer_contract": f"direct-dataapp-agreement-worker{peer_worker_id}",
-                    "selected_csv" : sel_csv,
+                    "connector_uri"    : uri,
+                    "ecc_url"          : ecc_url,
+                    "match_ratio"      : worker["match_ratio"],
+                    "transfer_contract": transfer_contract_id,
+                    "selected_csv"     : sel_csv,
                 })
-            else:
-                reason = result.get("reason", "rejected")
+                # â”€â”€ Notificar al peer sus datos de coordinator para que abra el túnel WS â”€â”€
+                # (solo si el peer lo soporta — ignorar errores)
+                try:
+                    requests.post(
+                        f"{peer_dataapp_url}/fl/accept-negotiation",
+                        json={
+                            "coordinator_uri": CONNECTOR_URI,
+                            "coordinator_ecc": my_ecc_url,
+                            "selected_csv"   : sel_csv,
+                        },
+                        timeout=10,
+                        verify=False,
+                    )
+                except Exception:
+                    pass   # El túnel WS se iniciará en /fl/start de todos modos
+
+            elif ("Rejection" in ids_type
+                  or "rejection" in ids_result.get("reason", "")
+                  or ids_result.get("status") == "rejected"):
+                reason = ids_result.get("reason", "ids_rejection")
+                msg    = ids_result.get("message", str(ids_result.get("ids:rejectionReason", "")))
                 log.warning(
-                    f"[/fl/negotiate] worker-{peer_worker_id} RECHAZÓ — {reason}: "
-                    f"{result.get('message', '')}"
+                    f"[/fl/negotiate] worker-{peer_worker_id} RECHAZí“ (IDS) — {reason}: {msg}"
                 )
                 rejected.append({
-                    "connector_uri": result.get("connector_uri") or uri,
+                    "connector_uri": uri,
                     "ecc_url"      : ecc_url,
                     "reason"       : reason,
-                    "message"      : result.get("message", ""),
+                    "message"      : msg,
+                })
+
+            else:
+                # Respuesta inesperada — tratar como error
+                log.warning(
+                    f"[/fl/negotiate] worker-{peer_worker_id} respuesta IDS inesperada: "
+                    f"{ids_type!r} — {str(ids_result)[:200]}"
+                )
+                rejected.append({
+                    "connector_uri": uri,
+                    "ecc_url"      : ecc_url,
+                    "reason"       : "unexpected_ids_response",
+                    "message"      : str(ids_result)[:200],
                 })
 
         except requests.exceptions.ConnectionError as ce:
@@ -3372,7 +3432,7 @@ class FLTrainingWSManager:
         await websocket.accept()
         self.active_workers[worker_id] = websocket
         log.info(
-            f"[WS FL-Train] 🚀 TÚNEL ESTABLECIDO: Worker-{worker_id} → Coordinator-{INSTANCE_ID}\n"
+            f"[WS FL-Train] ðŸš€ TÚNEL ESTABLECIDO: Worker-{worker_id} â†’ Coordinator-{INSTANCE_ID}\n"
             f"  Túneles activos: {list(self.active_workers.keys())}\n"
             f"  Total: {len(self.active_workers)} worker(s) en data-plane WS"
         )
@@ -3381,7 +3441,7 @@ class FLTrainingWSManager:
         if worker_id in self.active_workers:
             del self.active_workers[worker_id]
             log.info(
-                f"[WS FL-Train] ⚡ TÚNEL CERRADO: Worker-{worker_id}\n"
+                f"[WS FL-Train] [WARN] TÚNEL CERRADO: Worker-{worker_id}\n"
                 f"  Túneles activos restantes: {list(self.active_workers.keys())}"
             )
 
@@ -3427,7 +3487,7 @@ async def ws_fl_training(websocket: WebSocket, worker_id: str):
                         "n_samples"  : n_samples,
                         "metrics"    : metrics,
                     }
-                log.info(f"[WS FL-Train] 💨 Pesos locales recibidos vía WS: worker-{sender} ronda {round_num}")
+                log.info(f"[WS FL-Train] ðŸ’¨ Pesos locales recibidos vía WS: worker-{sender} ronda {round_num}")
     except WebSocketDisconnect:
         fl_ws_manager.disconnect(worker_id)
     except Exception as e:
@@ -3476,8 +3536,8 @@ async def _fl_worker_ws_client_connect():
             ws_url, ssl=_ssl_ctx_worker, max_size=None, ping_timeout=None
         )
         log.info(
-            f"[WS FL-Train] 🚀 TÚNEL WORKER→COORDINATOR ESTABLECIDO\n"
-            f"  Worker-{INSTANCE_ID} ──WS──→ Coordinator (worker{coord_id})\n"
+            f"[WS FL-Train] ðŸš€ TÚNEL WORKERâ†’COORDINATOR ESTABLECIDO\n"
+            f"  Worker-{INSTANCE_ID} â”€â”€WSâ”€â”€â†’ Coordinator (worker{coord_id})\n"
             f"  URL: {ws_url}\n"
             f"  Canal: ws:// (data-plane interno Docker, sin TLS overhead)\n"
             f"  Modo: Bypass IDS — pesos viajarán por WS en lugar de HTTP multipart"
@@ -3490,7 +3550,7 @@ async def _fl_worker_ws_client_connect():
                 if payload.get("type") == "fl_global_weights":
                     round_num = payload.get("round", 1)
                     global_weights = payload.get("global_weights_b64")
-                    log.info(f"[WS FL-Train] 💨 Pesos globales recibidos vía WS — ronda {round_num}")
+                    log.info(f"[WS FL-Train] ðŸ’¨ Pesos globales recibidos vía WS — ronda {round_num}")
                     
                     def _train_and_reply_ext():
                         try:
@@ -3500,12 +3560,12 @@ async def _fl_worker_ws_client_connect():
                             log.error(f"Error WS training local ronda {round_num}: {exc}")
                     threading.Thread(target=_train_and_reply_ext, daemon=True).start()
             except Exception as loop_e:
-                log.warning(f"[WS FL-Train] ⚡ Enlace websocket interrumpido: {loop_e}")
+                log.warning(f"[WS FL-Train] [WARN] Enlace websocket interrumpido: {loop_e}")
                 break
                 
     except Exception as e:
         log.warning(
-            f"[WS FL-Train] ❌ TÚNEL WS NO DISPONIBLE\n"
+            f"[WS FL-Train] âŒ TÚNEL WS NO DISPONIBLE\n"
             f"  URL: {ws_url}\n"
             f"  Error: {e}\n"
             f"  Fallback: Los pesos se enviarán por IDS/HTTP multipart (más lento)"
@@ -3732,7 +3792,7 @@ async def ws_ids_data(websocket: WebSocket):
                 await websocket.send_text(json.dumps({"error": "missing header"}))
                 continue
 
-            # ── Reutiliza la lógica de /data creando un Request sintético ────
+            # â”€â”€ Reutiliza la lógica de /data creando un Request sintético â”€â”€â”€â”€
             # Para no duplicar código, construimos un multipart encoder
             # simulando un POST request válido compatible con ids_data.
             _fields = {"header": ("header", header_val, "application/json")}
@@ -3765,3 +3825,4 @@ async def ws_ids_data(websocket: WebSocket):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8500, access_log=False)
+
