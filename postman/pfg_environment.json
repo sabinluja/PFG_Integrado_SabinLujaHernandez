@@ -3,13 +3,6 @@
   "name": "PFG -- Environment",
   "values": [
     {
-      "key": "Proxy_Endpoint",
-      "value": "https://localhost:5001/proxy",
-      "description": "Proxy del coordinator (Worker 1). Todas las peticiones IDS salen desde aquí hacia los workers destino.",
-      "type": "default",
-      "enabled": true
-    },
-    {
       "key": "Coordinator_URL",
       "value": "https://localhost:5002",
       "description": "URL base del coordinator. Cambia la URL completa para apuntar a otro coordinator o despliegue remoto. Ejemplos: https://localhost:5001 (worker-1), https://localhost:5002 (worker-2), https://localhost:5003 (worker-3), https://mi-servidor.com:5002",
@@ -20,13 +13,6 @@
       "key": "multipart_type",
       "value": "form",
       "description": "Tipo de multipart usado por TRUE Connector. Mantener como 'form'.",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "Forward-To",
-      "value": "https://ecc-worker2:8889/data",
-      "description": "ECC destino para los pasos 1-5 (flujo manual IDS). Dentro de la red Docker. Ej: https://ecc-worker2:8889/data",
       "type": "default",
       "enabled": true
     },
@@ -86,14 +72,14 @@
     },
     {
       "key": "algorithm_b64",
-      "value": "",
+      "value": "IiIiDQphbGdvcml0aG0ucHkg4oCUIEZMIFdvcmtlciBwYXJhIHZhbGlkYWNpw7NuIGRlIGFycXVpdGVjdHVyYSBJRFMNCj09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09DQpEYXRhc2V0OiBVTlNXLU5CMTUgKGNsYXNpZmljYWNpw7NuIGJpbmFyaWE6IHRyw6FmaWNvIG5vcm1hbCB2cyBhdGFxdWUpDQpNb2RlbG86ICBSZWQgbmV1cm9uYWwgZGVuc2EgbcOtbmltYSAoMiBjYXBhcykgY29uIFRlbnNvckZsb3cvS2VyYXMNCg0KTG9zIGhpcGVycGFyw6FtZXRyb3MgKGVwb2NocywgYmF0Y2hfc2l6ZSwgbGVhcm5pbmdfcmF0ZSwgdGVzdF9zcGxpdCkNCnNlIGxlZW4gZGUgZmxfY29uZmlnLmpzb24gZW52aWFkbyBkZXNkZSBQb3N0bWFuIGVuIGVsIHBhc28gNS4NClNpIG5vIGV4aXN0ZSwgc2UgdXNhbiBsb3MgdmFsb3JlcyBwb3IgZGVmZWN0byBkZWZpbmlkb3MgZW4gbG9hZF9jb25maWcoKS4NCg0KRmx1am8gcG9yIHJvbmRhIGRlIEZMOg0KICAxLiBDb29yZGluYWRvciDihpIgZW52w61hIHBlc29zIGdsb2JhbGVzIGFsIHdvcmtlcg0KICAyLiBXb3JrZXIgY2FyZ2EgQ1NWIHBhcnRpY2nDs24gbG9jYWwg4oaSIGVudHJlbmEgTiDDqXBvY2FzIOKGkiBkZXZ1ZWx2ZSBwZXNvcw0KICAzLiBDb29yZGluYWRvciBhcGxpY2EgRmVkQXZnIOKGkiBtb2RlbG8gZ2xvYmFsIGFjdHVhbGl6YWRvDQogIDQuIFJlcGV0aXINCg0KUmVmZXJlbmNpYSBhcnF1aXRlY3R1cmE6DQogIEx1esOzbiBldCBhbC4gKDIwMjQpIC0gIkEgVHV0b3JpYWwgb24gRmVkZXJhdGVkIExlYXJuaW5nIGZyb20gVGhlb3J5DQogIHRvIFByYWN0aWNlIiAtIElFRUUvQ0FBIEouIEF1dG9tLiBTaW5pY2EsIHZvbC4xMSwgbm8uNCwgcHAuODI0LTg1MC4NCiAg4oaSIEhvcml6b250YWwgRkwsIGNsaWVudC1zZXJ2ZXIsIEZlZEF2ZywgdGFidWxhciBub24tSUlEIGRhdGEgKEZpZy4zLCBTZWMuSUlJLUIpDQoiIiINCg0KaW1wb3J0IG9zDQppbXBvcnQganNvbg0KaW1wb3J0IGJhc2U2NA0KaW1wb3J0IG51bXB5IGFzIG5wDQppbXBvcnQgcGFuZGFzIGFzIHBkDQoNCm9zLmVudmlyb25bIlRGX0NQUF9NSU5fTE9HX0xFVkVMIl0gPSAiMyINCmltcG9ydCB0ZW5zb3JmbG93IGFzIHRmDQpmcm9tIHRlbnNvcmZsb3cgaW1wb3J0IGtlcmFzDQoNCiMgQ29sdW1uYXMgZGVsIGRhdGFzZXQgVU5TVy1OQjE1IHF1ZSB1c2Ftb3MgKHZlcnNpw7NuIHByZXByb2Nlc2FkYSkNCkxBQkVMX0NPTCA9ICJsYWJlbCINCg0KRkVBVFVSRV9DT0xTID0gWw0KICAgICJkdXIiLCAic3BrdHMiLCAiZHBrdHMiLCAic2J5dGVzIiwgImRieXRlcyIsDQogICAgInJhdGUiLCAic2xvYWQiLCAiZGxvYWQiLCAic2xvc3MiLCAiZGxvc3MiLA0KICAgICJzaW5wa3QiLCAiZGlucGt0IiwgInNqaXQiLCAiZGppdCIsDQogICAgInN3aW4iLCAic3RjcGIiLCAiZHRjcGIiLCAiZHdpbiIsDQogICAgInRjcHJ0dCIsICJzeW5hY2siLCAiYWNrZGF0IiwNCiAgICAic21lYW4iLCAiZG1lYW4iLCAidHJhbnNfZGVwdGgiLA0KICAgICJyZXNwb25zZV9ib2R5X2xlbiIsICJjdF9zcnZfc3JjIiwgImN0X3N0YXRlX3R0bCIsDQogICAgImN0X2RzdF9sdG0iLCAiY3Rfc3JjX2Rwb3J0X2x0bSIsICJjdF9kc3Rfc3BvcnRfbHRtIiwNCiAgICAiY3RfZHN0X3NyY19sdG0iLCAiaXNfZnRwX2xvZ2luIiwgImN0X2Z0cF9jbWQiLA0KICAgICJjdF9mbHdfaHR0cF9tdGhkIiwgImN0X3NyY19sdG0iLCAiY3Rfc3J2X2RzdCIsDQogICAgImlzX3NtX2lwc19wb3J0cyINCl0NCg0KIyBSdXRhIHBvciBkZWZlY3RvIGRlbCBmaWNoZXJvIGRlIGNvbmZpZ3VyYWNpw7NuDQpDT05GSUdfUEFUSCA9ICIvaG9tZS9ub2JvZHkvZGF0YS9mbF9jb25maWcuanNvbiINCg0KDQojIOKUgOKUgCBDb25maWd1cmFjacOzbiDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIANCg0KZGVmIGxvYWRfY29uZmlnKGNvbmZpZ19wYXRoOiBzdHIgPSBDT05GSUdfUEFUSCkgLT4gZGljdDoNCiAgICAiIiINCiAgICBDYXJnYSBmbF9jb25maWcuanNvbiBzaSBleGlzdGUgeSBkZXZ1ZWx2ZSBsb3MgcGFyw6FtZXRyb3MgZGUgZW50cmVuYW1pZW50by4NCiAgICBTaSBubyBleGlzdGUsIHVzYSBsb3MgdmFsb3JlcyBwb3IgZGVmZWN0by4NCg0KICAgIFBhcsOhbWV0cm9zIHNvcG9ydGFkb3MgZW4gZmxfY29uZmlnLmpzb246DQogICAgICAgIHJvdW5kcyAgICAgICAgKGludCkgICA6IG7Dum1lcm8gZGUgcm9uZGFzIEZMIOKAlCBsZcOtZG8gcG9yIGFwcC5weQ0KICAgICAgICByb3VuZF90aW1lb3V0IChpbnQpICAgOiBzZWd1bmRvcyBkZSBlc3BlcmEgcG9yIHJvbmRhIOKAlCBsZcOtZG8gcG9yIGFwcC5weQ0KICAgICAgICBtaW5fd29ya2VycyAgIChpbnQpICAgOiBtw61uaW1vIGRlIHdvcmtlcnMgcGFyYSBGZWRBdmcg4oCUIGxlw61kbyBwb3IgYXBwLnB5DQogICAgICAgIGVwb2NocyAgICAgICAgKGludCkgICA6IMOpcG9jYXMgZGUgZW50cmVuYW1pZW50byBsb2NhbA0KICAgICAgICBiYXRjaF9zaXplICAgIChpbnQpICAgOiB0YW1hw7FvIGRlbCBiYXRjaA0KICAgICAgICBsZWFybmluZ19yYXRlIChmbG9hdCkgOiB0YXNhIGRlIGFwcmVuZGl6YWplIGRlbCBvcHRpbWl6YWRvciBBZGFtDQogICAgICAgIHRlc3Rfc3BsaXQgICAgKGZsb2F0KSA6IGZyYWNjacOzbiBkZSBkYXRvcyBwYXJhIHZhbGlkYWNpw7NuIGxvY2FsDQogICAgIiIiDQogICAgZGVmYXVsdHMgPSB7DQogICAgICAgICJyb3VuZHMiICAgICAgIDogNSwNCiAgICAgICAgInJvdW5kX3RpbWVvdXQiOiAxODAsDQogICAgICAgICJtaW5fd29ya2VycyIgIDogMiwNCiAgICAgICAgImVwb2NocyIgICAgICAgOiAzLA0KICAgICAgICAiYmF0Y2hfc2l6ZSIgICA6IDMyLA0KICAgICAgICAibGVhcm5pbmdfcmF0ZSI6IDAuMDAxLA0KICAgICAgICAidGVzdF9zcGxpdCIgICA6IDAuMiwNCiAgICB9DQogICAgaWYgY29uZmlnX3BhdGggYW5kIG9zLnBhdGguZXhpc3RzKGNvbmZpZ19wYXRoKToNCiAgICAgICAgdHJ5Og0KICAgICAgICAgICAgd2l0aCBvcGVuKGNvbmZpZ19wYXRoKSBhcyBmOg0KICAgICAgICAgICAgICAgIGNmZyA9IGpzb24ubG9hZChmKQ0KICAgICAgICAgICAgZGVmYXVsdHMudXBkYXRlKGNmZykNCiAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbjoNCiAgICAgICAgICAgIHBhc3MNCiAgICByZXR1cm4gZGVmYXVsdHMNCg0KDQojIOKUgOKUgCBTZXJpYWxpemFjacOzbiBkZSBwZXNvcyDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIANCg0KZGVmIHdlaWdodHNfdG9fYjY0KHdlaWdodHM6IGxpc3QpIC0+IHN0cjoNCiAgICBwYXlsb2FkID0ganNvbi5kdW1wcyhbdy50b2xpc3QoKSBmb3IgdyBpbiB3ZWlnaHRzXSkuZW5jb2RlKCJ1dGYtOCIpDQogICAgcmV0dXJuIGJhc2U2NC5iNjRlbmNvZGUocGF5bG9hZCkuZGVjb2RlKCJ1dGYtOCIpDQoNCg0KZGVmIGI2NF90b193ZWlnaHRzKGI2NF9zdHI6IHN0cikgLT4gbGlzdDoNCiAgICBwYXlsb2FkID0gYmFzZTY0LmI2NGRlY29kZShiNjRfc3RyLmVuY29kZSgidXRmLTgiKSkNCiAgICByZXR1cm4gW25wLmFycmF5KHcsIGR0eXBlPW5wLmZsb2F0MzIpIGZvciB3IGluIGpzb24ubG9hZHMocGF5bG9hZC5kZWNvZGUoInV0Zi04IikpXQ0KDQoNCiMg4pSA4pSAIENhcmdhIHkgcHJlcHJvY2VzYWRvIGRlbCBkYXRhc2V0IOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgA0KDQpkZWYgbG9hZF91bnN3X25iMTUoZGF0YV9wYXRoOiBzdHIsIHRlc3Rfc3BsaXQ6IGZsb2F0ID0gMC4yKToNCiAgICBkZiA9IHBkLnJlYWRfY3N2KGRhdGFfcGF0aCwgbG93X21lbW9yeT1GYWxzZSkNCiAgICBkZi5jb2x1bW5zID0gW2MubG93ZXIoKS5zdHJpcCgpIGZvciBjIGluIGRmLmNvbHVtbnNdDQoNCiAgICBpZiBMQUJFTF9DT0wgbm90IGluIGRmLmNvbHVtbnM6DQogICAgICAgIGlmICJhdHRhY2tfY2F0IiBpbiBkZi5jb2x1bW5zOg0KICAgICAgICAgICAgZGZbTEFCRUxfQ09MXSA9IChkZlsiYXR0YWNrX2NhdCJdLnN0ci5zdHJpcCgpICE9ICJOb3JtYWwiKS5hc3R5cGUoaW50KQ0KICAgICAgICBlbHNlOg0KICAgICAgICAgICAgbnVtX2NvbHMgPSBkZi5zZWxlY3RfZHR5cGVzKGluY2x1ZGU9Im51bWJlciIpLmNvbHVtbnMudG9saXN0KCkNCiAgICAgICAgICAgIGRmW0xBQkVMX0NPTF0gPSBkZltudW1fY29sc1stMV1dLmFzdHlwZShpbnQpDQoNCiAgICBhdmFpbGFibGUgPSBbYyBmb3IgYyBpbiBGRUFUVVJFX0NPTFMgaWYgYyBpbiBkZi5jb2x1bW5zXQ0KICAgIGlmIG5vdCBhdmFpbGFibGU6DQogICAgICAgIGF2YWlsYWJsZSA9IFtjIGZvciBjIGluIGRmLnNlbGVjdF9kdHlwZXMoaW5jbHVkZT0ibnVtYmVyIikuY29sdW1ucyBpZiBjICE9IExBQkVMX0NPTF0NCg0KICAgIGRmX2NsZWFuID0gZGZbYXZhaWxhYmxlICsgW0xBQkVMX0NPTF1dLmZpbGxuYSgwKQ0KICAgIGRmX2NsZWFuID0gZGZfY2xlYW4ucmVwbGFjZShbbnAuaW5mLCAtbnAuaW5mXSwgMCkNCg0KICAgIFggPSBkZl9jbGVhblthdmFpbGFibGVdLnZhbHVlcy5hc3R5cGUobnAuZmxvYXQzMikNCiAgICB5ID0gKGRmX2NsZWFuW0xBQkVMX0NPTF0udmFsdWVzID4gMCkuYXN0eXBlKG5wLmZsb2F0MzIpDQoNCiAgICB4X21pbiA9IFgubWluKGF4aXM9MCkNCiAgICB4X21heCA9IFgubWF4KGF4aXM9MCkNCiAgICBkZW5vbSA9IG5wLndoZXJlKCh4X21heCAtIHhfbWluKSA9PSAwLCAxLjAsIHhfbWF4IC0geF9taW4pDQogICAgWCA9IChYIC0geF9taW4pIC8gZGVub20NCg0KICAgIG5fdmFsICAgICA9IG1heCgxLCBpbnQobGVuKFgpICogdGVzdF9zcGxpdCkpDQogICAgaW5kaWNlcyAgID0gbnAucmFuZG9tLnBlcm11dGF0aW9uKGxlbihYKSkNCiAgICB2YWxfaWR4ICAgPSBpbmRpY2VzWzpuX3ZhbF0NCiAgICB0cmFpbl9pZHggPSBpbmRpY2VzW25fdmFsOl0NCg0KICAgIHJldHVybiBYW3RyYWluX2lkeF0sIHlbdHJhaW5faWR4XSwgWFt2YWxfaWR4XSwgeVt2YWxfaWR4XSwgYXZhaWxhYmxlDQoNCg0KIyDilIDilIAgTW9kZWxvIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgA0KDQpkZWYgYnVpbGRfbW9kZWwoaW5wdXRfZGltOiBpbnQsIGxlYXJuaW5nX3JhdGU6IGZsb2F0ID0gMC4wMDEpIC0+IGtlcmFzLk1vZGVsOg0KICAgICIiIg0KICAgIFJlZCBuZXVyb25hbCBkZW5zYSBtw61uaW1hIHBhcmEgY2xhc2lmaWNhY2nDs24gYmluYXJpYSAobm9ybWFsIHZzIGF0YXF1ZSkuDQogICAgQXJxdWl0ZWN0dXJhOiBJbnB1dCDihpIgRGVuc2UoMzIsIHJlbHUpIOKGkiBEZW5zZSgxNiwgcmVsdSkg4oaSIERlbnNlKDEsIHNpZ21vaWQpDQogICAgUmVmOiBMdXrDs24gZXQgYWwuICgyMDI0KSBTZWMuVklJLUENCiAgICAiIiINCiAgICBtb2RlbCA9IGtlcmFzLlNlcXVlbnRpYWwoWw0KICAgICAgICBrZXJhcy5sYXllcnMuSW5wdXQoc2hhcGU9KGlucHV0X2RpbSwpKSwNCiAgICAgICAga2VyYXMubGF5ZXJzLkRlbnNlKDMyLCBhY3RpdmF0aW9uPSJyZWx1IiksDQogICAgICAgIGtlcmFzLmxheWVycy5EZW5zZSgxNiwgYWN0aXZhdGlvbj0icmVsdSIpLA0KICAgICAgICBrZXJhcy5sYXllcnMuRGVuc2UoMSwgIGFjdGl2YXRpb249InNpZ21vaWQiKQ0KICAgIF0sIG5hbWU9ImZsX21pbmltYWxfY2xhc3NpZmllciIpDQoNCiAgICBtb2RlbC5jb21waWxlKA0KICAgICAgICBvcHRpbWl6ZXI9a2VyYXMub3B0aW1pemVycy5BZGFtKGxlYXJuaW5nX3JhdGUpLA0KICAgICAgICBsb3NzPSJiaW5hcnlfY3Jvc3NlbnRyb3B5IiwNCiAgICAgICAgbWV0cmljcz1bDQogICAgICAgICAgICAiYWNjdXJhY3kiLA0KICAgICAgICAgICAga2VyYXMubWV0cmljcy5BVUMobmFtZT0iYXVjIiksDQogICAgICAgICAgICBrZXJhcy5tZXRyaWNzLlByZWNpc2lvbihuYW1lPSJwcmVjaXNpb24iKSwNCiAgICAgICAgICAgIGtlcmFzLm1ldHJpY3MuUmVjYWxsKG5hbWU9InJlY2FsbCIpDQogICAgICAgIF0NCiAgICApDQogICAgcmV0dXJuIG1vZGVsDQoNCg0KIyDilIDilIAgRnVuY2nDs24gcHJpbmNpcGFsIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgA0KDQpkZWYgcnVuKGRhdGFfcGF0aDogc3RyLCBnbG9iYWxfd2VpZ2h0c19iNjQ6IHN0ciA9IE5vbmUsDQogICAgICAgIGNvbmZpZ19wYXRoOiBzdHIgPSBDT05GSUdfUEFUSCkgLT4gZGljdDoNCiAgICAiIiINCiAgICBFbnRyZW5hIGVsIG1vZGVsbyBsb2NhbCB1bmEgcm9uZGEgZGUgRkwgeSBkZXZ1ZWx2ZSBwZXNvcyArIG3DqXRyaWNhcy4NCg0KICAgIExlZSBsb3MgaGlwZXJwYXLDoW1ldHJvcyBkZSBmbF9jb25maWcuanNvbiAoY29uZmlnX3BhdGgpLg0KICAgIFNpIG5vIGV4aXN0ZSwgdXNhIGxvcyB2YWxvcmVzIHBvciBkZWZlY3RvIGRlIGxvYWRfY29uZmlnKCkuDQoNCiAgICBBcmdzOg0KICAgICAgICBkYXRhX3BhdGggICAgICAgICAgOiBSdXRhIGFsIENTViBsb2NhbCAocGFydGljacOzbiBVTlNXLU5CMTUpLg0KICAgICAgICBnbG9iYWxfd2VpZ2h0c19iNjQgOiBQZXNvcyBnbG9iYWxlcyBlbiBiYXNlNjQuIE5vbmUgZW4gcm9uZGEgMS4NCiAgICAgICAgY29uZmlnX3BhdGggICAgICAgIDogUnV0YSBhIGZsX2NvbmZpZy5qc29uLg0KDQogICAgUmV0dXJuczoNCiAgICAgICAgew0KICAgICAgICAgICAgIndlaWdodHNfYjY0IiAgOiBzdHIsDQogICAgICAgICAgICAibl9zYW1wbGVzIiAgICA6IGludCwNCiAgICAgICAgICAgICJtZXRyaWNzIiAgICAgIDogeyBsb3NzLCBhY2N1cmFjeSwgYXVjLCBwcmVjaXNpb24sIHJlY2FsbCB9LA0KICAgICAgICAgICAgImlucHV0X2RpbSIgICAgOiBpbnQsDQogICAgICAgICAgICAiZmVhdHVyZV9jb2xzIiA6IGxpc3Rbc3RyXSwNCiAgICAgICAgICAgICJtb2RlbF9uYW1lIiAgIDogc3RyDQogICAgICAgIH0NCiAgICAiIiINCiAgICBjZmcgPSBsb2FkX2NvbmZpZyhjb25maWdfcGF0aCkNCiAgICBlcG9jaHMgICAgICAgID0gaW50KGNmZ1siZXBvY2hzIl0pDQogICAgYmF0Y2hfc2l6ZSAgICA9IGludChjZmdbImJhdGNoX3NpemUiXSkNCiAgICBsZWFybmluZ19yYXRlID0gZmxvYXQoY2ZnWyJsZWFybmluZ19yYXRlIl0pDQogICAgdGVzdF9zcGxpdCAgICA9IGZsb2F0KGNmZ1sidGVzdF9zcGxpdCJdKQ0KDQogICAgWF90cmFpbiwgeV90cmFpbiwgWF92YWwsIHlfdmFsLCBmZWF0dXJlX2NvbHMgPSBsb2FkX3Vuc3dfbmIxNShkYXRhX3BhdGgsIHRlc3Rfc3BsaXQpDQogICAgaW5wdXRfZGltID0gWF90cmFpbi5zaGFwZVsxXQ0KDQogICAgbW9kZWwgPSBidWlsZF9tb2RlbChpbnB1dF9kaW0sIGxlYXJuaW5nX3JhdGUpDQoNCiAgICBpZiBnbG9iYWxfd2VpZ2h0c19iNjQ6DQogICAgICAgIHRyeToNCiAgICAgICAgICAgIG1vZGVsLnNldF93ZWlnaHRzKGI2NF90b193ZWlnaHRzKGdsb2JhbF93ZWlnaHRzX2I2NCkpDQogICAgICAgIGV4Y2VwdCBFeGNlcHRpb246DQogICAgICAgICAgICBwYXNzDQoNCiAgICBtb2RlbC5maXQoDQogICAgICAgIFhfdHJhaW4sIHlfdHJhaW4sDQogICAgICAgIGVwb2Nocz1lcG9jaHMsDQogICAgICAgIGJhdGNoX3NpemU9YmF0Y2hfc2l6ZSwNCiAgICAgICAgdmVyYm9zZT0wLA0KICAgICAgICB2YWxpZGF0aW9uX2RhdGE9KFhfdmFsLCB5X3ZhbCkNCiAgICApDQoNCiAgICBldmFsX3JlcyA9IG1vZGVsLmV2YWx1YXRlKFhfdmFsLCB5X3ZhbCwgdmVyYm9zZT0wKQ0KICAgIG1ldHJpY3MgPSB7DQogICAgICAgICJsb3NzIiAgICAgOiByb3VuZChmbG9hdChldmFsX3Jlc1swXSksIDYpLA0KICAgICAgICAiYWNjdXJhY3kiIDogcm91bmQoZmxvYXQoZXZhbF9yZXNbMV0pLCA2KSwNCiAgICAgICAgImF1YyIgICAgICA6IHJvdW5kKGZsb2F0KGV2YWxfcmVzWzJdKSwgNiksDQogICAgICAgICJwcmVjaXNpb24iOiByb3VuZChmbG9hdChldmFsX3Jlc1szXSksIDYpLA0KICAgICAgICAicmVjYWxsIiAgIDogcm91bmQoZmxvYXQoZXZhbF9yZXNbNF0pLCA2KQ0KICAgIH0NCg0KICAgIHJldHVybiB7DQogICAgICAgICJ3ZWlnaHRzX2I2NCIgOiB3ZWlnaHRzX3RvX2I2NChtb2RlbC5nZXRfd2VpZ2h0cygpKSwNCiAgICAgICAgIm5fc2FtcGxlcyIgICA6IGludChsZW4oWF90cmFpbikpLA0KICAgICAgICAibWV0cmljcyIgICAgIDogbWV0cmljcywNCiAgICAgICAgImlucHV0X2RpbSIgICA6IGludChpbnB1dF9kaW0pLA0KICAgICAgICAiZmVhdHVyZV9jb2xzIjogbGlzdChmZWF0dXJlX2NvbHMpLA0KICAgICAgICAibW9kZWxfbmFtZSIgIDogbW9kZWwubmFtZQ0KICAgIH0=",
       "description": "⚠️ RELLENAR MANUALMENTE antes del paso 5. Base64 de algorithm.py. PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\algorithm.py'))",
       "type": "default",
       "enabled": true
     },
     {
       "key": "config_b64",
-      "value": "",
+      "value": "ew0KICAicm91bmRzIjogNSwNCiAgInJvdW5kX3RpbWVvdXQiOiAxODAsDQogICJtaW5fd29ya2VycyI6IDEsDQogICJlcG9jaHMiOiAzLA0KICAiYmF0Y2hfc2l6ZSI6IDMyLA0KICAibGVhcm5pbmdfcmF0ZSI6IDAuMDAxLA0KICAidGVzdF9zcGxpdCI6IDAuMg0KfQ==",
       "description": "⚠️ RELLENAR MANUALMENTE antes del paso 5. Base64 de fl_config.json. PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('.\\ia-dataapp\\fl_config.json'))",
       "type": "default",
       "enabled": true
@@ -116,27 +102,6 @@
       "key": "rejected_workers",
       "value": "[]",
       "description": "Auto-rellenado por el paso 5c → workers rechazados (ej. worker4 con FL_AUTHORIZED_URIS vacío).",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "Coordinator_Discover_Endpoint",
-      "value": "https://localhost:5002/broker/discover",
-      "description": "Referencia documental. La colección usa {{Coordinator_URL}}/broker/discover",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "Coordinator_Negotiate_Endpoint",
-      "value": "https://localhost:5002/fl/negotiate",
-      "description": "Referencia documental. La colección usa {{Coordinator_URL}}/fl/negotiate",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "Coordinator_Start_Endpoint",
-      "value": "https://localhost:5002/fl/start",
-      "description": "Referencia documental. La colección usa {{Coordinator_URL}}/fl/start",
       "type": "default",
       "enabled": true
     },
@@ -293,6 +258,57 @@
       "description": "Auto-rellenado por WS-5 pre-request. URL WebSocket del canal IDS-data del coordinator (wss://localhost:500N/ws/ids-data).",
       "type": "default",
       "enabled": true
+    },
+    {
+      "key": "Worker1_URL",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "Worker3_URL",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "Broker_URL",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "WS_Tunnel_Status_URL",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "WS_Performance_URL",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "dataset_title",
+      "value": "Dataset Mi Proyecto",
+      "type": "default",
+      "enabled": true,
+      "description": "Título del dataset a publicar manulmente"
+    },
+    {
+      "key": "dataset_filename",
+      "value": "unsw_nb15.csv",
+      "type": "default",
+      "enabled": true,
+      "description": "Nombre exacto del archivo CSV subido"
+    },
+    {
+      "key": "dataset_description",
+      "value": "Dataset subido vía variables de Postman",
+      "type": "default",
+      "enabled": true,
+      "description": "Descripción del dataset"
     }
   ],
   "_postman_variable_scope": "environment",
