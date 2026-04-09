@@ -57,6 +57,35 @@ except ImportError:
     _WS_AVAILABLE = False
 
 TLS_CERT = "./cert/daps/ca.crt" if os.path.exists("./cert/daps/ca.crt") else False
+
+# =============================================================================
+# Duplicación de logs a archivo "General"
+# =============================================================================
+class TeeWithStripANSI:
+    def __init__(self, filename):
+        self.stdout = sys.stdout
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        self.file = open(filename, "w", encoding="utf-8")
+        self.ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        
+    def write(self, message):
+        self.stdout.write(message)
+        self.file.write(self.ansi_escape.sub('', message))
+        self.file.flush()
+        
+    def flush(self):
+        self.stdout.flush()
+        self.file.flush()
+        
+    def isatty(self):
+        return hasattr(self.stdout, 'isatty') and self.stdout.isatty()
+
+try:
+    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ia-dataapp", "log", "fl_orchestrator.log")
+    sys.stdout = TeeWithStripANSI(log_path)
+except Exception:
+    pass
+
 if not TLS_CERT:
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -521,7 +550,6 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
             print(f"{RESET}\n")
 
             field(f"  IA ({llm_mod}) Sugerencia",   f"{CYAN}{llm_rec} (confianza: {llm_conf:.0%}){RESET}", indent=8)
-            field(f"  IA ({llm_mod}) Razonamiento", f"{GRAY}{llm_rsn}{RESET}", indent=8)
 
             if llm_conf >= 0.80:
                 field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
@@ -1482,7 +1510,7 @@ def _start_keyboard_listener(coordinator_url_ref, endpoints_ref, req_timeout):
         time.sleep(0.1)
 
 
-def fase0b_verificar_catalogo_coordinator(coordinator_url, req_timeout):
+def fase0b_verificar_catalogo_coordinator(coordinator_url, cid, req_timeout):
     """
     Tras la FASE 0, consulta el Catalogo IDS del Coordinator (/ids/self-description)
     y lista los Datasets CSV registrados de forma dinamica, sin hardcoding.
@@ -1493,6 +1521,11 @@ def fase0b_verificar_catalogo_coordinator(coordinator_url, req_timeout):
         "Consulta dinamica al catalogo IDS para obtener los Datasets\n"
         "publicados en el Coordinator sin hardcodear ningun nombre."
     )
+    step("0b", "GET /ids/self-description")
+    
+    ecc_port = 8090 if int(cid) == 1 else 8090 + int(cid)
+    info(f"Comando Manual: https://localhost:{ecc_port}/api/selfDescription/")
+    
     try:
         r = SESSION.get(
             f"{coordinator_url}/ids/self-description",
@@ -1568,7 +1601,7 @@ def main():
         _endpoints_ref[0] = endpoints
         time.sleep(0.5)
 
-        fase0b_verificar_catalogo_coordinator(coordinator_url, req_timeout)
+        fase0b_verificar_catalogo_coordinator(coordinator_url, cid, req_timeout)
         time.sleep(0.5)
 
         fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout)

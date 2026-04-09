@@ -136,9 +136,23 @@ def _load_fl_config() -> dict:
 # Logging
 # =============================================================================
 
+import sys
+
+# Asegurar que la carpeta de logs existe
+os.makedirs("/home/nobody/log", exist_ok=True)
+log_file = f"/home/nobody/log/worker_{INSTANCE_ID}.log"
+
+# Limpiamos el archivo al arrancar para no acumular megas de corridas anteriores
+with open(log_file, "w"):
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
     format=f"%(asctime)s  [worker-{INSTANCE_ID}]  %(levelname)-8s  %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file)
+    ]
 )
 log = logging.getLogger(__name__)
 
@@ -1490,15 +1504,30 @@ def _get_my_columns() -> list:
     Devuelve las columnas del CSV local con mas columnas (referencia del coordinator).
     Si hay un unico CSV, lo usa directamente.
     """
+    global _my_selected_csv
     csvs = _get_all_local_csvs()
     if not csvs:
         log.error("[broker-discover] No hay CSVs disponibles en INPUT_DIR")
         return []
-    best = max(csvs, key=lambda x: len(x["columns"]))
+    forced_csv = os.getenv("COORDINATOR_CSV_REFERENCE")
+    is_forced  = False
+    if forced_csv:
+        matched = [c for c in csvs if c["filename"] == forced_csv]
+        if matched:
+            best = matched[0]
+            is_forced = True
+        else:
+            log.warning(f"[broker-discover] CSV forzado '{forced_csv}' no encontrado. Usando heuristicas.")
+            best = max(csvs, key=lambda x: len(x["columns"]))
+    else:
+        best = max(csvs, key=lambda x: len(x["columns"]))
+
+    origin = "seleccionado por .env" if is_forced else "HEURISTICA (max cols)"
     log.info(
-        f"[broker-discover] CSV de referencia: {best['filename']} "
+        f"[broker-discover] CSV de referencia ({origin}): {best['filename']} "
         f"({len(best['columns'])} columnas): {best['columns'][:5]}..."
     )
+    _my_selected_csv = best["path"]
     return best["columns"]
 
 
