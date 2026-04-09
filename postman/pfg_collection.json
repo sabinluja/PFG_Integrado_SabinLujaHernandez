@@ -317,6 +317,51 @@
           "response": []
         },
         {
+          "name": "1b. Ver Catálogo IDS (Datasets)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Catalogo obtenido', () => pm.response.to.have.status(200));",
+                  "const sd = pm.response.json();",
+                  "const cat = (sd['ids:resourceCatalog'] || [{}])[0];",
+                  "const resources = cat['ids:offeredResource'] || [];",
+                  "console.log('--- DATASETS DISPONIBLES EN EL COORDINATOR ---');",
+                  "let count = 0;",
+                  "resources.forEach(r => {",
+                  "   const titleObj = (r['ids:title'] || [{}])[0];",
+                  "   let title = titleObj['@value'] || String(titleObj);",
+                  "   if (title.includes('Dataset:')) {",
+                  "       console.log('✅ ' + title.replace('Dataset: ', ''));",
+                  "       count++;",
+                  "   }",
+                  "});",
+                  "console.log('Total: ${count} datasets publicados listos para FL.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{Coordinator_URL}}/ids/self-description",
+              "host": [
+                "{{Coordinator_URL}}"
+              ],
+              "path": [
+                "ids",
+                "self-description"
+              ],
+              "query": []
+            }
+          },
+          "description": "Extrae el catálogo IDS (self-description) del coordinator e imprime por consola los Datasets publicados disponibles para entrenar.",
+          "response": []
+        },
+        {
           "name": "2. Lista de Conectores (Broker)",
           "request": {
             "method": "GET",
@@ -468,7 +513,7 @@
           "response": []
         },
         {
-          "name": "5. Negociar Contratos Rápidos",
+          "name": "5. Negociar Contratos con Workers",
           "event": [
             {
               "listen": "test",
@@ -1179,8 +1224,45 @@
               }
             }
           ]
+        },
+        {
+          "name": "16. Limpiar Sistema Completo (Reset-All)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Reset total completado', () => pm.response.to.have.status(200));",
+                  "const resp = pm.response.json();",
+                  "console.log('🧹 Reset-All completado:', resp.message);",
+                  "const nodes = resp.nodes || {};",
+                  "Object.keys(nodes).forEach(n => console.log('  ' + n + ':', nodes[n]));",
+                  "console.log('Archivos eliminados del coordinator:', (resp.deleted || []).join(', ') || '(ninguno)');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{Coordinator_URL}}/system/reset-all",
+              "host": [
+                "{{Coordinator_URL}}"
+              ],
+              "path": [
+                "system",
+                "reset-all"
+              ],
+              "query": []
+            }
+          },
+          "description": "Llama al coordinator para que cascade un reset total a todos los Workers y a si mismo. Deja el ecosistema como si acabase de encenderse el proyecto.",
+          "response": []
         }
-      ]
+      ],
+      "description": "\nEl flujo \"FL Algorithm Deployment Flow\" simula la ejecución paso a paso de un entrenamiento de Machine Learning Federado sobre un ecosistema de soberanía de datos (International Data Spaces - IDSA).\n\nCaracterísticas Clave:\n- Intercambio de modelos e hiperparámetros cifrados vía payload IDS (ContractRequestMessage).\n- Auto-descubrimiento en ecosistema mediante Catálogo Federado (Broker).\n- Negociación ODRL estricta evaluada con tokens DAPS reales.\n- Bypass asíncrono Data Plane: Transporte grueso de pesos (.json) via WebSockets puro sobre HTTPs sorteando cuellos de botella del Proxy IDS de Java.\n- Tests automáticos de resiliencia (rechazo de nodos por soberanía, caída controlada).\n\nSigue los Requests en órden numérico para visualizar exactamente los mismos logs y validaciones que se ejecutan en consola mediante el orquestador pfg_ids_fl_flow.py.\n"
     },
     {
       "name": "DAPS Verification",

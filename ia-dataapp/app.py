@@ -2,29 +2,23 @@
 app.py  --  IA DataApp Worker/Coordinator
 =========================================
 
-Cualquier worker puede ser coordinator -- se elige en Postman enviando el
-algoritmo (fl_algorithm) al worker destino via IDS/TRUE Connector.
+Cualquier worker puede instanciarse como Coordinator recibiendo el algoritmo
+en la FASE 1. La comunicación se orquesta nativamente mediante la red IDS.
 
-Flujo completo con Broker + DAPS (pasos Postman):
-  Pasos 1-4  -- Negociacion IDS manual (proxy -> ecc destino)
-               El worker receptor recibe algorithm.py + fl_config.json
-               y se convierte en COORDINATOR.
+Arquitectura Híbrida:
+  - Control Plane (IDS): Negociación de contratos y descubrimiento (HTTPS/REST + DAPS).
+  - Data Plane (WS): Transferencia asíncrona de alto rendimiento de pesos FL (WebSockets).
 
-  Paso 5a    -- POST /broker/discover   -> coordinator consulta Fuseki SPARQL
-                                          y descubre workers compatibles.
-  Paso 5b    -- POST /fl/negotiate      -> coordinator negocia contratos IDS
-                                          con los workers compatibles del broker.
-                                          Worker4 (FL_AUTHORIZED_URIS vacio) es
-                                          rechazado automaticamente.
-  Paso 5c    -- POST /fl/start          -> coordinator envia algoritmo + pesos
-                                          a los workers aceptados y arranca FL.
+Flujo actual (alineado con pfg_ids_fl_flow.py y Postman):
+  FASE 0: Resolución de Endpoints, validación de Broker y Catálogo IDS dinámico.
+  FASE 1: Coordinator solicita/obtiene algorithm.py y fl_config.json vía IDS.
+  FASE 2: Descubrimiento de peers en Broker (Fuseki) y filtro semántico (LLM).
+  FASE 3: Negociación de contratos IDS obligatorios (Restringido > Worker4 descartado).
+  FASE 4: Arranque del Entrenamiento FL vía propagación IDS.
+  FASE 5: Monitorización y Benchmarking (WebSocket Performance) en tiempo real.
+  FASE 6: Protección de datos (Soberanía) denegando recursos al Worker descartado.
 
-  Pasos 13-17 -- Verificacion del modelo publicado y control de acceso.
-               Worker4 no puede negociar contrato del recurso FL porque
-               su CONNECTOR_URI no aparece en ids:rightOperand del constraint.
-
-  El fl_config.json se guarda en /home/nobody/data/fl_config.json.
-  Los parametros FL_ROUNDS y ROUND_TIMEOUT ya NO vienen de variables de entorno.
+Se incluye soporte de Cancelación de Entornos Globales (/system/reset) vía Signal Handler.
 """
 
 import os
@@ -956,12 +950,12 @@ def _load_algorithm():
 
 
 def _csv_path() -> str:
-    specific = os.path.join(INPUT_DIR, f"unsw_nb15_worker_{INSTANCE_ID}.csv")
-    if os.path.exists(specific):
-        return specific
     files = sorted(f for f in os.listdir(INPUT_DIR) if f.endswith(".csv"))
     if not files:
         raise FileNotFoundError(f"No hay CSV en {INPUT_DIR}")
+    
+    # Heuristica mas neutra: buscar el archivo mas grande o con mas peso (aqui cogemos el primero por defecto)
+    # Ya no hay dependencia dura de unsw_nb15.
     return os.path.join(INPUT_DIR, files[0])
 
 
@@ -2828,8 +2822,9 @@ async def ws_llm_recommend(websocket: WebSocket):
         return
 
     target_worker = peer_worker_id or INSTANCE_ID
+    # Eliminamos el hardcode de UNSW-NB15.
     context_str   = (
-        f"El coordinator (worker-{INSTANCE_ID}) usa UNSW-NB15 como referencia. "
+        f"El coordinator dicta las columnas de referencia. "
         f"Estas evaluando los datasets del worker-{target_worker}."
     )
 
@@ -3525,6 +3520,128 @@ def ids_contract(contractOffer: str | None = None, request: Request = None):
         return JSONResponse(content=_published_fl_contract)
     except Exception as exc:
         return JSONResponse(status_code=502, content={"error": str(exc)})
+
+
+@app.post("/system/reset")
+def system_reset():
+    global fl_state, _my_selected_csv
+    global is_coordinator, _published_fl_contract
+    global coordinator_ecc_url, coordinator_conn_uri
+
+
+    # --- MEMORIA: Reset de todas las variables de estado ---
+    with _fl_lock:
+        fl_state = {
+            "status"       : "idle",
+            "current_round": 0,
+            "total_rounds" : 0,
+            "history"      : [],
+        }
+    with _round_lock:
+        _round_weights.clear()
+
+    _my_selected_csv     = None
+    is_coordinator       = False
+    _published_fl_contract = {}
+    coordinator_ecc_url  = None
+    coordinator_conn_uri = None
+
+    PEER_SELECTED_CSVS.clear()
+
+    with _compatible_workers_lock:
+        _compatible_workers_cache.clear()
+
+    with _negotiate_lock:
+        _accepted_workers.clear()
+
+    with _ws_perf_lock:
+        _ws_perf_stats.update({
+            "ws_sends": 0, "ws_total_ms": 0.0, "ws_bytes": 0,
+            "http_sends": 0, "http_total_ms": 0.0, "http_bytes": 0,
+            "ws_failures": 0, "http_failures": 0, "history": [],
+        })
+
+    deleted = []
+
+    # --- DISCO: Borrar algorithm.py recibido via IDS (nunca el /app/ baked) ---
+    if os.path.exists(ALGO_IDS_PATH):
+        try:
+            os.remove(ALGO_IDS_PATH)
+            deleted.append(os.path.basename(ALGO_IDS_PATH))
+        except Exception as e:
+            log.warning(f"[reset] No se pudo borrar {ALGO_IDS_PATH}: {e}")
+
+    # --- DISCO: Borrar fl_config.json recibido via IDS ---
+    if os.path.exists(CONFIG_PATH):
+        try:
+            os.remove(CONFIG_PATH)
+            deleted.append(os.path.basename(CONFIG_PATH))
+        except Exception as e:
+            log.warning(f"[reset] No se pudo borrar {CONFIG_PATH}: {e}")
+
+    # --- DISCO: Borrar TODOS los .json del OUTPUT_DIR ---
+    #    (global_model.json, fl_results.json, local_metrics.json, etc.)
+    #    Los CSV del INPUT_DIR NUNCA se tocan.
+    if os.path.isdir(OUTPUT_DIR):
+        for fname in list(os.listdir(OUTPUT_DIR)):
+            if fname.endswith(".json"):
+                fpath = os.path.join(OUTPUT_DIR, fname)
+                try:
+                    os.remove(fpath)
+                    deleted.append(fname)
+                except Exception as e:
+                    log.warning(f"[reset] No se pudo borrar {fpath}: {e}")
+
+    log.info(f"[SYSTEM] Reset completo. Borrados: {deleted}")
+    return {
+        "status" : "ok",
+        "message": "DataApp restaurado al estado inicial (como si acabase de arrancar)",
+        "deleted": deleted,
+    }
+
+
+@app.post("/system/reset-all")
+def system_reset_all():
+    """
+    Cascada de limpieza total: llama a POST /system/reset en cada peer DataApp
+    conocido via PEER_ECC_URLS, luego se resetea a si mismo.
+    Deja el ecosistema en el mismo estado que al arrancar por primera vez.
+    """
+    import re as _re
+
+    results = {}
+    _verify = False  # Docker interno con cert auto-firmado
+
+    # Derivar URL de cada DataApp peer desde su ECC URL
+    # Convencion: ecc-workerN:8889 -> be-dataapp-workerN:8500
+    for ecc_url in PEER_ECC_URLS:
+        m = _re.search(r"ecc-worker(\d+)", ecc_url)
+        if not m:
+            continue
+        n = m.group(1)
+        peer_dataapp = f"https://be-dataapp-worker{n}:8500"
+        try:
+            r = requests.post(
+                f"{peer_dataapp}/system/reset",
+                verify=_verify,
+                timeout=10,
+            )
+            results[f"worker{n}"] = "ok" if r.ok else f"http_{r.status_code}"
+        except Exception as e:
+            results[f"worker{n}"] = f"error: {str(e)[:80]}"
+        log.info(f"[reset-all] worker{n} -> {results[f'worker{n}']}")
+
+    # Resetear el propio nodo
+    own = system_reset()
+    results["self"] = "ok"
+
+    log.info(f"[SYSTEM] reset-all completado: {results}")
+    return {
+        "status" : "ok",
+        "message": "Todos los DataApps restaurados al estado inicial",
+        "nodes"  : results,
+        "deleted": own.get("deleted", []),
+    }
 
 
 @app.get("/health")

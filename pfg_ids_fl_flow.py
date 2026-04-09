@@ -1,40 +1,30 @@
 #!/usr/bin/env python3
 """
-pfg_ids_fl_flow.py  --  Demostracion completa IDS + Federated Learning
+pfg_ids_fl_flow.py  --  Demostración completa IDS + Federated Learning
 ======================================================================
+Arquitectura Híbrida:
+  - Control Plane (IDS): Negociación de contratos y descubrimiento HTTPS.
+  - Data Plane (WS): Transferencia asíncrona de alto rendimiento de pesos FL.
 
-  FASE 0  Resolver endpoints
-          - GET /status            -> ECC del coordinator (autoritativo)
-          - GET /broker/connectors  -> peers via SPARQL Fuseki (owl:sameAs)
+  FASE 0   Resolver endpoints
+           - GET /status y /broker/connectors.
+  FASE 0.5 Explorar Catálogo IDS Dinámicamente
+           - GET /ids/self-description (Lista Datasets del Coordinator).
+  FASE 1   Coordinator obtiene el algoritmo vía IDS
+           - POST /fl/fetch-algorithm (Lee model.py y config).
+  FASE 2   Descubrimiento de peers en Broker + match semántico
+           - POST /broker/discover (Umbral >= 80% compatibilidad columnas).
+  FASE 3   Negociación de contratos (Restringido > Worker4 descartado)
+           - POST /fl/negotiate (Firma de credenciales ODRL mutuas mediante DAPS).
+  FASE 4   Arranque del Entrenamiento FL vía propagación IDS
+           - POST /fl/start
+  FASE 5   Monitorización en Tiempo Real y Resultados
+           - GET /fl/status, GET /fl/results y GET /fl/model
+  FASE 6   Verificación Soberanía de Datos y Acceso de Red
+           - Intento de lecturas por nodos no autorizados para comprobar
+             que el IDS bloquea la transferencia (Security Token).
 
-  FASE 1  Coordinator obtiene el algoritmo via IDS
-          - POST /fl/fetch-algorithm
-             El coordinator actua como CONSUMER IDS:
-               DescriptionRequestMessage -> ContractRequestMessage
-               -> ContractAgreementMessage -> ArtifactRequestMessage
-             El ECC fuente responde con algorithm.py + fl_config.json.
-             El coordinator los guarda en disco y activa su rol.
-             No hay intermediario externo ni lectura de ficheros locales.
-
-  FASE 2  Descubrimiento de peers (broker + match de columnas >= 95%)
-          - POST /broker/discover
-             Para cada peer registrado en el Broker, el coordinator
-             llama a GET /dataset/all-columns y escanea TODOS sus CSVs.
-             Por cada CSV calcula ratio = columnas_comunes / columnas_propias.
-             Selecciona el CSV de mayor ratio; si ratio >= 80% -> COMPATIBLE.
-             El CSV ganador queda asignado a ese worker para el entrenamiento.
-
-  FASE 3  Negociacion IDS coordinator -> cada peer  (TODA la logica IDS aqui)
-          - POST /fl/negotiate
-             - Worker-1: Description -> ContractRequest -> ContractAgreement -> ACEPTA
-             - Worker-3: Description -> ContractRequest -> ContractAgreement -> ACEPTA
-             - Worker-4: Description -> ContractRequest -> RejectionMessage  -> RECHAZA
-                          (FL_OPT_OUT=true en docker-compose -- soberania del dato)
-
-  FASE 4  Arranque del entrenamiento (omitir con --skip-fl)
-          - POST /fl/start
-             El coordinator envia selected_csv a cada worker en el payload
-             IDS para que cada worker entrene con el dataset correcto.
+Se incluye soporte de Cancelación Global (/system/reset) pulsando Ctrl+C.
 
 Uso:
   python pfg_ids_fl_flow.py
@@ -43,12 +33,19 @@ Uso:
   python pfg_ids_fl_flow.py --timeout 360
 """
 
+
 import sys
 import json
 import argparse
 import time
 import re
 import os
+import threading
+try:
+    import msvcrt
+    _HAS_MSVCRT = True
+except ImportError:
+    _HAS_MSVCRT = False
 
 import requests
 import urllib3
@@ -71,6 +68,9 @@ if not TLS_CERT:
 # Puerto del dataapp coordinator: convencion 5000 + N (p.ej. 5002 para worker-2)
 # Se puede sobreescribir con --coordinator-port
 DEFAULT_COORDINATOR_PORT_BASE = 5000
+
+# Flag global de cancelacion -- lo activa el hilo del listener de teclado
+_cancel_requested = False
 
 
 # =============================================================================
@@ -454,13 +454,14 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
         "Descubrimiento de peers compatibles  (multi-CSV, umbral 80%)",
         "POST /broker/discover\n"
         "  Para cada peer registrado en el Broker:\n"
-        "    GET /dataset/all-columns  -> lista de todos sus CSVs con columnas\n"
-        "    Ollama evalua cada CSV para saber su similitud\n"
-        "    Elige el CSV de mayor ratio  frente a los demas comparados\n"
-        "  El CSV seleccionado queda asignado al worker para el entrenamiento FL."
+        "    1. GET /dataset/all-columns -> lista de todos sus CSVs con columnas\n"
+        "    2. Matching matematico: ratio columnas_comunes/columnas_propias (umbral >=80%)\n"
+        "    3. Ollama (LLM local) verifica semanticamente el CSV candidato\n"
+        "    4. Si Ollama no alcanza confianza del 80%, se usa el mejor ratio matematico\n"
+        "  El CSV ganador queda asignado a ese worker para el entrenamiento FL."
     )
 
-    step("5b", "POST /broker/discover")
+    step("2", "POST /broker/discover")
     data       = http_post(f"{coordinator_url}/broker/discover", {}, timeout=req_timeout)
     compatible = data.get("compatible_workers", [])
     my_cols    = data.get("my_columns_count", "?")
@@ -529,6 +530,8 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
                 field("  CSV (Seleccionado por columnas)", math_csv, indent=8)
                 field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
         else:
+            print(f"\n        {YELLOW}⚠️ LLM Fallback:{RESET} La validación por IA no devolvió un formato válido o dio Timeout.")
+            print(f"        {YELLOW}Activando plan de rescate: se aplicará la delegación 100% matemática.{RESET}")
             field("  CSV (Seleccionado por columnas)", math_csv, indent=8)
             field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
 
@@ -555,7 +558,7 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
 
     phase(
         3,
-        "Negociacion IDS  coordinator -> cada peer  (paso 5c)",
+        "Negociacion IDS  coordinator -> cada peer",
         f"Coordinator ECC: {endpoints['coordinator']['ecc_url']}\n"
         "\n"
         "Handshake IDS por peer:\n"
@@ -737,7 +740,7 @@ def fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout):
         "POST /fl/start -- el coordinator distribuye pesos globales y arranca las rondas"
     )
 
-    step("7", "POST /fl/start")
+    step("4", "POST /fl/start")
     data   = http_post(f"{coordinator_url}/fl/start", {}, timeout=req_timeout)
     status = data.get("status", "?")
     peers  = data.get("peers", [])
@@ -1417,6 +1420,107 @@ def parse_args():
     return p.parse_args()
 
 
+# =============================================================================
+# RESET GLOBAL Y LISTENER DE TECLADO
+# =============================================================================
+
+def _cleanup_workers(coordinator_url, endpoints, req_timeout):
+    """
+    Recorre el coordinator y todos los workers conocidos y llama a
+    POST /system/reset para devolverlos al estado inicial (sin archivos FL).
+    """
+    workers = [("coordinator", coordinator_url)]
+    if endpoints and "peers" in endpoints:
+        for w_name in endpoints["peers"]:
+            num = w_name.replace("worker", "")
+            try:
+                w_url = f"https://localhost:{5000 + int(num)}"
+                workers.append((w_name, w_url))
+            except ValueError:
+                pass
+    for name, url in workers:
+        try:
+            r = SESSION.post(f"{url}/system/reset", timeout=req_timeout, verify=TLS_CERT)
+            if r.ok:
+                print(f"  {GREEN}[OK]{RESET} {name} restaurado.")
+            else:
+                print(f"  {RED}[FAIL]{RESET} {name} devolvio {r.status_code}")
+        except Exception as exc:
+            print(f"  {RED}[ERR ]{RESET} No se pudo contactar a {name}: {exc}")
+
+
+def _start_keyboard_listener(coordinator_url_ref, endpoints_ref, req_timeout):
+    """
+    Hilo daemon que escucha el teclado. Al pulsar 'P' o 'p' (o Ctrl+C):
+      1. Imprime un aviso coloreado.
+      2. Llama a _cleanup_workers para limpiar los DataApps.
+      3. Termina el proceso.
+    Solo funciona en Windows (usa msvcrt). En Linux/Mac se ignora.
+    """
+    global _cancel_requested
+    if not _HAS_MSVCRT:
+        return
+    while not _cancel_requested:
+        if msvcrt.kbhit():
+            ch = msvcrt.getwch()
+            if ch.lower() == 'p':
+                _cancel_requested = True
+                print()
+                print(f"  {RED}{BOLD}╔══════════════════════════════════════════════╗{RESET}")
+                print(f"  {RED}{BOLD}║  [P] CANCELACION MANUAL SOLICITADA           ║{RESET}")
+                print(f"  {RED}{BOLD}║  Limpiando todos los Workers y Coordinator   ║{RESET}")
+                print(f"  {RED}{BOLD}╚══════════════════════════════════════════════╝{RESET}")
+                print()
+                _cleanup_workers(
+                    coordinator_url_ref[0],
+                    endpoints_ref[0],
+                    req_timeout,
+                )
+                print(f"  {GREEN}Sistema restaurado. Puedes volver a ejecutar pfg_ids_fl_flow.py.{RESET}")
+                print()
+                os._exit(0)
+        time.sleep(0.1)
+
+
+def fase0b_verificar_catalogo_coordinator(coordinator_url, req_timeout):
+    """
+    Tras la FASE 0, consulta el Catalogo IDS del Coordinator (/ids/self-description)
+    y lista los Datasets CSV registrados de forma dinamica, sin hardcoding.
+    """
+    phase(
+        "0b",
+        "Catalogo IDS del Coordinator (Datasets disponibles)",
+        "Consulta dinamica al catalogo IDS para obtener los Datasets\n"
+        "publicados en el Coordinator sin hardcodear ningun nombre."
+    )
+    try:
+        r = SESSION.get(
+            f"{coordinator_url}/ids/self-description",
+            timeout=req_timeout,
+            verify=TLS_CERT,
+        )
+        if not r.ok:
+            warn(f"Error HTTP {r.status_code} al leer el catalogo IDS")
+            return
+        sd  = r.json()
+        cat = (sd.get("ids:resourceCatalog") or [{}])[0]
+        resources = cat.get("ids:offeredResource", [])
+        datasets = []
+        for res in resources:
+            t_node = res.get("ids:title", [{}])[0]
+            title  = t_node.get("@value", "") if isinstance(t_node, dict) else str(t_node)
+            if "Dataset:" in title:
+                datasets.append(title.replace("Dataset: ", "").strip())
+        if datasets:
+            info(f"Se encontraron {len(datasets)} Dataset(s) publicados en el Coordinator:")
+            for d in datasets:
+                print(f"    {CYAN}[CSV]{RESET} {GRAY}{d}{RESET}")
+        else:
+            warn("No se detectaron Datasets CSV en el catalogo IDS.")
+    except Exception as exc:
+        warn(f"No se pudo parsear el catalogo IDS: {exc}")
+
+
 def main():
     args = parse_args()
     cid  = args.coordinator
@@ -1445,24 +1549,49 @@ def main():
     info("FASE 2: cada peer es evaluado por sus CSVs reales -- umbral coincidencia: 80%")
     info("El CSV ganador de cada worker se comunica al worker via payload IDS en cada ronda")
 
-    # Fases
-    endpoints = fase0_resolver_endpoints(coordinator_url, cid, req_timeout)
-    time.sleep(0.5)
+    # Referencias mutables para que el listener las actualice en caliente
+    _coord_ref     = [coordinator_url]
+    _endpoints_ref = [None]
 
-    fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout)
-    time.sleep(1)
+    # Arrancar el hilo de escucha del teclado (daemon => muere con el proceso)
+    info("Pulsa [P] en cualquier momento para cancelar y resetear todos los Workers.")
+    _listener = threading.Thread(
+        target=_start_keyboard_listener,
+        args=(_coord_ref, _endpoints_ref, req_timeout),
+        daemon=True,
+    )
+    _listener.start()
 
-    fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout)
-    nego = fase3_negociar(coordinator_url, cid, endpoints, req_timeout)
-    verificar_coordinator(coordinator_url, cid, endpoints, req_timeout)
+    try:
+        # Fases
+        endpoints = fase0_resolver_endpoints(coordinator_url, cid, req_timeout)
+        _endpoints_ref[0] = endpoints
+        time.sleep(0.5)
 
-    if not args.skip_fl:
-        if not nego.get("accepted"):
-            warn("No hay workers aceptados -- no se arranca el FL")
-        else:
-            fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout)
-            fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout)
-            fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
+        fase0b_verificar_catalogo_coordinator(coordinator_url, req_timeout)
+        time.sleep(0.5)
+
+        fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout)
+        time.sleep(1)
+
+        fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout)
+        nego = fase3_negociar(coordinator_url, cid, endpoints, req_timeout)
+        verificar_coordinator(coordinator_url, cid, endpoints, req_timeout)
+
+        if not args.skip_fl:
+            if not nego.get("accepted"):
+                warn("No hay workers aceptados -- no se arranca el FL")
+            else:
+                fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout)
+                fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout)
+                fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
+
+    except KeyboardInterrupt:
+        print()
+        print(f"  {RED}{BOLD}[CTRL+C] Ejecucion interrumpida. Limpiando Workers...{RESET}")
+        _cleanup_workers(coordinator_url, _endpoints_ref[0], req_timeout)
+        print(f"  {GREEN}Sistema restaurado.{RESET}")
+        sys.exit(0)
 
     # Resumen final
     print()
