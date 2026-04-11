@@ -1488,13 +1488,44 @@ def _llm_recommend_dataset(
                     break
 
         import re as _re_llm
-        # Extraer bloque JSON admitiendo razonamiento de texto alrededor
-        match = _re_llm.search(r"```(?:json)?\s*(\{.*?\})\s*```", full_response, _re_llm.DOTALL)
-        if not match:
-             match = _re_llm.search(r"(\{.*\})", full_response, _re_llm.DOTALL)
-             
-        json_str = match.group(1) if match else full_response.strip()
-        result   = json.loads(json_str)
+
+        def _extract_llm_json(text: str) -> dict:
+            """
+            Extrae el JSON de la respuesta del LLM de forma robusta.
+            Estrategias en orden de prioridad:
+              1. Bloque ```json ... ``` (formato ideal)
+              2. Cualquier { ... } sin llaves anidadas (mas tolerante)
+              3. Extraccion campo a campo con regex (ultimo recurso)
+            """
+            # Estrategia 1: bloque ```json ... ```
+            m = _re_llm.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, _re_llm.DOTALL)
+            if m:
+                try:
+                    return json.loads(m.group(1))
+                except Exception:
+                    pass
+
+            # Estrategia 2: cualquier { ... } iterando de mayor a menor
+            for m in _re_llm.finditer(r"\{[^{}]*\}", text, _re_llm.DOTALL):
+                try:
+                    return json.loads(m.group(0))
+                except Exception:
+                    continue
+
+            # Estrategia 3: extraer campos individualmente con regex
+            fn_match = _re_llm.search(r'"filename"\s*:\s*"([^"]+)"', text)
+            rs_match = _re_llm.search(r'"reasoning"\s*:\s*"([^"]*)"', text)
+            cn_match = _re_llm.search(r'"confidence"\s*:\s*([0-9.]+)', text)
+            if fn_match:
+                return {
+                    "filename"  : fn_match.group(1),
+                    "reasoning" : rs_match.group(1) if rs_match else "",
+                    "confidence": float(cn_match.group(1)) if cn_match else 0.5,
+                }
+
+            raise ValueError(f"No se pudo extraer JSON de la respuesta LLM: {text[:200]!r}")
+
+        result = _extract_llm_json(full_response)
 
         filename   = result.get("filename", "")
         reasoning  = result.get("reasoning", "")
@@ -2923,89 +2954,61 @@ async def ws_llm_recommend(websocket: WebSocket):
         return
 
     target_worker = peer_worker_id or INSTANCE_ID
-    # Eliminamos el hardcode de UNSW-NB15.
-    context_str   = (
-        f"El coordinator dicta las columnas de referencia. "
-        f"Estas evaluando los datasets del worker-{target_worker}."
-    )
 
-    csv_descriptions = [
-        f"  [{i}] {c['filename']}\n"
-        f"      Columnas ({c['count']}): {', '.join(str(col) for col in c.get('columns', [])[:12])}"
-        + ("..." if c['count'] > 12 else "")
-        for i, c in enumerate(candidates, 1)
-    ]
-
-    prompt = (
-        "Eres un experto en Machine Learning y Federated Learning para ciberseguridad.\n"
-        "Tu tarea es seleccionar el dataset MAS ADECUADO para un entrenamiento de "
-        "deteccion de intrusiones de red (Network Intrusion Detection) en un entorno "
-        "de Federated Learning basado en el ecosistema IDS.\n"
-        f"Contexto adicional: {context_str}\n\n"
-        f"A continuacion tienes los datasets disponibles en el worker-{target_worker}:\n"
-        f"{chr(10).join(csv_descriptions)}\n\n"
-        "Razona tu respuesta paso a paso detalladamente de forma concisa y SIEMPRE termina tu respuesta "
-        "con un bloque en formato JSON EXACTAMENTE asi:\n"
-        "```json\n"
-        "{\"filename\": \"<nombre_exacto>\", \"reasoning\": \"<explicacion>\", \"confidence\": <numero_0_1>}\n"
-        "```\n"
-        "No anadas texto despues del JSON."
-    )
-    
     log.info(
-        f"[ws/llm-recommend] Iniciando streaming con {LLM_MODEL} "
+        f"[ws/llm-recommend] Iniciando con {LLM_MODEL} "
         f"-- evaluando CSVs de worker-{target_worker} ({len(candidates)} candidatos)"
     )
-    
-    loop = asyncio.get_running_loop()
-    def _stream_llm():
-        try:
-            with requests.post(LLM_ENDPOINT, json={"model": LLM_MODEL, "prompt": prompt, "stream": True}, stream=True, verify=TLS_CERT, timeout=60) as r:
-                r.raise_for_status()
-                for line in r.iter_lines():
-                    if line:
-                        try:
-                            # Verify valid JSON block from Ollama before yielding
-                            json.loads(line.decode())
-                            yield line.decode()
-                        except json.JSONDecodeError:
-                            continue
-        except requests.exceptions.RequestException as req_err:
-            log.warning(f"[LLM] Error de conexion con Ollama en ws_llm_recommend: {req_err}")
-            yield json.dumps({"error": f"Error de conexion con Ollama: {req_err}"})
 
-    import queue
-    q = queue.Queue()
-    def _run_req():
-        try:
-            for l in _stream_llm():
-                q.put(l)
-            q.put(None)
-        except Exception as e:
-            q.put(e)
-            
-    threading.Thread(target=_run_req, daemon=True).start()
-    
+    # Obtener columnas del coordinator como referencia para el overlap de schema.
+    # Funciona con cualquier dataset: el LLM evalua overlap real de columnas,
+    # no el nombre del fichero ni el dominio hardcodeado.
+    coordinator_cols = _get_my_columns()
+
+    context_str = (
+        f"This is a Federated Learning training session. "
+        f"The coordinator (worker-{INSTANCE_ID}) has provided its reference columns. "
+        f"You are evaluating the datasets of the peer worker-{target_worker}. "
+        f"Select the dataset whose schema best matches the coordinator reference."
+    )
+
+    # Reutilizar _llm_recommend_dataset — prompt unificado, robusto y agnóstico al dataset.
+    # El streaming de tokens al WebSocket ya lo hace _notify_ws_clients internamente.
+    loop = asyncio.get_running_loop()
+
+    def _run_llm():
+        return _llm_recommend_dataset(
+            csvs             = candidates,
+            coordinator_cols = coordinator_cols if coordinator_cols else None,
+            context          = context_str,
+            timeout          = 120,
+        )
+
     try:
-        while True:
-            item = await loop.run_in_executor(None, q.get)
-            if item is None:
-                break
-            if isinstance(item, Exception):
-                await websocket.send_json({"error": "Error de conexion con Ollama", "detail": str(item)})
-                break
-            try:
-                chunk = json.loads(item)
-                if "response" in chunk:
-                    await websocket.send_json({"type": "token", "token": chunk["response"]})
-                if chunk.get("done"):
-                    break
-            except Exception:
-                pass
+        result = await loop.run_in_executor(None, _run_llm)
+
+        if result:
+            await websocket.send_json({
+                "type"      : "result",
+                "filename"  : result["filename"],
+                "reasoning" : result["reasoning"],
+                "confidence": result["confidence"],
+                "model"     : LLM_MODEL,
+                "worker"    : target_worker,
+            })
+        else:
+            await websocket.send_json({
+                "type"   : "error",
+                "message": "LLM no disponible o no pudo recomendar un dataset. Usando column-matching como fallback.",
+            })
     except WebSocketDisconnect:
         pass
     except Exception as e:
-        log.warning(f"Error WS LLM: {e}")
+        log.warning(f"[ws/llm-recommend] Error: {e}")
+        try:
+            await websocket.send_json({"type": "error", "message": str(e)})
+        except Exception:
+            pass
     finally:
         await websocket.close()
 
@@ -3267,6 +3270,69 @@ async def broker_discover_post():
     }
 
 
+@app.post("/broker/discover/worker")
+async def broker_discover_single_worker(request: Request):
+    """
+    Analiza un solo peer (ecc_url + connector_uri) y devuelve el resultado
+    inmediatamente. Usado por el script pfg_ids_fl_flow.py para mostrar
+    el analisis de cada worker en cuanto termina, sin esperar a los demas.
+
+    Body: { "ecc_url": "https://ecc-worker1:8889/data", "connector_uri": "http://..." }
+    """
+    if not is_coordinator:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Solo el coordinator puede hacer descubrimiento."}
+        )
+
+    body         = await request.json()
+    ecc_url      = body.get("ecc_url", "")
+    connector_uri = body.get("connector_uri", "")
+
+    if not ecc_url or not connector_uri:
+        return JSONResponse(status_code=400, content={"error": "ecc_url y connector_uri requeridos"})
+
+    my_cols = _get_my_columns()
+    my_set  = set(c.lower() for c in my_cols)
+
+    try:
+        best_cols, real_uri, best_filename, best_ratio, llm_rec, all_evaluated = _get_peer_best_csv(
+            ecc_url, connector_uri, my_set
+        )
+    except Exception as exc:
+        log.error(f"[/broker/discover/worker] Error analizando {ecc_url}: {exc}")
+        return JSONResponse(status_code=500, content={"error": str(exc), "ecc_url": ecc_url})
+
+    common = my_set & set(c.lower() for c in best_cols)
+    compatible = best_ratio >= MATCH_THRESHOLD
+
+    result = {
+        "connector_uri"  : real_uri,
+        "ecc_url"        : ecc_url,
+        "compatible"     : compatible,
+        "match_ratio"    : round(best_ratio, 3),
+        "common_cols"    : sorted(common),
+        "selected_csv"   : best_filename,
+        "math_filename"  : llm_rec.get("math_filename") if llm_rec else best_filename,
+        "llm_recommended": llm_rec.get("filename")   if llm_rec else None,
+        "llm_reasoning"  : llm_rec.get("reasoning")  if llm_rec else None,
+        "llm_confidence" : llm_rec.get("confidence") if llm_rec else 0.0,
+        "llm_model"      : LLM_MODEL,
+        "all_evaluated"  : all_evaluated,
+        "my_columns_count": len(my_cols),
+    }
+
+    # Acumular en cache si es compatible (para /fl/negotiate)
+    if compatible:
+        with _compatible_workers_lock:
+            # Evitar duplicados
+            existing_uris = {w["connector_uri"] for w in _compatible_workers_cache}
+            if real_uri not in existing_uris:
+                _compatible_workers_cache.append(result)
+
+    return result
+
+
 @app.post("/fl/receive-algorithm")
 async def fl_receive_algorithm(request: Request):
     """
@@ -3479,6 +3545,17 @@ async def fl_negotiate():
         ecc_url  = worker["ecc_url"]
         sel_csv  = worker.get("selected_csv")
 
+        # ── Excluir al propio coordinator ─────────────────────────────────────
+        # El coordinator no negocia consigo mismo: se excluye por URI IDS y
+        # por ECC URL para cubrir el caso en que la URI no coincida exactamente.
+        if uri == CONNECTOR_URI:
+            log.info(f"[/fl/negotiate] Omitiendo al propio coordinator ({uri})")
+            continue
+        if ecc_url == my_ecc_url:
+            log.info(f"[/fl/negotiate] Omitiendo al propio coordinator por ECC URL ({ecc_url})")
+            continue
+        # ─────────────────────────────────────────────────────────────────────
+
         import re as _re_neg
         _m = _re_neg.search(r"ecc-worker(\d+)", ecc_url)
         if not _m:
@@ -3502,8 +3579,7 @@ async def fl_negotiate():
 
         log.info(
             f"[/fl/negotiate] Negociando con worker-{peer_worker_id} "
-            f"via IDS ContractRequestMessage -> ECC {ecc_url}  "
-            f"(ECC valida token DAPS antes de enrutar al DataApp)"
+            f"via ContractRequestMessage -> DataApp {peer_dataapp_url}/data"
         )
 
         # Payload del ContractRequest FL
@@ -3517,32 +3593,17 @@ async def fl_negotiate():
             "ids:consumer"  : {"@id": CONNECTOR_URI},
         }
 
-        # -- Paso 1: ContractRequestMessage al ECC del peer (valida DAPS) --------
-        # El ECC (puerto 8889) valida el token DAT contra Omejdn JWKS y reenvía
-        # al DataApp via /ws/ids-data. El DataApp responde segun FL_OPT_OUT.
-        # Si el ECC no responde, se hace fallback directo al DataApp.
-        try:
-            ids_result = _ids_send(
-                forward_to_url       = ecc_url,      # https://ecc-workerN:8889/data
-                forward_to_connector = uri,
-                message_type         = "ids:ContractRequestMessage",
-                payload              = _contract_payload,
-            )
-            log.info(
-                f"[/fl/negotiate] Respuesta IDS via ECC de worker-{peer_worker_id}: "
-                f"@type={ids_result.get('@type','?')!r}  reason={ids_result.get('reason','')}"
-            )
-        except Exception as _ecc_exc:
-            log.warning(
-                f"[/fl/negotiate] ECC de worker-{peer_worker_id} no responde ({_ecc_exc}). "
-                f"Fallback al DataApp directo (sin validacion DAPS en peer ECC)."
-            )
-            ids_result = _ids_send(
-                forward_to_url       = f"{peer_dataapp_url}/data",
-                forward_to_connector = uri,
-                message_type         = "ids:ContractRequestMessage",
-                payload              = _contract_payload,
-            )
+        # -- Paso 1: ContractRequestMessage directo al DataApp del peer ----------
+        # La negociacion FL es un protocolo interno entre DataApps en la red Docker.
+        # El ECC (puerto 8889) no enruta este tipo de mensajes de negociacion FL,
+        # por lo que se contacta directamente al DataApp (be-dataapp-workerN:8500).
+        # La soberania del dato se garantiza mediante FL_OPT_OUT en el DataApp peer.
+        ids_result = _ids_send(
+            forward_to_url       = f"{peer_dataapp_url}/data",
+            forward_to_connector = uri,
+            message_type         = "ids:ContractRequestMessage",
+            payload              = _contract_payload,
+        )
 
         # -- Paso 2: Evaluar la respuesta (viene del ECC o del fallback DataApp) -
         ids_type = ids_result.get("@type", "")

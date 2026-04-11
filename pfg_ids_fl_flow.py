@@ -475,13 +475,83 @@ def fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
 # FASE 2 -- Descubrimiento de peers compatibles
 # =============================================================================
 
+def _mostrar_resultado_worker(w, endpoints, coord_label):
+    """
+    Muestra el resultado del analisis de un solo worker inmediatamente.
+    Llamado en cuanto el backend devuelve la respuesta de /broker/discover/worker.
+    """
+    import time as _time
+
+    uri      = w.get("connector_uri", "?")
+    match    = w.get("match_ratio", 0)
+    sel_csv  = w.get("selected_csv") or "(auto)"
+    math_csv = w.get("math_filename") or sel_csv
+    m        = re.search(r"worker(\d+)", uri)
+    wid      = m.group(1) if m else "?"
+    peer     = endpoints["peers"].get(f"worker{wid}", {})
+    ecc      = peer.get("ecc_url") or w.get("ecc_url", "(desconocido)")
+    pl       = peer.get("ecc_label") or f"ecc-worker{wid}:8889"
+    compatible = w.get("compatible", match >= 0.80)
+
+    color = GREEN if compatible else YELLOW
+    tag   = "OK " if compatible else "--- (descartado)"
+    print(f"    {color}{tag}{RESET}  Worker-{wid}  {GRAY}{uri}{RESET}")
+    field("  ECC (broker)", ecc, indent=8)
+
+    # Handshake de metadatos (IDS Catalog fetch)
+    ids_arrow("out", "ids:DescriptionRequestMessage",  coord_label, pl)
+    ids_arrow("in",  "ids:DescriptionResponseMessage", pl, coord_label)
+
+    print(f"\n        {GRAY}Descubrimiento dinamico -- Consultando Catalogo IDS del peer (Self-Description):{RESET}")
+    for ev in w.get("all_evaluated", []):
+        fname_ev = ev["filename"]
+        ratio_ev = ev["ratio"]
+        common_c = ev.get("common_cols_count", 0)
+        total_c  = ev.get("total_cols", 0)
+        print(f"          - Recurso en catalogo: {fname_ev:<30} (match: {ratio_ev:.0%} - {common_c}/{total_c} cols)")
+
+    llm_rec = w.get("llm_recommended")
+
+    if llm_rec:
+        llm_conf = w.get("llm_confidence", 0)
+        llm_mod  = w.get("llm_model", "Ollama")
+        llm_rsn  = w.get("llm_reasoning", "Decision basada en esquema semantico.")
+
+        print(f"\n        {MAGENTA}-> IA Local ({llm_mod}) -- razonamiento:{RESET}")
+        print(f"          {GRAY}", end="", flush=True)
+        for _ch in llm_rsn:
+            print(_ch, end="", flush=True)
+            _time.sleep(0.008)
+        print(f"{RESET}\n")
+
+        field(f"  IA ({llm_mod}) Sugerencia", f"{CYAN}{llm_rec} (confianza: {llm_conf:.0%}){RESET}", indent=8)
+
+        if llm_conf >= 0.80:
+            field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
+        else:
+            print(f"        {YELLOW} Confianza de IA < 80%. Fallback a emparejamiento matematico.{RESET}")
+            field("  CSV (Seleccionado por columnas)", math_csv, indent=8)
+            field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
+    else:
+        print(f"\n        {YELLOW}LLM Fallback:{RESET} La validacion por IA no devolvio un formato valido o dio Timeout.")
+        print(f"        {YELLOW}Activando plan de rescate: se aplicara la delegacion 100% matematica.{RESET}")
+        field("  CSV (Seleccionado por columnas)", math_csv, indent=8)
+        field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
+
+    if compatible:
+        info(f"     El coordinator usara {sel_csv!r} en worker-{wid} para el entrenamiento FL")
+    print()
+
+
 def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
     coord_label = endpoints["coordinator"]["ecc_label"]
+    # ECC URL del coordinator para excluirlo del bucle de forma fiable
+    coord_ecc_url = endpoints["coordinator"]["ecc_url"]
 
     phase(
         2,
         "Descubrimiento de peers compatibles  (multi-CSV, umbral 80%)",
-        "POST /broker/discover\n"
+        "POST /broker/discover/worker  (uno por uno -- resultado inmediato por peer)\n"
         "  Para cada peer registrado en el Broker:\n"
         "    1. GET /dataset/all-columns -> lista de todos sus CSVs con columnas\n"
         "    2. Matching matematico: ratio columnas_comunes/columnas_propias (umbral >=80%)\n"
@@ -490,82 +560,61 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
         "  El CSV ganador queda asignado a ese worker para el entrenamiento FL."
     )
 
-    step("2", "POST /broker/discover")
-    data       = http_post(f"{coordinator_url}/broker/discover", {}, timeout=req_timeout)
-    compatible = data.get("compatible_workers", [])
-    my_cols    = data.get("my_columns_count", "?")
-    count      = data.get("count", len(compatible))
+    step("2", "POST /broker/discover/worker -- analisis peer por peer")
 
-    ok(f"{count} workers compatibles encontrados")
-    field("Columnas del coordinator", my_cols)
-    print()
+    # Obtener lista de todos los conectores del broker
+    bd       = http_get(f"{coordinator_url}/broker/connectors", timeout=req_timeout)
+    all_conn = bd.get("connectors", [])
 
-    for w in compatible:
-        uri      = w.get("connector_uri", "?")
-        match    = w.get("match_ratio", 0)
-        cols     = len(w.get("common_cols", []))
-        sel_csv  = w.get("selected_csv") or "(auto)"
-        m        = re.search(r"worker(\d+)", uri)
-        wid      = m.group(1) if m else "?"
-        peer     = endpoints["peers"].get(f"worker{wid}", {})
-        ecc      = peer.get("ecc_url") or w.get("ecc_url", "(desconocido)")
-        pl       = peer.get("ecc_label") or f"ecc-worker{wid}:8889"
+    my_cols_count = "?"
+    compatible    = []
+    incompatible  = []
 
-        print(f"    {GREEN}OK{RESET}  Worker-{wid}  {GRAY}{uri}{RESET}")
-        field("  ECC (broker)", ecc, indent=8)
+    for conn in all_conn:
+        uri    = conn.get("connector_uri", "")
+        ep_raw = conn.get("endpoint", "")
 
-        # Handshake de metadatos (IDS Catalog fetch)
-        ids_arrow("out", "ids:DescriptionRequestMessage",  coord_label, pl)
-        ids_arrow("in",  "ids:DescriptionResponseMessage", pl, coord_label)
+        # Derivar ecc_url del conector
+        ecc_url = ""
+        m_ecc = re.search(r"(ecc-worker\d+)", ep_raw or uri)
+        if m_ecc:
+            ecc_url = f"https://{m_ecc.group(1)}:8889/data"
 
-        print(f"\n        {GRAY}Descubrimiento dinamico -- Consultando Catalogo IDS del peer (Self-Description):{RESET}")
-        for ev in w.get("all_evaluated", []):
-            fname_ev = ev["filename"]
-            ratio_ev = ev["ratio"]
-            common_c = ev.get("common_cols_count", 0)
-            total_c  = ev.get("total_cols", 0)
-            print(f"          - Recurso en catalogo: {fname_ev:<30} (match: {ratio_ev:.0%} - {common_c}/{total_c} cols)")
+        if not ecc_url:
+            continue
 
-        llm_rec  = w.get("llm_recommended")
-        sel_csv  = w.get("selected_csv") or "(auto)"
-        math_csv = w.get("math_filename") or sel_csv
+        # Excluir el coordinator comparando por ecc_url (mas fiable que wid)
+        if ecc_url == coord_ecc_url:
+            continue
 
-        if llm_rec:
-            llm_conf = w.get("llm_confidence", 0)
-            llm_mod  = w.get("llm_model", "Ollama")
-            llm_rsn  = w.get("llm_reasoning", "Decision basada en esquema semantico.")
+        try:
+            r = SESSION.post(
+                f"{coordinator_url}/broker/discover/worker",
+                json={"ecc_url": ecc_url, "connector_uri": uri},
+                timeout=req_timeout,
+            )
+            if not r.ok:
+                m_w = re.search(r"ecc-worker(\d+)", ecc_url)
+                warn(f"Worker-{m_w.group(1) if m_w else '?'} devolvio HTTP {r.status_code} -- saltando")
+                continue
+            w = r.json()
+        except Exception as exc:
+            m_w = re.search(r"ecc-worker(\d+)", ecc_url)
+            warn(f"Worker-{m_w.group(1) if m_w else '?'} error: {exc}")
+            continue
 
-            # -- Mostrar el razonamiento ya calculado por /broker/discover -----
-            # El LLM fue invocado UNA sola vez durante /broker/discover en el
-            # DataApp. Aqui se reproduce ese mismo razonamiento en modo
-            # "streaming simulado" caracter a caracter, sin relanzar el LLM.
-            # Esto garantiza que el log muestra siempre la misma decision y
-            # elimina los duplicados que aparecian en los logs del DataApp.
-            import time as _time
-            print(f"\n        {MAGENTA}-> IA Local ({llm_mod}) -- razonamiento (calculado en /broker/discover):{RESET}")
-            print(f"          {GRAY}", end="", flush=True)
-            for _ch in llm_rsn:
-                print(_ch, end="", flush=True)
-                _time.sleep(0.008)
-            print(f"{RESET}\n")
+        # Mostrar resultado inmediatamente
+        _mostrar_resultado_worker(w, endpoints, coord_label)
 
-            field(f"  IA ({llm_mod}) Sugerencia",   f"{CYAN}{llm_rec} (confianza: {llm_conf:.0%}){RESET}", indent=8)
-
-            if llm_conf >= 0.80:
-                field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
-            else:
-                print(f"        {YELLOW} Confianza de IA < 80%. Fallback a emparejamiento matematico.{RESET}")
-                field("  CSV (Seleccionado por columnas)", math_csv, indent=8)
-                field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
+        if w.get("compatible", w.get("match_ratio", 0) >= 0.80):
+            compatible.append(w)
+            my_cols_count = w.get("my_columns_count", my_cols_count)
         else:
-            print(f"\n        {YELLOW}LLM Fallback:{RESET} La validación por IA no devolvió un formato válido o dio Timeout.")
-            print(f"        {YELLOW}Activando plan de rescate: se aplicará la delegación 100% matemática.{RESET}")
-            field("  CSV (Seleccionado por columnas)", math_csv, indent=8)
-            field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
+            incompatible.append(w)
 
-        info(f"     El coordinator usara {sel_csv!r} "
-             f"en worker-{wid} para el entrenamiento FL")
-        print()
+    total = len(compatible)
+    ok(f"{total} workers compatibles de {len(compatible) + len(incompatible)} analizados")
+    field("Columnas del coordinator", my_cols_count)
 
     if not compatible:
         warn(
@@ -595,9 +644,8 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
         "                                ->  RejectionMessage          (rechaza)\n"
         "  3. ContractAgreementMessage   ->  MessageProcessedNotif.    (si acepto)\n"
         "\n"
-        "  Worker-1: ACEPTA  (FL_OPT_OUT no definido en docker-compose)\n"
-        "  Worker-3: ACEPTA  (FL_OPT_OUT no definido en docker-compose)\n"
-        "  Worker-4: RECHAZA (FL_OPT_OUT=true en docker-compose -- soberania del dato)"
+        "  Worker: ACEPTA  (FL_OPT_OUT no definido en docker-compose)\n"
+        "  Worker: RECHAZA (FL_OPT_OUT=true en docker-compose -- soberania del dato)"
     )
 
     step("5c", "POST /fl/negotiate")
