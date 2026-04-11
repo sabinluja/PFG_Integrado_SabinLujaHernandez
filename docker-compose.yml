@@ -1,13 +1,13 @@
 services:
 
   # ===========================================================================
-  # DAPS — Omejdn + nginx (imágenes exactas del IDS Testbed)
+  # DAPS — omejdn-server + nginx (imágenes exactas del IDS Testbed)
   #
   # Arquitectura idéntica al testbed:
   #   omejdn-server  → idstestbed/omejdn-server:1.6.0  (solo interno)
   #   omejdn-nginx   → nginx:1.25.3 con TLS (hostname "omejdn" en red Docker)
   #
-  # Los ECC apuntan a Omejdn a través de nginx:
+  # Los ECC apuntan al DAPS a través de nginx:
   #   application.dapsUrl     = https://omejdn/auth/token
   #   application.dapsJWKSUrl = https://omejdn/auth/jwks.json
   #
@@ -29,8 +29,8 @@ services:
       - OMEJDN_DEFAULT_AUDIENCE=idsc:IDS_CONNECTORS_ALL
       - OMEJDN_ADMIN=admin:admin
     volumes:
-      - ./omejdn/config:/opt/config
-      - ./omejdn/keys:/opt/keys
+      - ./DAPS/config:/opt/config
+      - ./DAPS/keys:/opt/keys
 
   omejdn-nginx:
     image: nginx:1.25.3
@@ -44,9 +44,9 @@ services:
       - OMEJDN_PATH=/auth
       - UI_PATH=auth/ui
     volumes:
-      - ./omejdn/nginx.conf:/etc/nginx/templates/default.conf.template
-      - ./omejdn/keys/TLS/daps.cert:/etc/nginx/daps.cert
-      - ./omejdn/keys/TLS/daps.key:/etc/nginx/daps.key
+      - ./DAPS/nginx.conf:/etc/nginx/templates/default.conf.template
+      - ./DAPS/keys/TLS/daps.cert:/etc/nginx/daps.cert
+      - ./DAPS/keys/TLS/daps.key:/etc/nginx/daps.key
     depends_on:
       - omejdn-server
     healthcheck:
@@ -216,8 +216,8 @@ services:
       - ./ia-dataapp/log:/home/nobody/log
       - ./certs:/cert
       - ./certs/dataapp/worker1:/cert/dataapp
-      - ./omejdn/keys/worker1.cert:/cert/daps/worker.cert
-      - ./omejdn/keys/worker1.key:/cert/daps/worker.key
+      - ./DAPS/keys/worker1.cert:/cert/daps/worker.cert
+      - ./DAPS/keys/worker1.key:/cert/daps/worker.key
     depends_on:
       - ecc-worker1
 
@@ -317,8 +317,8 @@ services:
       - ./ia-dataapp/log:/home/nobody/log
       - ./certs:/cert
       - ./certs/dataapp/worker2:/cert/dataapp
-      - ./omejdn/keys/worker2.cert:/cert/daps/worker.cert
-      - ./omejdn/keys/worker2.key:/cert/daps/worker.key
+      - ./DAPS/keys/worker2.cert:/cert/daps/worker.cert
+      - ./DAPS/keys/worker2.key:/cert/daps/worker.key
     depends_on:
       - ecc-worker2
 
@@ -418,8 +418,8 @@ services:
       - ./ia-dataapp/log:/home/nobody/log
       - ./certs:/cert
       - ./certs/dataapp/worker3:/cert/dataapp
-      - ./omejdn/keys/worker3.cert:/cert/daps/worker.cert
-      - ./omejdn/keys/worker3.key:/cert/daps/worker.key
+      - ./DAPS/keys/worker3.cert:/cert/daps/worker.cert
+      - ./DAPS/keys/worker3.key:/cert/daps/worker.key
     depends_on:
       - ecc-worker3
 
@@ -427,7 +427,7 @@ services:
   # WORKER 4 — Sin acceso al modelo FL (solo intenta acceder, es rechazado)
   #
   # Worker 4 es un conector IDS legítimo:
-  #   ✔ Obtiene token DAT del DAPS (Omejdn) — está registrado como cliente
+  #   ✔ Obtiene token DAT del DAPS — está registrado como cliente
   #   ✔ Se registra en el Broker — aparece en el catálogo de conectores
   #   ✘ El coordinador (app.py) lo rechaza al intentar unirse al FL
   #     porque su URI no está en PEER_CONNECTOR_URIS de los workers 1-3
@@ -526,8 +526,8 @@ services:
       - ./ia-dataapp/log:/home/nobody/log
       - ./certs:/cert
       - ./certs/dataapp/worker4:/cert/dataapp
-      - ./omejdn/keys/worker4.cert:/cert/daps/worker.cert
-      - ./omejdn/keys/worker4.key:/cert/daps/worker.key
+      - ./DAPS/keys/worker4.cert:/cert/daps/worker.cert
+      - ./DAPS/keys/worker4.key:/cert/daps/worker.key
     depends_on:
       - ecc-worker4
 

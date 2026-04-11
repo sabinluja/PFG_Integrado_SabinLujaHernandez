@@ -24,7 +24,7 @@ ia-dataapp/data/worker*/algorithm.py
 ia-dataapp/data/worker*/fl_config.json
 ia-dataapp/data/worker*/output/
 
-# ── Bases de Datos locales y Caches (Broker / Omejdn / Linter) ───────────────
+# ── Bases de Datos locales y Caches (Broker / DAPS / Linter) ────────────────────────────
 *.db
 *.sqlite
 *.sqlite3
@@ -56,4 +56,4 @@ desktop.ini
 *_backup*.json
 
 # ── DAPS ───────────────────────────────────────────────
-omejdn/config/users.yaml
+DAPS/config/users.yaml

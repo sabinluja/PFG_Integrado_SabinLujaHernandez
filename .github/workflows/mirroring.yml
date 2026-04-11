@@ -18,8 +18,11 @@ jobs:
       - name: Instalar dependencias de app.py
         run: pip install fastapi uvicorn requests requests-toolbelt
 
+      - name: Verificar que docker-compose.yml es válido
+        run: docker compose config --quiet && echo "✅ docker-compose.yml válido"
+
       - name: Verificar sintaxis de app.py
         run: python -m py_compile ia-dataapp/app.py && echo "✅ app.py sin errores de sintaxis"
 
-      - name: Verificar que docker-compose.yml es válido
-        run: docker compose config --quiet && echo "✅ docker-compose.yml válido"
+      - name: Verificar sintaxis de pfg_ids_fl_flow.py
+        run: python -m py_compile pfg_ids_fl_flow.py && echo "✅ pfg_ids_fl_flow.py sin errores de sintaxis"
