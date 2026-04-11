@@ -65,7 +65,7 @@
     },
     {
       "key": "ECC_Base_URL",
-      "value": "https://localhost:8090/",
+      "value": "https://localhost:8092/",
       "description": "URL base del ECC. Worker1=8090, Worker2=8092, Worker3=8093, Worker4=8094",
       "type": "default",
       "enabled": true
@@ -182,14 +182,14 @@
     },
     {
       "key": "dataset_title",
-      "value": "Dataset Mi Proyecto",
+      "value": "Titatic Dataset TEST",
       "type": "default",
       "enabled": true,
       "description": "Título del dataset a publicar manulmente"
     },
     {
       "key": "dataset_filename",
-      "value": "unsw_nb15.csv",
+      "value": "test_manual_titanic_dataset.csv",
       "type": "default",
       "enabled": true,
       "description": "Nombre exacto del archivo CSV subido"
@@ -206,6 +206,41 @@
       "value": "https://localhost:5002/proxy",
       "type": "default",
       "enabled": true
+    },
+    {
+      "key": "DataApp_Worker_URL",
+      "value": "https://localhost:5002",
+      "type": "default",
+      "enabled": true,
+      "description": "URL del DataApp del worker al que quieres registrar el CSV manualmente. El pre-request del Paso 1 llama a {DataApp_Worker_URL}/dataset/all-columns para obtener los metadatos reales del CSV (columnas, filas, tamaño). Worker1=5001, Worker2=5002, Worker3=5003, Worker4=5004."
+    },
+    {
+      "key": "body_offered_resource",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "Auto-generado por el pre-request del Paso 1. Payload completo del OfferedResource igual que _publish_local_csvs()."
+    },
+    {
+      "key": "body_meta_repr",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "Auto-generado por el pre-request del Paso 1. Payload de la Metadata Representation con columnas reales del CSV."
+    },
+    {
+      "key": "body_exec_repr",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "Auto-generado por el pre-request del Paso 1. Payload de la Execution Representation."
+    },
+    {
+      "key": "body_contract_offer",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "Auto-generado por el pre-request del Paso 1. Payload del Contract Offer ODRL."
     }
   ],
   "_postman_variable_scope": "environment",

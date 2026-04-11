@@ -8,46 +8,28 @@
   "item": [
     {
       "name": "Dataset Registration Catalog (Manual)",
-      "description": "Permite registrar manualmente un dataset en el catálogo del worker. En esta versión de app.py, esto se hace automáticamente al arrancar, pero se deja aquí para testing de los 4 pasos IDS.",
+      "description": "Carpeta para publicar un nuevo dataset en el catalogo IDS del worker seleccionado y verificar el resultado.\n\nCONFIGURACION:\n  - ECC_Base_URL: URL base del ECC del worker\n  - DataApp_Worker_URL: URL del DataApp del worker",
       "item": [
         {
-          "name": "1. Offered Resource",
+          "name": "1. Publicar Datasets (Auto)",
           "event": [
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "var jsonData = pm.response.json();",
-                  "pm.environment.set(\"resourceCatalog\", pm.request.headers.get(\"catalog\"));",
-                  "var resourceId = pm.request.url.toString() + \"/\" + jsonData[\"@id\"].split(\"/\").pop();",
-                  "// Extracción si fuera necesario de la location header o del cuerpo",
-                  "pm.environment.set(\"offeredResource\", jsonData[\"@id\"] || pm.response.headers.get(\"Location\"));"
-                ],
-                "type": "text/javascript"
-              }
-            },
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  "var sdUrl = pm.environment.get(\"ECC_Base_URL\") + \"api/selfDescription/\";",
-                  "pm.sendRequest({",
-                  "    url: sdUrl,",
-                  "    method: 'GET',",
-                  "    header: { 'Authorization': 'Basic YXBpVXNlcjpwYXNzd29yZEFwaVVzZXI=' }",
-                  "}, function (err, res) {",
-                  "    if (!err && res.code === 200) {",
-                  "        var sd = res.json();",
-                  "        var catalogs = sd[\"ids:resourceCatalog\"];",
-                  "        if (catalogs && catalogs.length > 0) {",
-                  "            pm.environment.set(\"resourceCatalog\", catalogs[0][\"@id\"]);",
-                  "            console.log(\"Auto-extracted catalog:\", catalogs[0][\"@id\"]);",
-                  "        }",
-                  "    }",
-                  "});",
-                  "pm.variables.set(\"uuid_resource\", pm.variables.replaceIn('{{$guid}}'));"
-                ],
-                "type": "text/javascript"
+                  "pm.test('Publicacion automatica OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.status === 'success') {",
+                  "    console.log('✅ Publicados ' + json.published_count + ' dataset(s) automaticamente via /catalog/publish-datasets');",
+                  "    (json.published || []).forEach(p => console.log('   📂 ' + p.filename + ' -> ' + p.resource_id));",
+                  "    console.log('');",
+                  "    console.log('Los datasets ya estan disponibles para el LLM y el discovery.');",
+                  "    console.log('Usa los pasos 1-4 solo si necesitas registrar un campo especifico manualmente.');",
+                  "} else {",
+                  "    console.warn('⚠️  ' + JSON.stringify(json));",
+                  "}"
+                ]
               }
             }
           ],
@@ -55,148 +37,60 @@
             "method": "POST",
             "header": [
               {
-                "key": "catalog",
-                "value": "{{resourceCatalog}}"
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"@context\": {\"ids\": \"https://w3id.org/idsa/core/\", \"idsc\": \"https://w3id.org/idsa/code/\"},\n    \"@id\": \"https://w3id.org/idsa/autogen/textResource/dataset_{{uuid_resource}}\",\n    \"@type\": \"ids:TextResource\",\n    \"ids:title\": [{\"@value\": \"{{dataset_title}}\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n    \"ids:description\": [{\"@value\": \"{{dataset_description}}\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n    \"ids:keyword\": [{\"@value\": \"dataset\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n    \"ids:language\": [{\"@id\": \"https://w3id.org/idsa/code/EN\"}],\n    \"ids:version\": \"1.0.0\",\n    \"ids:contentType\": {\"@id\": \"https://w3id.org/idsa/code/SCHEMA_DEFINITION\"}\n}"
+              "raw": "{}"
             },
             "url": {
-              "raw": "{{ECC_Base_URL}}api/offeredResource/",
+              "raw": "{{DataApp_Worker_URL}}/catalog/publish-datasets",
               "host": [
-                "{{ECC_Base_URL}}api"
+                "{{DataApp_Worker_URL}}"
               ],
               "path": [
-                "offeredResource",
-                ""
-              ]
-            },
-            "auth": {
-              "type": "basic",
-              "basic": [
-                {
-                  "key": "username",
-                  "value": "apiUser",
-                  "type": "string"
-                },
-                {
-                  "key": "password",
-                  "value": "passwordApiUser",
-                  "type": "string"
-                }
+                "catalog",
+                "publish-datasets"
               ]
             }
-          }
+          },
+          "description": "Atajo directo: llama a POST /catalog/publish-datasets en el DataApp del worker. Publica TODOS los CSVs de la carpeta /data/input/ con todos los campos correctos (igual que el arranque automatico).\n\nUSA ESTE PASO en lugar de los pasos 1-4 si solo quieres re-publicar rapido. Los pasos 1-4 son para registro manual avanzado o depuracion."
         },
         {
-          "name": "2. Metadata Representation",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  "pm.variables.set(\"uuid_meta\", pm.variables.replaceIn('{{$guid}}'));"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "resource",
-                "value": "{{offeredResource}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n    \"@context\": {\"ids\": \"https://w3id.org/idsa/core/\", \"idsc\": \"https://w3id.org/idsa/code/\"},\n    \"@id\": \"https://w3id.org/idsa/autogen/representation/meta_{{uuid_meta}}\",\n    \"@type\": \"ids:TextRepresentation\",\n    \"ids:title\": [{\"@value\": \"Metadata Representation\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n    \"ids:description\": [{\"@value\": \"Metadata for Ollama reasoning. Columns: srcip, dstip, proto, state, dur, sbytes, dbytes...\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n    \"ids:mediaType\": {\"@id\": \"https://w3id.org/idsa/code/JSON\"},\n    \"ids:instance\": [{\n        \"@type\": \"ids:Artifact\",\n        \"@id\": \"http://w3id.org/engrd/connector/artifact/metadata_{{uuid_meta}}\",\n        \"ids:fileName\": \"metadata.json\",\n        \"ids:creationDate\": {\"@value\": \"2026-01-01T00:00:00Z\", \"@type\": \"http://www.w3.org/2001/XMLSchema#dateTimeStamp\"}\n    }]\n}"
-            },
-            "url": {
-              "raw": "{{ECC_Base_URL}}api/representation/",
-              "host": [
-                "{{ECC_Base_URL}}api"
-              ],
-              "path": [
-                "representation",
-                ""
-              ]
-            },
-            "auth": {
-              "type": "basic",
-              "basic": [
-                {
-                  "key": "username",
-                  "value": "apiUser",
-                  "type": "string"
-                },
-                {
-                  "key": "password",
-                  "value": "passwordApiUser",
-                  "type": "string"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "3. Execution Representation",
+          "name": "2. Ver Catálogo Completo",
           "event": [
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "var reqBody = JSON.parse(pm.request.body.raw);",
-                  "var artifactId = reqBody[\"ids:instance\"][0][\"@id\"];",
-                  "pm.environment.set(\"datasetArtifact\", artifactId);"
-                ],
-                "type": "text/javascript"
-              }
-            },
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  "pm.variables.set(\"uuid_exec\", pm.variables.replaceIn('{{$guid}}'));"
-                ],
-                "type": "text/javascript"
+                  "pm.test(\"Catálogo recuperado\", () => pm.response.to.have.status(200));",
+                  "const sd = pm.response.json();",
+                  "const cats = sd[\"ids:resourceCatalog\"] || [];",
+                  "if (cats.length > 0 && cats[0][\"ids:offeredResource\"]) {",
+                  "    console.log(\"✅ Datasets en el catálogo:\");",
+                  "    cats[0][\"ids:offeredResource\"].forEach(r => {",
+                  "        var titles = r[\"ids:title\"] || [];",
+                  "        var value = titles.length > 0 ? titles[0][\"@value\"] : r[\"@id\"];",
+                  "        if (value) console.log(\"   - \" + value);",
+                  "    });",
+                  "}"
+                ]
               }
             }
           ],
           "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "resource",
-                "value": "{{offeredResource}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n    \"@context\": {\"ids\": \"https://w3id.org/idsa/core/\", \"idsc\": \"https://w3id.org/idsa/code/\"},\n    \"@id\": \"https://w3id.org/idsa/autogen/representation/exec_{{uuid_exec}}\",\n    \"@type\": \"ids:TextRepresentation\",\n    \"ids:title\": [{\"@value\": \"Execution Representation\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n    \"ids:description\": [{\"@value\": \"Instancia del dataset en sí para entrenamiento FL\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n    \"ids:mediaType\": {\"@id\": \"https://w3id.org/idsa/code/CSV\"},\n    \"ids:instance\": [{\n        \"@type\": \"ids:Artifact\",\n        \"@id\": \"http://w3id.org/engrd/connector/artifact/dataset_{{uuid_exec}}\",\n        \"ids:fileName\": \"{{dataset_filename}}\",\n        \"ids:creationDate\": {\"@value\": \"2026-01-01T00:00:00Z\", \"@type\": \"http://www.w3.org/2001/XMLSchema#dateTimeStamp\"}\n    }]\n}"
-            },
+            "method": "GET",
+            "header": [],
             "url": {
-              "raw": "{{ECC_Base_URL}}api/representation/",
+              "raw": "{{ECC_Base_URL}}api/selfDescription/",
               "host": [
                 "{{ECC_Base_URL}}api"
               ],
               "path": [
-                "representation",
+                "selfDescription",
                 ""
               ]
             },
@@ -215,64 +109,8 @@
                 }
               ]
             }
-          }
-        },
-        {
-          "name": "4. Contract Offer",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "exec": [
-                  "pm.variables.set(\"uuid_contract\", pm.variables.replaceIn('{{$guid}}'));",
-                  "pm.variables.set(\"uuid_perm\", pm.variables.replaceIn('{{$guid}}'));"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "resource",
-                "value": "{{offeredResource}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n    \"@id\": \"https://w3id.org/idsa/autogen/contractOffer/dataset_{{uuid_contract}}\",\n    \"@type\": \"ids:ContractOffer\",\n    \"ids:provider\": {\"@id\": \"{{Coordinator_Connector_URI}}\"},\n    \"ids:permission\": [{\n        \"@type\": \"ids:Permission\",\n        \"@id\": \"https://w3id.org/idsa/autogen/permission/{{uuid_perm}}\",\n        \"ids:action\": [{\"@id\": \"https://w3id.org/idsa/code/USE\"}],\n        \"ids:title\": [{\"@value\": \"Local FL Training Only\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n        \"ids:description\": [{\"@value\": \"Data strictly restricted for Federated Learning algorithms. No raw data access or transfer allowed.\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}],\n        \"ids:target\": {\"@id\": \"{{datasetArtifact}}\"},\n        \"ids:constraint\": [{\n            \"@type\": \"ids:Constraint\",\n            \"@id\": \"https://w3id.org/idsa/autogen/constraint/local_only\",\n            \"ids:leftOperand\": {\"@id\": \"https://w3id.org/idsa/code/PURPOSE\"},\n            \"ids:operator\": {\"@id\": \"https://w3id.org/idsa/code/SAME_AS\"},\n            \"ids:rightOperand\": {\"@value\": \"Federated_Learning_Local_Only\", \"@type\": \"http://www.w3.org/2001/XMLSchema#string\"}\n        }]\n    }],\n    \"ids:prohibition\": [{\n        \"@type\": \"ids:Prohibition\",\n        \"@id\": \"https://w3id.org/idsa/autogen/prohibition/no_distribute\",\n        \"ids:action\": [{\"@id\": \"https://w3id.org/idsa/code/DISTRIBUTE\"}],\n        \"ids:target\": {\"@id\": \"{{datasetArtifact}}\"}\n    }]\n}"
-            },
-            "url": {
-              "raw": "{{ECC_Base_URL}}api/contractOffer/",
-              "host": [
-                "{{ECC_Base_URL}}api"
-              ],
-              "path": [
-                "contractOffer",
-                ""
-              ]
-            },
-            "auth": {
-              "type": "basic",
-              "basic": [
-                {
-                  "key": "username",
-                  "value": "apiUser",
-                  "type": "string"
-                },
-                {
-                  "key": "password",
-                  "value": "passwordApiUser",
-                  "type": "string"
-                }
-              ]
-            }
-          }
+          },
+          "description": "Obtiene el Self-Description completo del ECC seleccionado e imprime en la consola los titulos de los Datasets publicados para verificación."
         }
       ]
     },
@@ -733,7 +571,7 @@
           "response": []
         },
         {
-          "name": "10. Health Check (Todos los Workers)",
+          "name": "10. Health Check (Coordinator)",
           "event": [
             {
               "listen": "test",
@@ -1755,25 +1593,26 @@
       "description": "Verifica los dos endpoints WebSocket de app.py:\n  /ws/fl-status — stream en tiempo real del estado FL (ronda, métricas, estado).\n  /ws/ids-data  — canal IDS entrante del ECC cuando WS_EDGE=true.\n\nPara cada request: en Postman, abre como 'WebSocket Request', conecta y observa los mensajes en tiempo real. Las URLs se construyen desde {{Coordinator_URL}} y el broker, sin hardcodear puertos.",
       "item": [
         {
-          "name": "WS-0: Resolver URLs WebSocket (ejecutar primero)",
+          "name": "WS-0: Resolve URLs",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 — coordinator activo', () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
-                  "const inst = json.instance || '2';",
+                  "pm.test('Environment Ready', () => pm.response.to.have.status(200));",
                   "const base = pm.environment.get('Coordinator_URL') || 'https://localhost:5002';",
                   "const wsBase = base.replace(/^https/, 'wss');",
-                  "pm.environment.set('WS_Coordinator_URL', ${wsBase}/ws/fl-status);",
-                  "pm.environment.set('WS_Worker1_URL', 'wss://localhost:5001/ws/fl-status');",
-                  "pm.environment.set('WS_Worker3_URL', 'wss://localhost:5003/ws/fl-status');",
-                  "pm.environment.set('WS_Worker4_URL', 'wss://localhost:5004/ws/fl-status');",
-                  "pm.environment.set('WS_IDS_Data_URL', ${wsBase}/ws/ids-data);",
-                  "pm.environment.set('WS_Performance_URL', ${base}/ws/performance);",
-                  "pm.environment.set('WS_Tunnel_Status_URL', ${base}/ws/tunnel-status);"
+                  "",
+                  "const setWS = (k, v) => pm.environment.set(k, v);",
+                  "setWS('WS_Coordinator_URL', wsBase + '/ws/fl-status');",
+                  "setWS('WS_Worker1_URL', 'wss://localhost:5001/ws/fl-status');",
+                  "setWS('WS_IDS_Data_URL', wsBase + '/ws/ids-data');",
+                  "setWS('WS_Performance_URL', wsBase + '/ws/performance-live');",
+                  "setWS('WS_Tunnel_Status_URL', wsBase + '/ws/tunnel-status-live');",
+                  "setWS('WS_Logs_URL', wsBase + '/ws/logs');",
+                  "setWS('WS_AI_Insights_URL', wsBase + '/ws/ai-insights');",
+                  "setWS('WS_IDS_Monitor_URL', wsBase + '/ws/ids-monitor');"
                 ]
               }
             }
@@ -1794,7 +1633,7 @@
           }
         },
         {
-          "name": "WS-1: FL Live Monitor — Coordinator",
+          "name": "WS-1: Monitor Coordinator",
           "request": {
             "method": "GET",
             "header": [],
@@ -1812,7 +1651,7 @@
           }
         },
         {
-          "name": "WS-2: FL Live Monitor — Worker-1",
+          "name": "WS-2: Monitor Worker-1",
           "request": {
             "method": "GET",
             "header": [],
@@ -1830,17 +1669,17 @@
           }
         },
         {
-          "name": "WS-3: FL Live Monitor — Worker-3",
+          "name": "WS-3: [LIVE WS] AI Insights",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{WS_Worker3_URL}}",
+              "raw": "{{WS_AI_Insights_URL}}",
               "host": [
-                "{{WS_Worker3_URL}}"
+                "{{WS_AI_Insights_URL}}"
               ]
             },
-            "description": "Stream WebSocket del estado FL del Worker-3."
+            "description": "Canal EXCLUSIVO de IA con persistencia.\n\nMuestra solo el razonamiento semantico de Ollama. Si te conectas tarde, recibiras automaticamente la ultima decision tomada."
           },
           "protocolProfileBehavior": {
             "protocolVersion": "websocket",
@@ -1848,86 +1687,7 @@
           }
         },
         {
-          "name": "WS-4: FL Live Monitor — Worker-4 (FL_OPT_OUT=true)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{WS_Worker4_URL}}",
-              "host": [
-                "{{WS_Worker4_URL}}"
-              ]
-            },
-            "description": "Stream WebSocket del estado FL del Worker-4. Al tener FL_OPT_OUT=true, permanecerá inactivo."
-          },
-          "protocolProfileBehavior": {
-            "protocolVersion": "websocket",
-            "disableCookies": true
-          }
-        },
-        {
-          "name": "WS-5: IDS Data Channel — Coordinator (WS_EDGE=true)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{WS_IDS_Data_URL}}",
-              "host": [
-                "{{WS_IDS_Data_URL}}"
-              ]
-            },
-            "description": "Canal WebSocket de mensajes IDS entrantes del ECC local → DataApp."
-          },
-          "protocolProfileBehavior": {
-            "protocolVersion": "websocket",
-            "disableCookies": true
-          }
-        },
-        {
-          "name": "WS-6: Metrics — WS vs HTTP Performance (REST GET)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
-                  "console.log('=== WS vs HTTP Performance ===');",
-                  "console.log('WS Speedup:', json.summary?.ws_speedup_factor);"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{WS_Performance_URL}}",
-              "host": [
-                "{{WS_Performance_URL}}"
-              ],
-              "path": []
-            },
-            "description": "GET /ws/performance — Métricas de rendimiento WS vs HTTP."
-          }
-        },
-        {
-          "name": "WS-7: Tunnel Status (REST GET)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const json = pm.response.json();",
-                  "console.log('=== WS Tunnel Status ===');",
-                  "console.log('Túneles activos:', json.worker_tunnels_active);"
-                ]
-              }
-            }
-          ],
+          "name": "WS-4: [LIVE WS] Active Tunnels",
           "request": {
             "method": "GET",
             "header": [],
@@ -1935,10 +1695,49 @@
               "raw": "{{WS_Tunnel_Status_URL}}",
               "host": [
                 "{{WS_Tunnel_Status_URL}}"
-              ],
-              "path": []
+              ]
             },
-            "description": "GET /ws/tunnel-status — Estado de los túneles WebSocket de data-plane FL."
+            "description": "Streaming WebSocket LIVE del estado de los tuneles TCP/WS abiertos contra el coordinator."
+          },
+          "protocolProfileBehavior": {
+            "protocolVersion": "websocket",
+            "disableCookies": true
+          }
+        },
+        {
+          "name": "WS-5: [LIVE WS] Performance Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{WS_Performance_URL}}",
+              "host": [
+                "{{WS_Performance_URL}}"
+              ]
+            },
+            "description": "Streaming WebSocket LIVE de las metricas de rendimiento.\n\nMuestra en tiempo real la ventaja del data-plane WS frente al control-plane IDS/HTTP multipart."
+          },
+          "protocolProfileBehavior": {
+            "protocolVersion": "websocket",
+            "disableCookies": true
+          }
+        },
+        {
+          "name": "WS-6: [LIVE WS] System Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{WS_Logs_URL}}",
+              "host": [
+                "{{WS_Logs_URL}}"
+              ]
+            },
+            "description": "Streaming en tiempo real de los logs internos de uvicorn y app.py.\n\nEquivalente a 'docker logs -f', pero visualizado directamente en Postman."
+          },
+          "protocolProfileBehavior": {
+            "protocolVersion": "websocket",
+            "disableCookies": true
           }
         }
       ]

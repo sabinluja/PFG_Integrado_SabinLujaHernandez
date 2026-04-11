@@ -94,7 +94,8 @@ OUTPUT_DIR = os.path.join(DATA_DIR, "output")
 # Rutas de ficheros recibidos via IDS
 ALGO_IDS_PATH   = os.path.join(DATA_DIR, "algorithm.py")
 ALGO_BAKED_PATH = "/app/algorithm.py"
-CONFIG_PATH     = os.path.join(DATA_DIR, "fl_config.json")
+CONFIG_PATH       = os.path.join(DATA_DIR, "fl_config.json")
+SELECTED_CSV_PATH = os.path.join(INPUT_DIR, ".selected_csv")
 
 os.makedirs(INPUT_DIR,  exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -207,6 +208,11 @@ global_event_loop = None
 
 
 # =============================================================================
+# Estado Global para Monitorizacion
+_last_ai_insight = None  # Almacena la ultima decision del LLM para persistencia en WS
+_ai_insight_lock = threading.Lock()
+
+
 # FastAPI
 # =============================================================================
 
@@ -1425,8 +1431,9 @@ def _llm_recommend_dataset(
         "RULES FOR RESPONSE:\n"
         "1. Do not use generic statements like 'The dataset with the highest match count'\n"
         "2. Break down your logical reasoning explicitly in your justification.\n"
-        "3. Output MUST be ONLY a valid JSON object block. NO extra text, NO greetings.\n\n"
-        "4. Always must mention which is the .csv that you have selected.\n\n"
+        "3. Output MUST be ONLY a valid JSON object block. NO extra text, NO greetings.\n"
+        "4. Always mention which is the .csv that you have selected.\n"
+        "5. CRITICAL: Do NOT use double-quotes (\") or literal newlines inside the reasoning text value. Use single quotes (') instead. Make sure it is 100% valid JSON.\n\n"
         "```json\n"
         "{\n"
         "  \"filename\": \"<exact_name_from_list>\",\n"
@@ -1440,24 +1447,53 @@ def _llm_recommend_dataset(
         f"[llm-recommend] Model={LLM_MODEL}  "
         f"Candidatos={[c['filename'] for c in csvs]}"
     )
+    _notify_ws_clients({
+        "event": "llm_thinking",
+        "instance": INSTANCE_ID,
+        "model": LLM_MODEL,
+        "candidates": [c['filename'] for c in csvs],
+        "message": "Analizando semántica de datasets con Ollama..."
+    })
 
+    full_response = ""
     try:
+        # Peticion en modo STREAMING a Ollama
         resp = requests.post(
             LLM_ENDPOINT,
-            json={"model": LLM_MODEL, "prompt": prompt, "stream": False},
+            json={"model": LLM_MODEL, "prompt": prompt, "stream": True},
             timeout=timeout,
             verify=TLS_CERT,
+            stream=True
         )
         resp.raise_for_status()
-        raw_text = resp.json().get("response", "")
+
+        # Procesar los tokens uno a uno
+        for line in resp.iter_lines():
+            if line:
+                chunk = json.loads(line)
+                token = chunk.get("response", "")
+                full_response += token
+                
+                # Notificar a los clientes WebSocket (efecto "Live Typing")
+                if token:
+                    msg = {
+                        "event": "llm_token",
+                        "instance": INSTANCE_ID,
+                        "token": token
+                    }
+                    _notify_ws_clients(msg)
+                    _notify_ai_clients(msg) # Asegurar que llega al canal dedicado ai-insights
+                
+                if chunk.get("done"):
+                    break
 
         import re as _re_llm
         # Extraer bloque JSON admitiendo razonamiento de texto alrededor
-        match = _re_llm.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw_text, _re_llm.DOTALL)
+        match = _re_llm.search(r"```(?:json)?\s*(\{.*?\})\s*```", full_response, _re_llm.DOTALL)
         if not match:
-             match = _re_llm.search(r"(\{.*\})", raw_text, _re_llm.DOTALL)
+             match = _re_llm.search(r"(\{.*\})", full_response, _re_llm.DOTALL)
              
-        json_str = match.group(1) if match else raw_text.strip()
+        json_str = match.group(1) if match else full_response.strip()
         result   = json.loads(json_str)
 
         filename   = result.get("filename", "")
@@ -1483,6 +1519,20 @@ def _llm_recommend_dataset(
             f"[llm-recommend] [OK] Recomendacion: {filename!r} "
             f"(confianza={confidence:.0%})\n"
         )
+        insight_data = {
+            "event": "llm_decision",
+            "instance": INSTANCE_ID,
+            "filename": filename,
+            "confidence": confidence,
+            "reasoning": reasoning
+        }
+        with _ai_insight_lock:
+            global _last_ai_insight
+            _last_ai_insight = insight_data
+
+        _notify_ws_clients(insight_data)
+        _notify_ai_clients(insight_data) # Canal dedicado
+
         return {"filename": filename, "reasoning": reasoning, "confidence": confidence}
 
     except requests.exceptions.ConnectionError:
@@ -1955,6 +2005,10 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         expected = len(PEER_ECC_URLS) + 1
         deadline = time.time() + round_timeout
         while time.time() < deadline:
+            with _fl_lock:
+                if fl_state.get("status") == "idle":
+                    log.warning(f"Ronda {round_num} abortada: el sistema fue reseteado (/reset).")
+                    return
             with _round_lock:
                 if len(_round_weights) >= expected:
                     break
@@ -2104,6 +2158,14 @@ async def ids_data(request: Request):
     mensaje = json.loads(header_val)
     tipo    = mensaje.get("@type", "")
     log.info(f"<- Mensaje IDS: {tipo}")
+
+    _notify_ids_monitor({
+        "event": "ids_request_received",
+        "instance": INSTANCE_ID,
+        "type": tipo,
+        "sender": mensaje.get("ids:issuerConnector", {}).get("@id", "unknown"),
+        "payload_snippet": payload_val[:150] if payload_val else ""
+    })
 
     try:
         self_desc    = _get_self_description()
@@ -2365,6 +2427,9 @@ async def ids_data(request: Request):
                     "from"  : sender,
                 }))
             with _round_lock:
+                if fl_state.get("current_round") != round_num:
+                    log.warning(f"Ignorando pesos locales de worker-{sender} para ronda {round_num} (ronda actual: {fl_state.get('current_round')})")
+                    return _multipart_response(resp_h, json.dumps({"status": "ignored", "reason": "outdated_round"}))
                 _round_weights[sender] = {
                     "weights_b64": weights_b64,
                     "n_samples"  : n_samples,
@@ -2404,6 +2469,9 @@ async def ids_data(request: Request):
                 try:
                     deadline_algo = time.time() + 15
                     while time.time() < deadline_algo:
+                        with _fl_lock:
+                            if fl_state.get("status") == "idle":
+                                return
                         if os.path.exists(ALGO_IDS_PATH) or os.path.exists(ALGO_BAKED_PATH):
                             break
                         log.info(f"[fl_global_weights] Esperando algorithm.py... (ronda {round_num})")
@@ -2412,6 +2480,10 @@ async def ids_data(request: Request):
                         log.error(f"[fl_global_weights] algorithm.py no disponible tras 15s -- ronda {round_num} abortada")
                         return
                     result = _train_local(global_weights_b64, round_num, _my_selected_csv)
+                    with _fl_lock:
+                        if fl_state.get("status") == "idle":
+                            log.warning(f"Ronda {round_num} cancelada durante train_local. Ignorando resultados descartan envío local.")
+                            return
                     _send_local_weights(result["weights_b64"], result["n_samples"],
                                         result["metrics"], round_num)
                 except Exception as exc:
@@ -2955,13 +3027,31 @@ def _publish_local_csvs() -> dict:
         if not catalogs:
             return {"error": "No se encontro ningun resourceCatalog en el ECC"}
         catalog_id = catalogs[0].get("@id", "")
+        
+        # Extraer recursos ya registrados para no duplicar
+        existing_resources = catalogs[0].get("ids:offeredResource", [])
+        existing_titles = []
+        for r in existing_resources:
+            titles = r.get("ids:title", [])
+            if isinstance(titles, list) and len(titles) > 0:
+                val = titles[0].get("@value", "")
+                if val: existing_titles.append(val)
+                
     except Exception as e:
         return {"error": f"Error obteniendo catalogo: {e}"}
 
     published = []
+    skipped   = []
     
     for c in csvs:
         fname = c["filename"]
+        target_title = f"Dataset: {fname}"
+        
+        if target_title in existing_titles:
+            log.info(f"[publish-datasets] {fname} ya esta publicado en el catalogo. Omitiendo.")
+            skipped.append(fname)
+            continue
+            
         try:
             # 1. Resource
             import uuid
@@ -2987,7 +3077,7 @@ def _publish_local_csvs() -> dict:
             metadata_repr_id = f"https://w3id.org/idsa/autogen/representation/meta_{uuid.uuid4()}"
             cols_str = ", ".join(c["columns"])
             metadata_desc = (
-                f"Informacion exhaustiva del Dataset para evaluacion IA/Ollama:\n"
+                f"Informacion exhaustiva del Dataset:\n"
                 f"- Nombre de Fichero: {fname}\n"
                 f"- Numero Total de Filas (Registros): {c.get('rows', 'Desconocido')}\n"
                 f"- Tamano en Disco: {c.get('size_mb', '0')} MB\n"
@@ -3065,7 +3155,13 @@ def _publish_local_csvs() -> dict:
         except Exception as e:
             log.error(f"[publish-datasets] Error publicando {fname}: {e}")
             
-    return {"status": "success", "published_count": len(published), "published": published}
+    return {
+        "status": "success", 
+        "published_count": len(published), 
+        "published": published,
+        "skipped_count": len(skipped),
+        "skipped": skipped
+    }
 
 
 @app.post("/catalog/publish-datasets")
@@ -3406,103 +3502,101 @@ async def fl_negotiate():
 
         log.info(
             f"[/fl/negotiate] Negociando con worker-{peer_worker_id} "
-            f"via IDS ContractRequestMessage -> {peer_dataapp_url}/data"
+            f"via IDS ContractRequestMessage -> ECC {ecc_url}  "
+            f"(ECC valida token DAPS antes de enrutar al DataApp)"
         )
 
+        # Payload del ContractRequest FL
+        _contract_payload = {
+            "@context"      : _ids_context(),
+            "@type"         : "ids:ContractRequest",
+            "@id"           : f"https://w3id.org/idsa/autogen/contractRequest/fl_nego_{uuid.uuid4()}",
+            "ids:permission": [],
+            "ids:provider"  : {"@id": uri},
+            "ids:obligation": [], "ids:prohibition": [],
+            "ids:consumer"  : {"@id": CONNECTOR_URI},
+        }
+
+        # -- Paso 1: ContractRequestMessage al ECC del peer (valida DAPS) --------
+        # El ECC (puerto 8889) valida el token DAT contra Omejdn JWKS y reenvía
+        # al DataApp via /ws/ids-data. El DataApp responde segun FL_OPT_OUT.
+        # Si el ECC no responde, se hace fallback directo al DataApp.
         try:
-            # El peer aplica FL_OPT_OUT en su handler ContractRequestMessage
-            # y responde con ContractAgreementMessage (aceptado) o
-            # RejectionMessage (rechazado / opt-out).
-            # Usamos be-dataapp-workerN:8500/data como destino (no ECC 8889).
+            ids_result = _ids_send(
+                forward_to_url       = ecc_url,      # https://ecc-workerN:8889/data
+                forward_to_connector = uri,
+                message_type         = "ids:ContractRequestMessage",
+                payload              = _contract_payload,
+            )
+            log.info(
+                f"[/fl/negotiate] Respuesta IDS via ECC de worker-{peer_worker_id}: "
+                f"@type={ids_result.get('@type','?')!r}  reason={ids_result.get('reason','')}"
+            )
+        except Exception as _ecc_exc:
+            log.warning(
+                f"[/fl/negotiate] ECC de worker-{peer_worker_id} no responde ({_ecc_exc}). "
+                f"Fallback al DataApp directo (sin validacion DAPS en peer ECC)."
+            )
             ids_result = _ids_send(
                 forward_to_url       = f"{peer_dataapp_url}/data",
                 forward_to_connector = uri,
                 message_type         = "ids:ContractRequestMessage",
-                payload={
-                    "@context"      : _ids_context(),
-                    "@type"         : "ids:ContractRequest",
-                    "@id"           : f"https://w3id.org/idsa/autogen/contractRequest/fl_nego_{uuid.uuid4()}",
-                    "ids:permission": [],
-                    "ids:provider"  : {"@id": uri},
-                    "ids:obligation": [], "ids:prohibition": [],
-                    "ids:consumer"  : {"@id": CONNECTOR_URI},
-                },
+                payload              = _contract_payload,
             )
 
-            ids_type = ids_result.get("@type", "")
+        # -- Paso 2: Evaluar la respuesta (viene del ECC o del fallback DataApp) -
+        ids_type = ids_result.get("@type", "")
 
-            if "ContractAgreement" in ids_type:
-                transfer_contract_id = ids_result.get("@id", f"ids-agreement-worker{peer_worker_id}")
-                log.info(f"[/fl/negotiate] worker-{peer_worker_id} ACEPTO [OK]  IDS ContractAgreement={transfer_contract_id}")
-                accepted.append({
-                    "connector_uri"    : uri,
-                    "ecc_url"          : ecc_url,
-                    "match_ratio"      : worker["match_ratio"],
-                    "transfer_contract": transfer_contract_id,
-                    "selected_csv"     : sel_csv,
-                })
-                # -- Notificar al peer sus datos de coordinator para que abra el tunel WS --
-                # (solo si el peer lo soporta -- ignorar errores)
-                try:
-                    requests.post(
-                        f"{peer_dataapp_url}/fl/accept-negotiation",
-                        json={
-                            "coordinator_uri": CONNECTOR_URI,
-                            "coordinator_ecc": my_ecc_url,
-                            "selected_csv"   : sel_csv,
-                        },
-                        timeout=10,
-                        verify=TLS_CERT,
-                    )
-                except Exception:
-                    pass   # El tunel WS se iniciara en /fl/start de todos modos
-
-            elif ("Rejection" in ids_type
-                  or "rejection" in ids_result.get("reason", "")
-                  or ids_result.get("status") == "rejected"):
-                reason = ids_result.get("reason", "ids_rejection")
-                msg    = ids_result.get("message", str(ids_result.get("ids:rejectionReason", "")))
-                log.info(
-                    f"[/fl/negotiate] worker-{peer_worker_id} RECHAZO (IDS) -- {reason}: {msg}"
-                )
-                rejected.append({
-                    "connector_uri": uri,
-                    "ecc_url"      : ecc_url,
-                    "reason"       : reason,
-                    "message"      : msg,
-                })
-
-            else:
-                # Respuesta inesperada -- tratar como error
-                log.warning(
-                    f"[/fl/negotiate] worker-{peer_worker_id} respuesta IDS inesperada: "
-                    f"{ids_type!r} -- {str(ids_result)[:200]}"
-                )
-                rejected.append({
-                    "connector_uri": uri,
-                    "ecc_url"      : ecc_url,
-                    "reason"       : "unexpected_ids_response",
-                    "message"      : str(ids_result)[:200],
-                })
-
-        except requests.exceptions.ConnectionError as ce:
-            log.error(
-                f"[/fl/negotiate] No se pudo conectar con DataApp de worker-{peer_worker_id} "
-                f"en {peer_dataapp_url}: {ce}"
-            )
-            rejected.append({
-                "connector_uri": uri,
-                "ecc_url"      : ecc_url,
-                "reason"       : "error",
-                "message"      : str(ce),
+        if "ContractAgreement" in ids_type:
+            transfer_contract_id = ids_result.get("@id", f"ids-agreement-worker{peer_worker_id}")
+            log.info(f"[/fl/negotiate] worker-{peer_worker_id} ACEPTO [OK]  IDS ContractAgreement={transfer_contract_id}")
+            accepted.append({
+                "connector_uri"    : uri,
+                "ecc_url"          : ecc_url,
+                "match_ratio"      : worker["match_ratio"],
+                "transfer_contract": transfer_contract_id,
+                "selected_csv"     : sel_csv,
             })
-        except Exception as exc:
-            log.error(f"[/fl/negotiate] Error negociando con worker-{peer_worker_id}: {exc}")
+            # Notificar al peer sus datos de coordinator para que abra el tunel WS
+            try:
+                requests.post(
+                    f"{peer_dataapp_url}/fl/accept-negotiation",
+                    json={
+                        "coordinator_uri": CONNECTOR_URI,
+                        "coordinator_ecc": my_ecc_url,
+                        "selected_csv"   : sel_csv,
+                    },
+                    timeout=10,
+                    verify=TLS_CERT,
+                )
+            except Exception:
+                pass   # El tunel WS se iniciara en /fl/start de todos modos
+
+        elif ("Rejection" in ids_type
+              or "rejection" in ids_result.get("reason", "")
+              or ids_result.get("status") == "rejected"):
+            reason = ids_result.get("reason", "ids_rejection")
+            msg    = ids_result.get("message", str(ids_result.get("ids:rejectionReason", "")))
+            log.info(
+                f"[/fl/negotiate] worker-{peer_worker_id} RECHAZO (IDS) -- {reason}: {msg}"
+            )
             rejected.append({
                 "connector_uri": uri,
                 "ecc_url"      : ecc_url,
-                "reason"       : "error",
-                "message"      : str(exc),
+                "reason"       : reason,
+                "message"      : msg,
+            })
+
+        else:
+            log.warning(
+                f"[/fl/negotiate] worker-{peer_worker_id} respuesta IDS inesperada: "
+                f"{ids_type!r} -- {str(ids_result)[:200]}"
+            )
+            rejected.append({
+                "connector_uri": uri,
+                "ecc_url"      : ecc_url,
+                "reason"       : "unexpected_ids_response",
+                "message"      : str(ids_result)[:200],
             })
 
     with _negotiate_lock:
@@ -3684,26 +3778,52 @@ def health():
 
 @app.get("/status")
 def status():
-    cfg = _load_fl_config()
-    csv_files = [f for f in os.listdir(INPUT_DIR) if f.endswith(".csv")]
+    """Estado extendido para Postman y monitorizacion."""
     try:
-        csv_sel = _csv_path()
-    except FileNotFoundError:
+        cfg = _load_fl_config()
+        csv_files = [f for f in os.listdir(INPUT_DIR) if f.endswith(".csv")]
+        
+        # Obtener CSV seleccionado de forma segura
         csv_sel = None
-    return {
-        "instance"        : INSTANCE_ID,
-        "role"            : "coordinator" if is_coordinator else "worker",
-        "algorithm_loaded": os.path.exists(ALGO_IDS_PATH),
-        "config_loaded"   : os.path.exists(CONFIG_PATH),
-        "fl_config"       : cfg if os.path.exists(CONFIG_PATH) else None,
-        "csv_available"   : csv_files,
-        "csv_selected"    : csv_sel,
-        "coordinator_ecc" : f"https://{ECC_HOSTNAME}:8889/data" if is_coordinator else coordinator_ecc_url,
-        "peer_eccs"       : PEER_ECC_URLS,
-        "fl_status"       : fl_state["status"],
-        "fl_round"        : fl_state["current_round"],
-        "fl_total_rounds" : fl_state["total_rounds"],
-    }
+        if os.path.exists(SELECTED_CSV_PATH):
+            try:
+                csv_sel = _csv_path()
+            except Exception:
+                pass
+
+        return {
+            "instance"        : INSTANCE_ID,
+            "role"            : "coordinator" if is_coordinator else "worker",
+            "algorithm_loaded": os.path.exists(ALGO_IDS_PATH),  # Solo la version dinamica recibida via IDS
+            "config_loaded"   : os.path.exists(CONFIG_PATH),
+            "fl_config"       : cfg if os.path.exists(CONFIG_PATH) else None,
+            "csv_available"   : csv_files,
+            "csv_selected"    : csv_sel,
+            "coordinator_ecc" : f"https://{ECC_HOSTNAME}:8889/data" if is_coordinator else coordinator_ecc_url,
+            "peer_eccs"       : PEER_ECC_URLS,
+            "fl_status"       : fl_state.get("status", "idle"),
+            "fl_round"        : fl_state.get("current_round", 0),
+            "fl_total_rounds" : fl_state.get("total_rounds", 0),
+        }
+    except Exception as e:
+        log.error(f"[status-500] Error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/llm-status")
+def get_llm_status():
+    """Verifica si el motor de IA (Ollama) esta disponible."""
+    try:
+        # Intenta una peticion ligera a Ollama
+        r = requests.get(f"{LLM_ENDPOINT.rsplit('/', 2)[0]}/api/tags", timeout=3)
+        return {
+            "status": "online" if r.status_code == 200 else "error",
+            "model": LLM_MODEL,
+            "engine": "Ollama",
+            "details": r.json() if r.status_code == 200 else str(r.status_code)
+        }
+    except Exception as e:
+        return {"status": "offline", "error": str(e)}
 
 
 @app.get("/fl/status")
@@ -3802,6 +3922,9 @@ async def ws_fl_training(websocket: WebSocket, worker_id: str):
                 metrics     = data.get("metrics")
                 
                 with _round_lock:
+                    if fl_state.get("current_round") != round_num:
+                        log.warning(f"[WS FL-Train] Ignorando pesos de worker-{sender} para ronda {round_num} (ronda actual: {fl_state.get('current_round')})")
+                        continue
                     _round_weights[sender] = {
                         "weights_b64": weights_b64,
                         "n_samples"  : n_samples,
@@ -3943,6 +4066,28 @@ class _WSConnectionManager:
 
 
 _ws_manager = _WSConnectionManager()
+_ws_ai_manager = _WSConnectionManager()
+_ws_ids_monitor_manager = _WSConnectionManager() # Monitor de trazas IDS
+
+
+def _notify_ai_clients(data: dict):
+    """Notifica al canal exclusivo de IA."""
+    try:
+        global global_event_loop
+        if global_event_loop and global_event_loop.is_running():
+            asyncio.run_coroutine_threadsafe(_ws_ai_manager.broadcast(data), global_event_loop)
+    except Exception:
+        pass
+
+
+def _notify_ids_monitor(data: dict):
+    """Envia trazas de paquetes IDS al monitor de Postman."""
+    try:
+        global global_event_loop
+        if global_event_loop and global_event_loop.is_running():
+            asyncio.run_coroutine_threadsafe(_ws_ids_monitor_manager.broadcast(data), global_event_loop)
+    except Exception:
+        pass
 
 
 def _notify_ws_clients(data: dict):
@@ -3976,12 +4121,23 @@ def _notify_ws_clients(data: dict):
 # =============================================================================
 
 @app.get("/ws/tunnel-status")
+@app.get("/ws/tunnel-status/")
 def ws_tunnel_status():
-    """
-    Observabilidad de los tuneles WebSocket activos.
-    Permite a pfg_ids_fl_flow.py verificar si los canales
-    de alta velocidad estan realmente establecidos.
-    """
+    """Version REST GET del estado de tuneles."""
+    return _get_tunnel_status_data()
+
+@app.websocket("/ws/tunnel-status-live")
+async def ws_tunnel_status_live(websocket: WebSocket):
+    """Version WebSocket: Envia el estado de tuneles cada 2 segundos."""
+    await websocket.accept()
+    try:
+        while True:
+            await websocket.send_json(_get_tunnel_status_data())
+            await asyncio.sleep(2)
+    except Exception:
+        pass
+
+def _get_tunnel_status_data():
     return {
         "instance"                : INSTANCE_ID,
         "fl_status_clients"       : len(_ws_manager._clients),
@@ -3992,13 +4148,23 @@ def ws_tunnel_status():
 
 
 @app.get("/ws/performance")
+@app.get("/ws/performance/")
 def ws_performance():
-    """
-    Metricas de rendimiento comparando WebSocket vs HTTP para
-    la transferencia de pesos del modelo en Federated Learning.
-    Permite demostrar la ventaja del data-plane WS frente al
-    control-plane IDS/HTTP multipart.
-    """
+    """Version REST GET de las metricas de rendimiento."""
+    return _get_performance_data()
+
+@app.websocket("/ws/performance-live")
+async def ws_performance_live(websocket: WebSocket):
+    """Version WebSocket: Streaming de metricas de rendimiento cada 2 segundos."""
+    await websocket.accept()
+    try:
+        while True:
+            await websocket.send_json(_get_performance_data())
+            await asyncio.sleep(2)
+    except Exception:
+        pass
+
+def _get_performance_data():
     with _ws_perf_lock:
         stats = dict(_ws_perf_stats)
         history = list(stats.pop("history", []))
@@ -4112,6 +4278,12 @@ async def ws_ids_data(websocket: WebSocket):
                 await websocket.send_text(json.dumps({"error": "missing header"}))
                 continue
 
+            _notify_ids_monitor({
+                "event": "ids_proxy_request",
+                "instance": INSTANCE_ID,
+                "payload_snippet": payload_val[:150] if payload_val else ""
+            })
+
             # -- Reutiliza la logica de /data creando un Request sintetico ----
             # Para no duplicar codigo, construimos un multipart encoder
             # simulando un POST request valido compatible con ids_data.
@@ -4141,6 +4313,98 @@ async def ws_ids_data(websocket: WebSocket):
         log.info(f"[WS /ids-data] ECC/cliente desconectado ({client_host})")
     except Exception as exc:
         log.error(f"[WS /ids-data] Error inesperado: {exc}", exc_info=True)
+
+
+@app.websocket("/ws/logs")
+async def ws_logs(websocket: WebSocket):
+    """
+    Streaming de logs en tiempo real via WebSocket.
+    Permite ver lo que pasa en el contenedor sin usar docker logs.
+    """
+    await websocket.accept()
+    log.info(f"[WS /logs] Cliente suscrito a logs (Worker {INSTANCE_ID})")
+    try:
+        # 1. Enviar las ultimas 20 lineas como contexto inicial
+        if os.path.exists(log_file):
+            with open(log_file, "r") as f:
+                lines = f.readlines()
+                for line in lines[-20:]:
+                    await websocket.send_text(line.strip())
+
+        # 2. Tail -f del archivo de logs
+        async def tail_log():
+            if not os.path.exists(log_file):
+                return
+            with open(log_file, "r") as f:
+                f.seek(0, os.SEEK_END)
+                while True:
+                    line = f.readline()
+                    if not line:
+                        await asyncio.sleep(0.5)
+                        continue
+                    await websocket.send_text(line.strip())
+
+        await tail_log()
+    except WebSocketDisconnect:
+        log.info(f"[WS /logs] Cliente desconectado")
+    except Exception as e:
+        log.error(f"[WS /logs] Error: {e}")
+
+
+@app.websocket("/ws/ai-insights")
+async def ws_ai_insights(websocket: WebSocket):
+    """
+    Canal exclusivo de IA con PERSISTENCIA.
+    Al conectar, recibe inmediatamente la ultima decision tomada por el LLM.
+    """
+    await _ws_ai_manager.connect(websocket)
+    try:
+        # Enviar la ultima decision como contexto inmediato si existe
+        with _ai_insight_lock:
+            if _last_ai_insight:
+                await websocket.send_json(_last_ai_insight)
+            else:
+                await websocket.send_json({
+                    "event": "info",
+                    "message": "Esperando primera recomendacion de IA...",
+                    "instance": INSTANCE_ID
+                })
+
+        # Mantener conexion activa con un heartbeat cada 30s
+        while True:
+            # Enviar un latido tecnico para evitar timeouts de proxies/Postman
+            await websocket.send_json({"event": "ping", "instance": INSTANCE_ID})
+            # Esperar una respuesta o tiempo de espera
+            try:
+                await asyncio.wait_for(websocket.receive_text(), timeout=30)
+            except asyncio.TimeoutError:
+                # El timeout es normal, volvemos a enviar el ping
+                continue
+    except WebSocketDisconnect:
+        await _ws_ai_manager.disconnect(websocket)
+    except Exception:
+        await _ws_ai_manager.disconnect(websocket)
+
+
+@app.websocket("/ws/ids-monitor")
+async def ws_ids_monitor(websocket: WebSocket):
+    """
+    Monitor de trafico IDS LIVE. 
+    Muestra los paquetes IDS (Request/Response) que pasan por el DataApp.
+    """
+    await _ws_ids_monitor_manager.connect(websocket)
+    # Mantener conexion activa con un heartbeat cada 30s
+    try:
+        while True:
+            await websocket.send_json({"event": "ping", "instance": INSTANCE_ID})
+            try:
+                await asyncio.wait_for(websocket.receive_text(), timeout=30)
+            except asyncio.TimeoutError:
+                continue
+    except WebSocketDisconnect:
+        await _ws_ids_monitor_manager.disconnect(websocket)
+    except Exception:
+        await _ws_ids_monitor_manager.disconnect(websocket)
 
 
 if __name__ == "__main__":

@@ -558,7 +558,7 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
                 field("  CSV (Seleccionado por columnas)", math_csv, indent=8)
                 field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
         else:
-            print(f"\n        {YELLOW}⚠️ LLM Fallback:{RESET} La validación por IA no devolvió un formato válido o dio Timeout.")
+            print(f"\n        {YELLOW}LLM Fallback:{RESET} La validación por IA no devolvió un formato válido o dio Timeout.")
             print(f"        {YELLOW}Activando plan de rescate: se aplicará la delegación 100% matemática.{RESET}")
             field("  CSV (Seleccionado por columnas)", math_csv, indent=8)
             field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
@@ -1525,6 +1525,7 @@ def fase0b_verificar_catalogo_coordinator(coordinator_url, cid, req_timeout):
     
     ecc_port = 8090 if int(cid) == 1 else 8090 + int(cid)
     info(f"Comando Manual: https://localhost:{ecc_port}/api/selfDescription/")
+    info(f"Comando Manual: https://localhost:5002/ids/self-description/")
     
     try:
         r = SESSION.get(
@@ -1545,6 +1546,7 @@ def fase0b_verificar_catalogo_coordinator(coordinator_url, cid, req_timeout):
             if "Dataset:" in title:
                 datasets.append(title.replace("Dataset: ", "").strip())
         if datasets:
+            print("\n")
             info(f"Se encontraron {len(datasets)} Dataset(s) publicados en el Coordinator:")
             for d in datasets:
                 print(f"    {CYAN}[CSV]{RESET} {GRAY}{d}{RESET}")
