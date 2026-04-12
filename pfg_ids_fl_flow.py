@@ -1749,6 +1749,68 @@ def main():
         except Exception as e:
             warn(f"No se pudieron cargar las métricas de rendimiento: {e}")
 
+    # --- CLEARING HOUSE AUDIT ---
+    try:
+        import requests
+        print(f"  {CYAN}🏛️ AUDITORÍA CLEARING HOUSE (Notario IDS){RESET}")
+        print(f"  {CYAN}----------------------------------------------------------------------{RESET}")
+        
+        try:
+            r_integ = requests.get("http://localhost:8100/api/transactions/audit/integrity", timeout=req_timeout)
+            if r_integ.ok:
+                data = r_integ.json()
+                status = data.get("status", "?")
+                c = GREEN if status == "INTEGRITY_OK" else \
+                   (YELLOW if status == "CORRUPTED" else RED)
+                print(f"    {BOLD}Estado Cadena Hash (Integridad){RESET}: {c}{status}{RESET}")
+        except:
+            pass
+
+        try:
+            r_stats = requests.get("http://localhost:8100/api/stats/system", timeout=req_timeout)
+            if r_stats.ok:
+                s_data = r_stats.json().get("data", {}) if "data" in r_stats.json() else r_stats.json()
+                total = s_data.get("total_transactions", "?")
+                print(f"    {BOLD}Muestreo Auditado (Nº Logs){RESET}    : {total} transacciones IDS")
+        except:
+            pass
+            
+        print()
+        print(f"  ► Explora el historial completo del notario digital en:")
+        print(f"      {MAGENTA}http://localhost:8100/api/transactions?page_size=1000&sort_order=asc{RESET}")
+        print(f"  ► Explora las métricas de uso aquí:")
+        print(f"      {MAGENTA}http://localhost:8100/api/stats/system{RESET}")
+        print(f"  ► Exportar base de datos a archivo:")
+        print(f"      {MAGENTA}http://localhost:8100/api/export/json{RESET}")
+        print()
+    except Exception as e:
+        warn(f"No se pudo consultar el Clearing House: {e}")
+
+    # =============================================================================
+    # DESCARGA AUTOMATIZADA DEL REGISTRO IDS (CLEARING HOUSE EXPORT)
+    # =============================================================================
+    try:
+        import os, datetime
+        exports_dir = os.path.join(os.getcwd(), "ClearingHouse", "exports")
+        os.makedirs(exports_dir, exist_ok=True)
+        
+        timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        export_filename = f"fl_ids_audit_report_{timestamp_str}.json"
+        export_path = os.path.join(exports_dir, export_filename)
+        
+        print(f"  {CYAN}💾 DESCARGANDO REPORTE DE AUDITORÍA (Notario IDS)...{RESET}")
+        
+        r_export = requests.get("http://localhost:8100/api/export/json", timeout=10)
+        if r_export.ok:
+            with open(export_path, "w", encoding="utf-8") as f:
+                f.write(r_export.text)
+            print(f"    {GREEN}OK  Reporte oficial guardado en: {export_path}{RESET}")
+        else:
+            print(f"    {YELLOW}WARN No se pudo descargar el reporte (HTTP {r_export.status_code}){RESET}")
+    except Exception as e:
+        print(f"    {YELLOW}WARN Error al automatizar la descarga del Clearing House: {e}{RESET}")
+    print()
+
     info(f"GET {coordinator_url}/fl/status")
     info(f"GET {coordinator_url}/fl/results")
     info(f"GET {coordinator_url}/fl/model")

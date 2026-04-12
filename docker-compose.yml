@@ -1,7 +1,7 @@
 services:
 
   # ===========================================================================
-  # DAPS — omejdn-server + nginx (imágenes exactas del IDS Testbed)
+  # DAPS — omejdn-server + nginx
   #
   # Arquitectura idéntica al testbed:
   #   omejdn-server  → idstestbed/omejdn-server:1.6.0  (solo interno)
@@ -57,7 +57,7 @@ services:
       start_period: 10s
 
   # ===========================================================================
-  # BROKER — IDS Metadata Broker (imágenes exactas del IDS Testbed)
+  # BROKER — IDS Metadata Broker
   #
   # Arquitectura idéntica al testbed: reverseproxy + core + fuseki
   #   broker-reverseproxy → idstestbed/mdb-reverseproxy:5.0.3
@@ -125,6 +125,10 @@ services:
       - "3030"
     volumes:
       - broker_fuseki_data:/fuseki
+
+  # ===========================================================================
+  # WORKER 1
+  # ===========================================================================
 
   ecc-worker1:
     image: rdlabengpa/ids_execution_core_container:v1.14.8
@@ -211,6 +215,7 @@ services:
       - LLM_MODEL=${LLM_MODEL}
       - API_USER=${API_USER}
       - API_PASS=${API_PASS}
+      - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
     volumes:
       - ./ia-dataapp/data/worker1:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -220,6 +225,7 @@ services:
       - ./DAPS/keys/worker1.key:/cert/daps/worker.key
     depends_on:
       - ecc-worker1
+      - clearinghouse
 
   # ===========================================================================
   # WORKER 2
@@ -312,6 +318,7 @@ services:
       - LLM_MODEL=${LLM_MODEL}
       - API_USER=${API_USER}
       - API_PASS=${API_PASS}
+      - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
     volumes:
       - ./ia-dataapp/data/worker2:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -321,6 +328,7 @@ services:
       - ./DAPS/keys/worker2.key:/cert/daps/worker.key
     depends_on:
       - ecc-worker2
+      - clearinghouse
 
   # ===========================================================================
   # WORKER 3
@@ -413,6 +421,7 @@ services:
       - LLM_MODEL=${LLM_MODEL}
       - API_USER=${API_USER}
       - API_PASS=${API_PASS}
+      - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
     volumes:
       - ./ia-dataapp/data/worker3:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -422,6 +431,7 @@ services:
       - ./DAPS/keys/worker3.key:/cert/daps/worker.key
     depends_on:
       - ecc-worker3
+      - clearinghouse
 
   # ===========================================================================
   # WORKER 4 — Sin acceso al modelo FL (solo intenta acceder, es rechazado)
@@ -521,6 +531,7 @@ services:
       - LLM_MODEL=${LLM_MODEL}
       - API_USER=${API_USER}
       - API_PASS=${API_PASS}
+      - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
     volumes:
       - ./ia-dataapp/data/worker4:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -530,6 +541,7 @@ services:
       - ./DAPS/keys/worker4.key:/cert/daps/worker.key
     depends_on:
       - ecc-worker4
+      - clearinghouse
 
   # ===========================================================================
   # LLM — Ollama Local
@@ -553,6 +565,59 @@ services:
       retries: 40
       start_period: 30s
 
+  # ===========================================================================
+  # CLEARING HOUSE — IDS Audit & Logging Service
+  # Notario digital IDS: registra y encadena (hash) todos los mensajes
+  # intercambiados entre conectores para garantizar trazabilidad y soberanía.
+  # Puerto host 8100 → 8000
+  # ===========================================================================
+  clearinghouse:
+    build:
+      context: ./ClearingHouse
+      dockerfile: Dockerfile
+    image: clearinghouse:latest
+    container_name: clearinghouse
+    networks:
+      - idsa
+    ports:
+      - "8100:8000"
+    environment:
+      - CH_MONGO_URI=mongodb://mongo-ch:27017
+      - CH_MONGO_DB_NAME=clearinghouse
+      - CH_DEBUG=false
+      - CH_LOG_LEVEL=INFO
+      - CH_ENABLE_AUTH=false
+      - CH_REQUIRE_DAT_TOKEN=false
+      - CH_VALIDATE_IDS_MESSAGES=false
+      - CH_ENABLE_ALERTS=true
+      - CH_LOG_RETENTION_DAYS=90
+    depends_on:
+      mongo-ch:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5)" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    logging:
+      options:
+        max-size: "50M"
+
+  mongo-ch:
+    image: mongo:7.0
+    container_name: mongo-ch
+    networks:
+      - idsa
+    volumes:
+      - mongo_ch_data:/data/db
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
 networks:
   idsa: {} # red única — todos los contenedores se ven entre sí
 
@@ -563,3 +628,4 @@ volumes:
   ecc_worker4_data: {}
   broker_fuseki_data: {}
   ollama_data: {}
+  mongo_ch_data: {}

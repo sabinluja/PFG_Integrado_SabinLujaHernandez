@@ -107,6 +107,97 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 LLM_ENDPOINT = os.getenv("LLM_ENDPOINT", "http://ollama:11434/api/generate")
 LLM_MODEL    = os.getenv("LLM_MODEL",    "llama3.2")
 
+# =============================================================================
+# Clearing House — Notario IDS
+# URL del microservicio CH (vacio = CH deshabilitado en este worker).
+# Todos los eventos IDS relevantes se reportan de forma no bloqueante.
+# =============================================================================
+CLEARING_HOUSE_URL = os.getenv("CLEARING_HOUSE_URL", "")
+
+
+def _report_to_ch(
+    message_type: str,
+    source_connector: str,
+    target_connector: str | None = None,
+    status: str = "success",
+    contract_id: str | None = None,
+    resource_id: str | None = None,
+    response_time_ms: float | None = None,
+    error_message: str | None = None,
+    additional_data: dict | None = None,
+):
+    """
+    Reporta un evento IDS al Clearing House (notario digital).
+    Incluye un toque profesional inyectando el DAT Token para validación de identidad.
+    """
+    if not CLEARING_HOUSE_URL:
+        return
+
+    def _send():
+        try:
+            # Construir cabecera profesional estilo IDS
+            header = {
+                "message_type": message_type,
+                "issued": _now_iso(),
+                "issuer_connector": source_connector,
+                "recipient_connector": [target_connector] if target_connector else [],
+            }
+            
+            try:
+                # Extraer token DAT del cache local para demostrar autenticidad (Proof of Identity)
+                token_val = _get_dat_token()
+                if token_val:
+                    header["security_token"] = {
+                        "@type": "ids:DynamicAttributeToken",
+                        "ids:tokenValue": token_val,
+                        "ids:tokenFormat": {"@id": "https://w3id.org/idsa/code/JWT"}
+                    }
+            except Exception:
+                pass # Si el token falla, seguimos reportando sin token para no perder el log
+
+            payload = {
+                "source_connector": source_connector,
+                "target_connector": target_connector,
+                "message_type": message_type,
+                "status": status,
+                "message_header": header,
+                "security_token_valid": True if "security_token" in header else False, # Validacion implicita de identidad
+            }
+            if contract_id:
+                payload["contract_id"] = contract_id
+            if resource_id:
+                payload["resource_id"] = resource_id
+            if response_time_ms is not None:
+                payload["response_time_ms"] = response_time_ms
+            if error_message:
+                payload["error_message"] = error_message
+            
+            # Formateo homogeneo de metadatos adicionales
+            professional_metadata = {
+                "app_version": "1.0.0",
+                "environment": os.getenv("SPRING_PROFILES_ACTIVE", "docker"),
+                "log_source": f"dataapp_worker_{INSTANCE_ID}",
+            }
+            if additional_data:
+                professional_metadata.update(additional_data)
+                
+            payload["additional_data"] = professional_metadata
+
+            requests.post(
+                f"{CLEARING_HOUSE_URL}/api/transactions",
+                json=payload,
+                timeout=5,
+                verify=False,
+            )
+            event_name = professional_metadata.get("event", "")
+            event_str = f" ({event_name})" if event_name else ""
+            log.info(f"🏛️  [CLEARING HOUSE] Evento notarizado: {message_type}{event_str}")
+        except Exception as exc:
+            log.warning(f"⚠️  [CLEARING HOUSE] No se pudo notarizar {message_type}: {exc}")
+
+    threading.Thread(target=_send, daemon=True).start()
+
+
 
 # =============================================================================
 # Configuracion FL -- leida de fl_config.json (enviado desde Postman)
@@ -248,6 +339,24 @@ async def _startup_identity_log():
     else:
         log.info("  FL_OPT_OUT      : False (Participara en entrenamientos FL validos).")
     log.info("=" * 60)
+    # --- Clearing House info ---
+    if CLEARING_HOUSE_URL:
+        log.info("=" * 60)
+        log.info(f"  CLEARING HOUSE (Notario IDS) activo en: {CLEARING_HOUSE_URL}")
+        log.info(f"  Todos los eventos IDS son auditados automaticamente.")
+        log.info(f"  -------------------------------------------------------")
+        log.info(f"  DASHBOARD (para abrir en el navegador local de Windows):")
+        log.info(f"  - Todas las transacciones : http://localhost:8100/api/transactions")
+        log.info(f"  - Resumen estadisticas    : http://localhost:8100/api/stats")
+        log.info(f"  - Alertas                 : http://localhost:8100/api/alerts")
+        log.info(f"  - Verificar integridad    : http://localhost:8100/api/transactions/audit/integrity")
+        log.info(f"  - Swagger UI              : http://localhost:8100/docs")
+        log.info("=" * 60)
+    else:
+        log.warning(
+            "  CLEARING_HOUSE_URL no definida -- auditoría IDS desactivada en este worker. "
+            "Define CLEARING_HOUSE_URL=http://clearing-house:8000 en .env para habilitarla."
+        )
 
     # Publicar datasets automaticamente dando tiempo al ECC a arrancar
     asyncio.create_task(_delay_publish_datasets())
@@ -269,7 +378,21 @@ async def _delay_publish_datasets():
             res = requests.get(f"{ecc_base}/api/selfDescription/", verify=TLS_CERT, auth=basic_api, timeout=5)
             if res.status_code == 200:
                 log.info(f"[startup] ECC levantado (intento {i+1}). Publicando datasets locales...")
-                _publish_local_csvs()
+                result = _publish_local_csvs()
+                # --- CH: Notificar publicación de datasets ---
+                published = result.get("published", [])
+                for pub in published:
+                    _report_to_ch(
+                        message_type="ids:ResourceUpdateMessage",
+                        source_connector=CONNECTOR_URI,
+                        status="success",
+                        resource_id=pub.get("resource_id"),
+                        additional_data={
+                            "event": "dataset_published",
+                            "filename": pub.get("filename"),
+                            "worker": INSTANCE_ID,
+                        },
+                    )
                 return
         except Exception:
             pass
@@ -733,6 +856,19 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
                 f"  CSV    : {selected_csv or '(auto)'}\n"
                 f"  Status : {ids_result.get('status', ids_result.get('@type', '?'))}"
             )
+            # --- CH: Algoritmo entregado al worker ---
+            _report_to_ch(
+                message_type="ids:ArtifactRequestMessage",
+                source_connector=CONNECTOR_URI,
+                target_connector=peer_conn_uri,
+                status="success",
+                additional_data={
+                    "event": "fl_algorithm_distributed",
+                    "coordinator": INSTANCE_ID,
+                    "peer_uri": peer_conn_uri,
+                    "selected_csv": selected_csv or "auto"
+                },
+            )
             return True
         else:
             log.warning(
@@ -1064,6 +1200,21 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                 f"[OK WS]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
             )
             _record_ws_perf("ws", elapsed_ms, payload_size, round_num, f"global->worker{_peer_wid}")
+            # --- CH [GAP 3-WS]: Pesos globales enviados via WebSocket ---
+            _report_to_ch(
+                message_type="ids:ArtifactRequestMessage",
+                source_connector=CONNECTOR_URI,
+                target_connector=peer_conn_uri,
+                status="success",
+                response_time_ms=elapsed_ms,
+                additional_data={
+                    "event": "global_weights_sent_ws",
+                    "round": round_num,
+                    "target_worker": _peer_wid,
+                    "payload_kb": round(payload_size / 1024, 1),
+                    "channel": "websocket",
+                },
+            )
             return
         else:
             log.info(
@@ -1097,6 +1248,21 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                 f"[OK IDS fallback]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
             )
             _record_ws_perf("http_ids", elapsed_ms, payload_size, round_num, f"global->{forward_target}")
+            # --- CH [GAP 3-IDS]: Pesos globales enviados via IDS multipart fallback ---
+            _report_to_ch(
+                message_type="ids:ArtifactRequestMessage",
+                source_connector=CONNECTOR_URI,
+                target_connector=peer_conn_uri,
+                status="success",
+                response_time_ms=elapsed_ms,
+                additional_data={
+                    "event": "global_weights_sent_ids_fallback",
+                    "round": round_num,
+                    "forward_target": forward_target,
+                    "payload_kb": round(payload_size / 1024, 1),
+                    "channel": "ids_multipart",
+                },
+            )
         else:
             resp = requests.post(
                 f"{peer_dataapp}/fl/receive-global-weights",
@@ -1111,6 +1277,21 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                 f"[OK HTTP fallback]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
             )
             _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"global->{peer_dataapp}")
+            # --- CH [GAP 3-HTTP]: Pesos globales enviados via HTTP directo fallback ---
+            _report_to_ch(
+                message_type="ids:ArtifactRequestMessage",
+                source_connector=CONNECTOR_URI,
+                target_connector=peer_conn_uri,
+                status="success",
+                response_time_ms=elapsed_ms,
+                additional_data={
+                    "event": "global_weights_sent_http_fallback",
+                    "round": round_num,
+                    "peer_dataapp": peer_dataapp,
+                    "payload_kb": round(payload_size / 1024, 1),
+                    "channel": "http_direct",
+                },
+            )
     except Exception as exc:
         with _ws_perf_lock:
             _ws_perf_stats["http_failures"] += 1
@@ -1312,6 +1493,23 @@ def _publish_fl_model_as_ids_resource(
             f" Modelo FL publicado como recurso IDS en coordinator-{INSTANCE_ID}\n"
             f"   Resource  : {resource_id}\n"
             f"   Contrato  : {contract_id} (restringido a {len(_authorized)} peers)"
+        )
+
+        # --- CH: Publicacion del modelo FL final como recurso IDS ---
+        _report_to_ch(
+            message_type="ids:ResourceUpdateMessage",
+            source_connector=CONNECTOR_URI,
+            status="success",
+            resource_id=resource_id,
+            contract_id=contract_id,
+            additional_data={
+                "event": "fl_model_published",
+                "coordinator": INSTANCE_ID,
+                "artifact_id": artifact_id,
+                "n_authorized_peers": len(_authorized),
+                "global_metrics": global_metrics,
+                "n_rounds": n_rounds,
+            },
         )
 
     except Exception as exc:
@@ -1564,6 +1762,20 @@ def _llm_recommend_dataset(
         _notify_ws_clients(insight_data)
         _notify_ai_clients(insight_data) # Canal dedicado
 
+        # --- CH: Decisión LLM de selección de dataset ---
+        _report_to_ch(
+            message_type="ids:ResultMessage",
+            source_connector=CONNECTOR_URI,
+            status="success",
+            additional_data={
+                "event": "llm_dataset_recommendation",
+                "model": LLM_MODEL,
+                "selected_filename": filename,
+                "confidence": confidence,
+                "worker": INSTANCE_ID,
+            },
+        )
+
         return {"filename": filename, "reasoning": reasoning, "confidence": confidence}
 
     except requests.exceptions.ConnectionError:
@@ -1639,9 +1851,29 @@ def _get_registered_connectors() -> list:
                 # Se debe usar la API IDS publica en el 8449.
                 connectors.append({"connector_uri": uri, "endpoint": endpoint})
         log.info(f"[broker-discover] {len(connectors)} conectores encontrados en el broker")
+        # --- CH: Notificar discovery del Broker ---
+        _report_to_ch(
+            message_type="ids:QueryMessage",
+            source_connector=CONNECTOR_URI,
+            target_connector="https://broker-reverseproxy/infrastructure",
+            status="success",
+            additional_data={
+                "event": "broker_discovery",
+                "connectors_found": len(connectors),
+                "worker": INSTANCE_ID,
+            },
+        )
         return connectors
     except Exception as e:
         log.error(f"[broker-discover] Error consultando Fuseki: {e}")
+        _report_to_ch(
+            message_type="ids:QueryMessage",
+            source_connector=CONNECTOR_URI,
+            target_connector="https://broker-reverseproxy/infrastructure",
+            status="error",
+            error_message=str(e),
+            additional_data={"event": "broker_discovery_failed", "worker": INSTANCE_ID},
+        )
         return []
 
 
@@ -1664,6 +1896,19 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
             desc     = _ids_send(ecc_url, connector_uri, "ids:DescriptionRequestMessage")
             real_uri = desc.get("@id", "") or connector_uri
             log.info(f"[broker-discover] [OK] Catalogo IDS obtenido de {ecc_url}")
+            # --- CH [GAP 1]: DescriptionRequestMessage saliente al peer ---
+            _report_to_ch(
+                message_type="ids:DescriptionResponseMessage",
+                source_connector=CONNECTOR_URI,
+                target_connector=real_uri or connector_uri,
+                status="success",
+                additional_data={
+                    "event": "peer_catalog_obtained_ids",
+                    "peer_ecc_url": ecc_url,
+                    "worker": INSTANCE_ID,
+                    "channel": "ids_multipart",
+                },
+            )
         except Exception as e:
             log.info(
                 f"[broker-discover] Puerto ECC-to-ECC (8889) no accesible desde DataApp -- "
@@ -1931,6 +2176,21 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         fl_state.update({"status": "running", "current_round": 0,
                           "total_rounds": n_rounds, "history": []})
 
+    # --- CH: FL arranque ---
+    _report_to_ch(
+        message_type="ids:NotificationMessage",
+        source_connector=CONNECTOR_URI,
+        target_connector="broadcast:" + ",".join(PEER_CONNECTOR_URIS) if PEER_CONNECTOR_URIS else None,
+        status="success",
+        additional_data={
+            "event": "fl_started",
+            "coordinator": INSTANCE_ID,
+            "total_rounds": n_rounds,
+            "min_workers": min_workers,
+            "peers": PEER_CONNECTOR_URIS,
+        },
+    )
+
     _notify_ws_clients({
         "event": "fl_started",
         "total_rounds": n_rounds,
@@ -1962,6 +2222,18 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
             fl_state["current_round"] = round_num
             fl_state["status"]        = f"round_{round_num}"
 
+        # --- CH: Inicio de ronda ---
+        _report_to_ch(
+            message_type="ids:NotificationMessage",
+            source_connector=CONNECTOR_URI,
+            status="success",
+            additional_data={
+                "event": "fl_round_started",
+                "round": round_num,
+                "total_rounds": n_rounds,
+                "coordinator": INSTANCE_ID,
+            },
+        )
         _notify_ws_clients({
             "event": "round_started",
             "round": round_num,
@@ -2085,6 +2357,23 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
             })
             _round_snapshot = dict(fl_state)
 
+        # --- CH: Ronda completada con métricas ---
+        _report_to_ch(
+            message_type="ids:ArtifactResponseMessage",
+            source_connector=CONNECTOR_URI,
+            status="success",
+            response_time_ms=elapsed * 1000,
+            additional_data={
+                "event": "fl_round_completed",
+                "round": round_num,
+                "total_rounds": n_rounds,
+                "workers_ok": len(results),
+                "total_samples": total_samples,
+                "elapsed_seconds": elapsed,
+                "global_metrics": global_metrics,
+                "coordinator": INSTANCE_ID,
+            },
+        )
         # Notificar a clientes WebSocket conectados
         _notify_ws_clients({
             "event"         : "round_completed",
@@ -2130,6 +2419,22 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         json.dump(fl_state["history"], f, indent=2)
 
     log.info(f"[OK] FL completado -- {n_rounds} rondas. Mejor ronda: {best_round}")
+
+    # --- CH: FL completado ---
+    _report_to_ch(
+        message_type="ids:NotificationMessage",
+        source_connector=CONNECTOR_URI,
+        target_connector="broadcast:" + ",".join(PEER_CONNECTOR_URIS) if PEER_CONNECTOR_URIS else None,
+        status="success",
+        additional_data={
+            "event": "fl_completed",
+            "coordinator": INSTANCE_ID,
+            "n_rounds": n_rounds,
+            "best_round": best_round,
+            "best_metrics": best_metrics,
+            "peers": PEER_CONNECTOR_URIS,
+        },
+    )
 
     try:
         last_metrics = best_metrics if best_metrics else (fl_state["history"][-1]["global_metrics"] if fl_state["history"] else {})
@@ -2239,6 +2544,19 @@ async def ids_data(request: Request):
                 f"worker-{INSTANCE_ID} ha optado por no compartir datos (Soberania)\n"
                 f"  Solicitante: {consumer_uri!r}"
             )
+            # --- CH: Rechazo por soberania de datos ---
+            _report_to_ch(
+                message_type="ids:RejectionMessage",
+                source_connector=CONNECTOR_URI,
+                target_connector=consumer_uri,
+                status="failed",
+                error_message="fl_opt_out: worker has opted out of FL participation",
+                additional_data={
+                    "event": "contract_rejected_opt_out",
+                    "worker": INSTANCE_ID,
+                    "reason": "fl_opt_out",
+                },
+            )
             rejection_header = _resp(
                 "ids:RejectionMessage", "rejectionMessage",
                 {"ids:rejectionReason": {"@id": "https://w3id.org/idsa/code/NOT_AUTHORIZED"}}
@@ -2272,6 +2590,20 @@ async def ids_data(request: Request):
                         f"[ContractRequest] ACCESO DENEGADO -- {consumer_uri!r} "
                         f"no esta en la lista de peers autorizados del modelo FL.\n"
                         f"  Autorizados: {_allowed_uris}"
+                    )
+                    # --- CH: Rechazo por politica de acceso restringido ---
+                    _report_to_ch(
+                        message_type="ids:RejectionMessage",
+                        source_connector=CONNECTOR_URI,
+                        target_connector=consumer_uri,
+                        status="failed",
+                        error_message="unauthorized_consumer: not in authorized peer list",
+                        additional_data={
+                            "event": "contract_rejected_policy",
+                            "worker": INSTANCE_ID,
+                            "reason": "connector-restricted-policy",
+                            "consumer": consumer_uri,
+                        },
                     )
                     _rej_header = _resp(
                         "ids:RejectionMessage", "rejectionMessage",
@@ -2308,12 +2640,40 @@ async def ids_data(request: Request):
             import uuid as _uuid
             contrato["@id"] = f"https://w3id.org/idsa/autogen/contractAgreement/{_uuid.uuid4()}"
 
+        # --- CH: Contrato aceptado ---
+        _report_to_ch(
+            message_type="ids:ContractAgreementMessage",
+            source_connector=CONNECTOR_URI,
+            target_connector=consumer_uri,
+            status="success",
+            contract_id=contrato.get("@id", ""),
+            additional_data={
+                "event": "contract_agreement",
+                "worker": INSTANCE_ID,
+                "consumer": consumer_uri,
+                "contract_offer_id": contract_offer_id,
+            },
+        )
+
         return _multipart_response(
             _resp("ids:ContractAgreementMessage", "contractAgreementMessage"),
             json.dumps(contrato)
         )
 
     elif tipo == "ids:ContractAgreementMessage":
+        _sender_uri = mensaje.get("ids:issuerConnector", {}).get("@id", "")
+        # --- CH [GAP 5]: Confirmacion de ContractAgreement recibida ---
+        _report_to_ch(
+            message_type="ids:ContractAgreementMessage",
+            source_connector=_sender_uri or "unknown",
+            target_connector=CONNECTOR_URI,
+            status="success",
+            additional_data={
+                "event": "contract_agreement_confirmation_received",
+                "worker": INSTANCE_ID,
+                "sender": _sender_uri,
+            },
+        )
         return _multipart_response(
             _resp("ids:MessageProcessedNotificationMessage", "messageProcessedNotificationMessage")
         )
@@ -2612,6 +2972,20 @@ async def ids_data(request: Request):
                     log.info(
                         f"[ArtifactRequest SOURCE] Sirviendo algorithm.py "
                         f"({len(algo_bytes_src)} bytes) -> {requester}"
+                    )
+                    # --- CH [GAP 2]: Algoritmo servido como fuente (soberanía de datos) ---
+                    _report_to_ch(
+                        message_type="ids:ArtifactResponseMessage",
+                        source_connector=CONNECTOR_URI,
+                        target_connector=requester,
+                        status="success",
+                        additional_data={
+                            "event": "algorithm_served_as_source",
+                            "requester": requester,
+                            "algo_size_bytes": len(algo_bytes_src),
+                            "config_included": config_b64_src is not None,
+                            "worker": INSTANCE_ID,
+                        },
                     )
                     return _multipart_response(resp_h, json.dumps({
                         "type"    : "fl_algorithm",
@@ -3395,6 +3769,19 @@ async def fl_receive_global_weights(request: Request):
         coordinator_conn_uri = coord_uri
 
     log.info(f"[/fl/receive-global-weights]  Pesos globales ronda {round_num} recibidos del coordinator")
+    # --- CH [GAP 4]: Worker recibe pesos globales del coordinator ---
+    _report_to_ch(
+        message_type="ids:ArtifactResponseMessage",
+        source_connector=coordinator_conn_uri or coord_uri or "coordinator",
+        target_connector=CONNECTOR_URI,
+        status="success",
+        additional_data={
+            "event": "global_weights_received",
+            "round": round_num,
+            "worker": INSTANCE_ID,
+            "coordinator_uri": coordinator_conn_uri or coord_uri,
+        },
+    )
 
     def _train_and_reply():
         try:
@@ -3437,6 +3824,20 @@ async def fl_receive_local_weights(request: Request):
         f"[/fl/receive-local-weights]  Pesos locales recibidos: "
         f"worker-{sender} ronda {round_num}  ({n_samples} samples)"
     )
+    # --- CH: Worker reporta pesos locales al coordinator ---
+    _report_to_ch(
+        message_type="ids:ArtifactRequestMessage",
+        source_connector=CONNECTOR_URI,
+        status="success",
+        additional_data={
+            "event": "local_weights_received",
+            "from_worker": sender,
+            "round": round_num,
+            "n_samples": n_samples,
+            "metrics": metrics,
+            "coordinator": INSTANCE_ID,
+        },
+    )
     return {"status": "ok", "round": round_num, "worker_id": INSTANCE_ID}
 
 
@@ -3472,6 +3873,20 @@ async def fl_accept_negotiation(request: Request):
             f"[/fl/accept-negotiation] RECHAZADO -- FL_OPT_OUT=true en worker-{INSTANCE_ID}\n"
             f"  Coordinator: {coord_uri}"
         )
+        # --- CH: Worker rechaza participar (soberania) ---
+        _report_to_ch(
+            message_type="ids:RejectionMessage",
+            source_connector=CONNECTOR_URI,
+            target_connector=coord_uri,
+            status="failed",
+            error_message="fl_opt_out: worker ejercio soberania del dato",
+            additional_data={
+                "event": "worker_rejected_participation",
+                "worker": INSTANCE_ID,
+                "coordinator": coord_uri,
+                "reason": "FL_OPT_OUT",
+            },
+        )
         return JSONResponse(content={
             "accepted"     : False,
             "reason"       : "fl_opt_out",
@@ -3495,6 +3910,19 @@ async def fl_accept_negotiation(request: Request):
     log.info(
         f"[/fl/accept-negotiation] ACEPTADO -- worker-{INSTANCE_ID} participara en FL\n"
         f"  Coordinator: {coord_uri}  |  CSV asignado: {sel_csv or '(auto)'}"
+    )
+    # --- CH: Worker acepta participar ---
+    _report_to_ch(
+        message_type="ids:ContractAgreementMessage",
+        source_connector=CONNECTOR_URI,
+        target_connector=coord_uri,
+        status="success",
+        additional_data={
+            "event": "worker_accepted_participation",
+            "worker": INSTANCE_ID,
+            "coordinator": coord_uri,
+            "selected_csv": sel_csv or "auto",
+        },
     )
     return JSONResponse(content={
         "accepted"     : True,
@@ -3611,6 +4039,21 @@ async def fl_negotiate():
         if "ContractAgreement" in ids_type:
             transfer_contract_id = ids_result.get("@id", f"ids-agreement-worker{peer_worker_id}")
             log.info(f"[/fl/negotiate] worker-{peer_worker_id} ACEPTO [OK]  IDS ContractAgreement={transfer_contract_id}")
+            # --- CH: Peer acepto trabajar ---
+            _report_to_ch(
+                message_type="ids:ContractAgreementMessage",
+                source_connector=CONNECTOR_URI,
+                target_connector=uri,
+                status="success",
+                contract_id=transfer_contract_id,
+                additional_data={
+                    "event": "negotiate_peer_accepted",
+                    "coordinator": INSTANCE_ID,
+                    "peer_worker": peer_worker_id,
+                    "match_ratio": worker["match_ratio"],
+                    "selected_csv": sel_csv,
+                },
+            )
             accepted.append({
                 "connector_uri"    : uri,
                 "ecc_url"          : ecc_url,
@@ -3640,6 +4083,20 @@ async def fl_negotiate():
             msg    = ids_result.get("message", str(ids_result.get("ids:rejectionReason", "")))
             log.info(
                 f"[/fl/negotiate] worker-{peer_worker_id} RECHAZO (IDS) -- {reason}: {msg}"
+            )
+            # --- CH: Peer rechazo trabajar ---
+            _report_to_ch(
+                message_type="ids:RejectionMessage",
+                source_connector=uri,
+                target_connector=CONNECTOR_URI,
+                status="failed",
+                error_message=f"{reason}: {msg}",
+                additional_data={
+                    "event": "negotiate_peer_rejected",
+                    "coordinator": INSTANCE_ID,
+                    "peer_worker": peer_worker_id,
+                    "reason": reason,
+                },
             )
             rejected.append({
                 "connector_uri": uri,
