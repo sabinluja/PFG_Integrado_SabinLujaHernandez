@@ -1710,7 +1710,7 @@ def main():
             raw_metrics = requests.get(f"{coordinator_url}/metrics", timeout=req_timeout, verify=TLS_CERT).text
             perf = json.loads(raw_metrics)
             
-            print(f"  {CYAN}📊 RENDIMIENTO DE TRANSFERENCIAS (Data Plane vs Control Plane IDS){RESET}")
+            print(f"  {CYAN}[RENDIMIENTO] DE TRANSFERENCIAS (Data Plane vs Control Plane IDS){RESET}")
             print(f"  {CYAN}----------------------------------------------------------------------{RESET}")
             
             ws_sends  = perf.get("ws_sends", 0)
@@ -1752,7 +1752,7 @@ def main():
     # --- CLEARING HOUSE AUDIT ---
     try:
         import requests
-        print(f"  {CYAN}🏛️ AUDITORÍA CLEARING HOUSE (Notario IDS){RESET}")
+        print(f"  {CYAN}[AUDITORÍA] CLEARING HOUSE (Notario IDS){RESET}")
         print(f"  {CYAN}----------------------------------------------------------------------{RESET}")
         
         try:
@@ -1798,7 +1798,7 @@ def main():
         export_filename = f"fl_ids_audit_report_{timestamp_str}.json"
         export_path = os.path.join(exports_dir, export_filename)
         
-        print(f"  {CYAN}💾 DESCARGANDO REPORTE DE AUDITORÍA (Notario IDS)...{RESET}")
+        print(f"  {CYAN}[REPORTE] DESCARGANDO REPORTE DE AUDITORÍA (Notario IDS)...{RESET}")
         
         r_export = requests.get("http://localhost:8100/api/export/json", timeout=10)
         if r_export.ok:

@@ -151,7 +151,7 @@ class DatabaseService:
             collection = self.db[config.COLLECTION_LOGS]
             last_log = collection.find_one(
                 {}, 
-                sort=[("timestamp", -1)], 
+                sort=[("timestamp", -1), ("_id", -1)], 
                 projection={"current_hash": 1}
             )
             return last_log["current_hash"] if last_log else None
@@ -320,7 +320,7 @@ class DatabaseService:
         """Devuelve todos los logs ordenados por timestamp ASC para verificar integridad de la cadena de hashes."""
         try:
             collection = self.db[config.COLLECTION_LOGS]
-            cursor = collection.find({}).sort("timestamp", ASCENDING)
+            cursor = collection.find({}).sort([("timestamp", ASCENDING), ("_id", ASCENDING)])
             results = []
             for doc in cursor:
                 doc["_id"] = str(doc["_id"])
