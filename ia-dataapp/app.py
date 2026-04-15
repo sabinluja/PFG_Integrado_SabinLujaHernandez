@@ -1956,23 +1956,39 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
                     rep_uri = rep.get("@id", "")
                     if "meta_" in rep_uri:
                         meta_id = rep_uri
-                        
-                        # El catalogo base del TrueConnector ya incluye recursivamente las representaciones y sus descripciones
+
+                        # Extraer metadata de ids:keyword de la Representacion Metadata
+                        # (labels "filename:X", "column_names:Y")
                         try:
-                            desc_texts = rep.get("ids:description", [])
-                            if desc_texts:
-                                full_desc = desc_texts[0].get("@value", "")
-                                # Extraemos usando Regex del texto semantico libre
-                                m_n = _re.search(r"[-:]? Nombre de Fichero:\s*(.+?)\n", full_desc)
-                                m_c = _re.search(r"[-:]? Nombres de Columnas:\s*(.+)", full_desc)
-                                if m_n and m_c:
-                                    fname = m_n.group(1).strip()
-                                    cols_str = m_c.group(1).strip()
-                                    cols_list = [c.strip() for c in cols_str.split(",") if c.strip()]
-                                    all_csvs.append({"filename": fname, "columns": cols_list})
+                            _fname_kw = None
+                            _cols_kw  = None
+
+                            kw_list = rep.get("ids:keyword", []) or rep.get("https://w3id.org/idsa/core/keyword", [])
+                            for kw in kw_list:
+                                val = kw.get("@value", "")
+                                if val.startswith("filename:"):
+                                    _fname_kw = val.split(":", 1)[1].strip()
+                                elif val.startswith("column_names:"):
+                                    _cols_kw = val.split(":", 1)[1].strip()
+
+                            if _fname_kw and _cols_kw:
+                                cols_list = [c.strip() for c in _cols_kw.split(",") if c.strip()]
+                                all_csvs.append({"filename": _fname_kw, "columns": cols_list})
+                            else:
+                                # Fallback: regex sobre ids:description (legacy)
+                                desc_texts = rep.get("ids:description", [])
+                                if desc_texts:
+                                    full_desc = desc_texts[0].get("@value", "")
+                                    m_n = _re.search(r"[-:]? Nombre de Fichero:\s*(.+?)\n", full_desc)
+                                    m_c = _re.search(r"[-:]? Nombres de Columnas:\s*(.+)", full_desc)
+                                    if m_n and m_c:
+                                        fname = m_n.group(1).strip()
+                                        cols_str = m_c.group(1).strip()
+                                        cols_list = [c.strip() for c in cols_str.split(",") if c.strip()]
+                                        all_csvs.append({"filename": fname, "columns": cols_list})
                         except Exception as e:
                             log.warning(f"[broker-discover] Error parseando MetadataRepresentation {meta_id}: {e}")
-                            
+
                         break
 
         log.info(f"[broker-discover] {real_uri} -- {len(all_csvs)} CSV(s) descubiertos en catalogo IDS")
@@ -3437,60 +3453,56 @@ def _publish_local_csvs() -> dict:
             resource_id = f"https://w3id.org/idsa/autogen/textResource/dataset_{uuid.uuid4()}"
             artifact_id = f"http://w3id.org/engrd/connector/artifact/dataset_{fname}"
             
+            # ── Propiedades semanticas del IDS Information Model ──
+            _xsd_str = "http://www.w3.org/2001/XMLSchema#string"
+            _n_rows  = c.get("rows", 0)
+            _size_mb = c.get("size_mb", 0)
+            _n_cols  = len(c["columns"])
+            _csv_byte_size = os.path.getsize(c["path"]) if os.path.exists(c["path"]) else 0
+            cols_str = ", ".join(c["columns"])
+
+            # ── 1. Resource IDS ──
             res_body = {
                 "@context": {"ids": "https://w3id.org/idsa/core/", "idsc": "https://w3id.org/idsa/code/"},
                 "@id": resource_id,
                 "@type": "ids:TextResource",
-                "ids:title": [{"@value": f"Dataset: {fname}", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
-                "ids:description": [{"@value": f"Dataset CSV con {len(c['columns'])} columnas para Federated Learning.", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
-                "ids:keyword": [{"@value": "dataset", "@type": "http://www.w3.org/2001/XMLSchema#string"}, {"@value": "csv", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
+                "ids:title": [{"@value": f"Dataset: {fname}", "@type": _xsd_str}],
                 "ids:language": [{"@id": "https://w3id.org/idsa/code/EN"}],
                 "ids:version": "1.0.0",
-                "ids:contentType": {"@id": "https://w3id.org/idsa/code/SCHEMA_DEFINITION"}
+                "ids:contentType": {"@id": "https://w3id.org/idsa/code/SCHEMA_DEFINITION"},
             }
-            resp_res = requests.post(f"{ecc_base}/api/offeredResource/", headers={"catalog": catalog_id, "Content-Type": "application/json"}, json=res_body, verify=TLS_CERT, auth=basic_api, timeout=10)
-            
-            # 2. Representation: Metadata
+            requests.post(f"{ecc_base}/api/offeredResource/", headers={"catalog": catalog_id, "Content-Type": "application/json"}, json=res_body, verify=TLS_CERT, auth=basic_api, timeout=10)
+
+            # ── 2. Representacion 1: Metadata (descripcion + 1 keyword por dato) ──
             metadata_repr_id = f"https://w3id.org/idsa/autogen/representation/meta_{uuid.uuid4()}"
-            cols_str = ", ".join(c["columns"])
-            metadata_desc = (
-                f"Informacion exhaustiva del Dataset:\n"
-                f"- Nombre de Fichero: {fname}\n"
-                f"- Numero Total de Filas (Registros): {c.get('rows', 'Desconocido')}\n"
-                f"- Tamano en Disco: {c.get('size_mb', '0')} MB\n"
-                f"- Total de Columnas (Features): {len(c['columns'])}\n"
-                f"- Nombres de Columnas: {cols_str}"
-            )
             meta_body = {
                 "@context": {"ids": "https://w3id.org/idsa/core/", "idsc": "https://w3id.org/idsa/code/"},
                 "@id": metadata_repr_id,
                 "@type": "ids:TextRepresentation",
-                "ids:title": [{"@value": "Metadata Representation (Schema & Stats)", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
-                "ids:description": [{"@value": metadata_desc, "@type": "http://www.w3.org/2001/XMLSchema#string"}],
-                "ids:mediaType": {"@id": "https://w3id.org/idsa/code/JSON"},
-                "ids:instance": [{
-                    "@type": "ids:Artifact",
-                    "@id": f"http://w3id.org/engrd/connector/artifact/metadata_{fname}",
-                    "ids:fileName": f"{fname}_metadata.json",
-                    "ids:creationDate": {"@value": ts, "@type": "http://www.w3.org/2001/XMLSchema#dateTimeStamp"}
-                }]
+                "ids:title": [{"@value": f"Semantic Metadata -- {fname}", "@type": _xsd_str}],
+                "ids:description": [{"@value": "Semantic metadata describing the schema of the dataset.", "@type": _xsd_str}],
+                "ids:keyword": [
+                    {"@value": f"size_mb:{_size_mb}",        "@type": _xsd_str},
+                    {"@value": f"filename:{fname}",          "@type": _xsd_str},
+                    {"@value": f"column_names:{cols_str}",   "@type": _xsd_str},
+                ],
+                "ids:mediaType": {"@id": "https://w3id.org/idsa/code/JSON"}
             }
             requests.post(f"{ecc_base}/api/representation/", headers={"resource": resource_id, "Content-Type": "application/json"}, json=meta_body, verify=TLS_CERT, auth=basic_api, timeout=10)
 
-            # 3. Representation: Execution
+            # ── 3. Representacion 2: Training (dataset para entrenamiento FL) ──
             exec_repr_id = f"https://w3id.org/idsa/autogen/representation/exec_{uuid.uuid4()}"
             exec_body = {
                 "@context": {"ids": "https://w3id.org/idsa/core/", "idsc": "https://w3id.org/idsa/code/"},
                 "@id": exec_repr_id,
                 "@type": "ids:TextRepresentation",
-                "ids:title": [{"@value": "Execution Representation", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
-                "ids:description": [{"@value": "Instancia del dataset en si para entrenamiento FL", "@type": "http://www.w3.org/2001/XMLSchema#string"}],
+                "ids:title": [{"@value": f"Training Artifact -- {fname}", "@type": _xsd_str}],
                 "ids:mediaType": {"@id": "https://w3id.org/idsa/code/CSV"},
                 "ids:instance": [{
                     "@type": "ids:Artifact",
                     "@id": artifact_id,
                     "ids:fileName": fname,
-                    "ids:creationDate": {"@value": ts, "@type": "http://www.w3.org/2001/XMLSchema#dateTimeStamp"}
+                    "ids:creationDate": {"@value": ts, "@type": "http://www.w3.org/2001/XMLSchema#dateTimeStamp"},
                 }]
             }
             requests.post(f"{ecc_base}/api/representation/", headers={"resource": resource_id, "Content-Type": "application/json"}, json=exec_body, verify=TLS_CERT, auth=basic_api, timeout=10)
@@ -3553,6 +3565,23 @@ async def catalog_publish_datasets():
     if "error" in res:
         return JSONResponse(status_code=500, content=res)
     return res
+
+
+@app.get("/ids/self-description")
+def get_self_description():
+    """
+    Consulta al catalogo real del connector (TrueConnector via /api/selfDescription/)
+    para devolver el JSON-LD de la FASE 1 intacto.
+    """
+    from requests.auth import HTTPBasicAuth
+    basic_api = HTTPBasicAuth(API_USER, API_PASS)
+    ecc_base  = f"https://{ECC_HOSTNAME}:8449"
+    try:
+        sd = requests.get(f"{ecc_base}/api/selfDescription/", verify=TLS_CERT, auth=basic_api, timeout=10).json()
+        return sd
+    except Exception as e:
+        log.error(f"Error obteniendo selfDescription: {e}")
+        return {"error": str(e), "ids:resourceCatalog": []}
 
 
 @app.get("/dataset/info")

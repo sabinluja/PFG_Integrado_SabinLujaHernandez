@@ -8,10 +8,8 @@ Arquitectura Híbrida:
 
   FASE 0   Resolver endpoints
            - GET /status y /broker/connectors.
-  FASE 0.5 Explorar Catálogo IDS Dinámicamente
+  FASE 1   Explorar Catálogo IDS Dinámicamente
            - GET /ids/self-description (Lista Datasets del Coordinator).
-  FASE 1   Coordinator obtiene el algoritmo vía IDS
-           - POST /fl/fetch-algorithm (Lee model.py y config).
   FASE 2   Descubrimiento de peers en Broker + match semántico
            - POST /broker/discover (Umbral >= 80% compatibilidad columnas).
   FASE 3   Negociación de contratos (Restringido > Worker4 descartado)
@@ -335,7 +333,7 @@ def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
         "Resolver endpoints",
         "Paso 0a: GET /status           -> health check del DataApp coordinator\n"
         "Paso 0b: GET /broker/connectors -> todos los conectores registrados en Fuseki\n"
-        f"Paso 0c: Extraer Worker-{cid} del Broker -> ECC URL y connector_uri sin hardcodear"
+        f"Paso 0c: Extraer Worker-{cid} del Broker -> ECC URL y rol de Coordinator"
     )
 
     # -- 0a: health check del DataApp coordinator -------------------------------
@@ -344,6 +342,8 @@ def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
     ok(f"Worker-{cid} responde correctamente en {coordinator_url}")
     field("instance",        status.get("instance", "?"))
     field("role (actual)",   status.get("role",     "worker"))
+    print()
+    print(f"    {BOLD}{GREEN}** Worker-{cid} asumio el rol de COORDINATOR **{RESET}")
 
     # -- 0b: TODOS los conectores desde el broker (incluido el coordinator) -----
     step("0b", "GET /broker/connectors -- todos los conectores del Broker Fuseki")
@@ -393,26 +393,14 @@ def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
             "      y que los workers se han auto-registrado."
         )
 
-    # -- 0c: Datos del Worker-{cid} extraidos del Broker -----------------------
-    step("0c", f"Datos del Worker-{cid} (coordinator) extraidos del Broker")
-
+    # -- 0c: Datos del Worker-{cid} extraidos del Broker (Silencioso) -----------
     coord_entry = all_entries.get(str(cid))
     if coord_entry:
-        ok(f"Worker-{cid} encontrado en el Broker -- sin hardcodear")
-        field("connector_uri (broker)", coord_entry["connector_uri"])
-        field("ecc_url      (broker)", coord_entry["ecc_url"])
         coordinator_entry = coord_entry
     else:
-        # Fallback solo si el worker-N no se registro aun en el broker
-        warn(
-            f"Worker-{cid} no encontrado en el Broker.\n"
-            f"      Puede que aun no se haya registrado -- re-intenta en unos segundos.\n"
-            f"      Usando connector_uri del /status como fallback."
-        )
         fallback_ecc = f"https://ecc-worker{cid}:8889/data"
         coordinator_entry = {
-            "connector_uri": status.get("connector_uri",
-                                        f"http://w3id.org/engrd/connector/worker{cid}"),
+            "connector_uri": status.get("connector_uri", f"http://w3id.org/engrd/connector/worker{cid}"),
             "ecc_url":       fallback_ecc,
             "ecc_label":     _ecc_label(fallback_ecc),
         }
@@ -423,52 +411,29 @@ def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
             "      Comprueba que los demas workers estan levantados y registrados."
         )
 
+    print()
+
     return {
         "coordinator": coordinator_entry,
         "peers":       peers,
         "all_peers":   all_peers,
     }
 
-
-
 # =============================================================================
-# FASE 1 -- Coordinator obtiene el algoritmo via IDS
+# Helper interno oculto -- El Coordinator obtiene el algoritmo via IDS/local
 # =============================================================================
 
-def fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
+def helper_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
     """
     El coordinator (worker-N) asume su rol nativo e inicializa el modelo localmente.
-    No requiere IDS self-fetch ya que los archivos residen en su propio disco (DataApp).
+    (Totalmente silencioso en consola)
     """
-    coord_ecc   = endpoints["coordinator"]["ecc_url"]
-    coord_label = endpoints["coordinator"]["ecc_label"]
+    try:
+        r = SESSION.post(f"{coordinator_url}/fl/fetch-algorithm", json={}, timeout=req_timeout)
+        r.raise_for_status()
+    except Exception as exc:
+        fail(f"El coordinator no pudo obtener el algoritmo internamente: {exc}")
 
-    phase(
-        1,
-        f"Worker-{cid} obtiene el algoritmo y el fichero de configuracion",
-        "El DataApp tiene la soberania del algoritmo y configuracion localmente\n"
-        "sin necesidad de peticiones IDS contra su propio conector."
-    )
-
-    step("1", "POST /fl/fetch-algorithm -- init coordinator")
-    info(f"Coordinator ({coord_label}) carga algorithm.py y fl_config.json desde su entorno local")
-
-    result = http_post(f"{coordinator_url}/fl/fetch-algorithm", {}, timeout=req_timeout)
-
-    status = result.get("status", "")
-    if status == "everything_received":
-        ok("algorithm.py + fl_config.json leidos nativamente por el coordinator")
-        field("source", result.get("source_ecc", "local_filesystem"))
-        cfg = result.get("fl_config") or {}
-        if cfg:
-            field("rounds",        cfg.get("rounds"))
-            field("round_timeout", f"{cfg.get('round_timeout')}s")
-            field("epochs",        cfg.get("epochs"))
-    else:
-        fail(f"El coordinator no pudo obtener el algoritmo: {result}")
-
-    print()
-    print(f"    {BOLD}{GREEN}** Worker-{cid} es ahora el COORDINATOR **{RESET}")
 
 
 # =============================================================================
@@ -1558,18 +1523,18 @@ def _start_keyboard_listener(coordinator_url_ref, endpoints_ref, req_timeout):
         time.sleep(0.1)
 
 
-def fase0b_verificar_catalogo_coordinator(coordinator_url, cid, req_timeout):
+def fase1_verificar_catalogo_coordinator(coordinator_url, cid, req_timeout):
     """
     Tras la FASE 0, consulta el Catalogo IDS del Coordinator (/ids/self-description)
     y lista los Datasets CSV registrados de forma dinamica, sin hardcoding.
     """
     phase(
-        "0b",
+        "1",
         "Catalogo IDS del Coordinator (Datasets disponibles)",
         "Consulta dinamica al catalogo IDS para obtener los Datasets\n"
         "publicados en el Coordinator sin hardcodear ningun nombre."
     )
-    step("0b", "GET /ids/self-description")
+    step("1", "GET /ids/self-description")
     
     ecc_port = 8090 if int(cid) == 1 else 8090 + int(cid)
     info(f"Comando Manual: https://localhost:{ecc_port}/api/selfDescription/")
@@ -1651,10 +1616,10 @@ def main():
         _endpoints_ref[0] = endpoints
         time.sleep(0.5)
 
-        fase0b_verificar_catalogo_coordinator(coordinator_url, cid, req_timeout)
+        fase1_verificar_catalogo_coordinator(coordinator_url, cid, req_timeout)
         time.sleep(0.5)
 
-        fase1_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout)
+        helper_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout)
         time.sleep(1)
 
         fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout)
