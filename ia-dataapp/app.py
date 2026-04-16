@@ -82,6 +82,12 @@ FL_OPT_OUT = os.getenv("FL_OPT_OUT", "false").lower() == "true"
 # Permite bypass de IDS (peticiones HTTP directas entre DataApps) si falla WebSockets
 ALLOW_IDS_BYPASS = os.getenv("ALLOW_IDS_BYPASS", "false").lower() == "true"
 
+# Fuerza que los pesos FL viajen por ECC->ECC usando el endpoint interno del ECC
+# en lugar de los atajos WS/DataApp-to-DataApp.
+FL_WEIGHTS_VIA_ECC = os.getenv("FL_WEIGHTS_VIA_ECC", "true").lower() == "true"
+FL_IDS_ECC_ONLY = os.getenv("FL_IDS_ECC_ONLY", "true").lower() == "true"
+WS_ECC_ENABLED = os.getenv("WS_ECC", "true").lower() == "true"
+
 # Credenciales para la API interna del ECC
 API_USER = os.getenv("API_USER", "apiUser")
 API_PASS = os.getenv("API_PASS", "passwordApiUser")
@@ -257,6 +263,8 @@ is_coordinator       = False
 _published_fl_contract: dict = {}
 coordinator_ecc_url  = None
 coordinator_conn_uri = None
+coordinator_transfer_contract = None
+coordinator_requested_artifact = None
 
 _accepted_workers: list = []
 _negotiate_lock = threading.Lock()
@@ -286,10 +294,14 @@ _ws_perf_stats = {
     "ws_sends": 0,
     "ws_total_ms": 0.0,
     "ws_bytes": 0,
+    "ids_ecc_sends": 0,
+    "ids_ecc_total_ms": 0.0,
+    "ids_ecc_bytes": 0,
     "http_sends": 0,
     "http_total_ms": 0.0,
     "http_bytes": 0,
     "ws_failures": 0,
+    "ids_ecc_failures": 0,
     "http_failures": 0,
     "history": [],   # ultimas 50 transferencias con detalle
 }
@@ -510,6 +522,44 @@ def _get_self_description() -> dict:
     return resp.json()
 
 
+def _first_contract_artifact(desc: dict) -> tuple[str | None, str | None]:
+    """
+    Devuelve (contract_offer_id, artifact_id) del primer recurso ofrecido.
+    Se usa para completar mensajes ArtifactRequest que el ECC valida estrictamente.
+    """
+    try:
+        catalogs = desc.get("ids:resourceCatalog", [{}])
+        resource = (catalogs[0].get("ids:offeredResource", [{}]) or [{}])[0]
+        contract = (resource.get("ids:contractOffer", [{}]) or [{}])[0]
+        repres = (resource.get("ids:representation", [{}]) or [{}])[0]
+        instance = (repres.get("ids:instance", [{}]) or [{}])[0]
+        return contract.get("@id"), instance.get("@id")
+    except Exception:
+        return None, None
+
+
+def _local_contract_artifact() -> tuple[str | None, str | None]:
+    try:
+        return _first_contract_artifact(_get_self_description())
+    except Exception:
+        return None, None
+
+
+def _peer_contract_artifact(peer_ecc_url: str, peer_conn_uri: str) -> tuple[str | None, str | None]:
+    try:
+        target = _ecc_forward_url(peer_ecc_url) if FL_IDS_ECC_ONLY else peer_ecc_url
+        desc = _ids_send(
+            target,
+            peer_conn_uri,
+            "ids:DescriptionRequestMessage",
+            use_local_ecc=FL_IDS_ECC_ONLY,
+        )
+        return _first_contract_artifact(desc)
+    except Exception as exc:
+        log.warning(f"[ids] No se pudo resolver artifact del peer {peer_conn_uri}: {exc}")
+        return None, None
+
+
 def _multipart_response(header_dict: dict, payload_str: str | None = None) -> Response:
     import uuid as _uuid
     boundary = _uuid.uuid4().hex
@@ -725,7 +775,6 @@ def _ids_send(
     actual_url = forward_to_url
     if use_local_ecc:
         actual_url = f"https://ecc-worker{INSTANCE_ID}:8887/incoming-data-app/multipartMessageBodyFormData"
-        header_dict["Forward-To"] = forward_to_url
         str_header = json.dumps(header_dict)
 
     fields = {"header": ("header", str_header, "application/json")}
@@ -737,11 +786,21 @@ def _ids_send(
     encoder = MultipartEncoder(fields=fields)
     log.info(f"[IDS OUT] {message_type} -> {forward_to_url}")
 
+    _auth = None
+    if use_local_ecc:
+        from requests.auth import HTTPBasicAuth as _HTTPBasicAuth
+        _auth = _HTTPBasicAuth(API_USER, API_PASS)
+
+    _http_headers = {"Content-Type": encoder.content_type}
+    if use_local_ecc:
+        _http_headers["Forward-To"] = forward_to_url
+
     resp = requests.post(
         actual_url,
         data=encoder,
-        headers={"Content-Type": encoder.content_type},
+        headers=_http_headers,
         verify=TLS_CERT,
+        auth=_auth,
         timeout=60,
     )
     resp.raise_for_status()
@@ -792,11 +851,28 @@ def _dataapp_url_from_ecc(peer_ecc_url: str) -> str:
     return ""
 
 
+def _ecc_forward_url(peer_ecc_url: str) -> str:
+    """
+    Convierte la URL REST del ECC remoto a su canal WSS cuando WS_ECC esta activo.
+    Ej.: https://ecc-worker1:8889/data -> wss://ecc-worker1:8086/data
+    """
+    if not peer_ecc_url:
+        return peer_ecc_url
+    if not WS_ECC_ENABLED:
+        return peer_ecc_url
+    return (
+        peer_ecc_url
+        .replace("https://", "wss://", 1)
+        .replace(":8889/data", ":8086/data")
+    )
+
+
 def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
                                    artifact_bytes: bytes,
                                    config_bytes: bytes,
                                    selected_csv: str | None = None,
-                                   transfer_contract: str | None = None) -> bool:
+                                   transfer_contract: str | None = None,
+                                   requested_artifact: str | None = None) -> bool:
     """
     Envia algorithm.py + fl_config.json al peer via IDS.
 
@@ -809,6 +885,11 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
     algo_b64   = base64.b64encode(artifact_bytes).decode("utf-8")
     config_b64 = base64.b64encode(config_bytes).decode("utf-8")
     combined   = f"{algo_b64}||fl_config::{config_b64}"
+    content_version = f"fl_algorithm::{combined}"
+    if selected_csv:
+        selected_csv_b64 = base64.b64encode(selected_csv.encode("utf-8")).decode("utf-8")
+        content_version += f"||selected_csv_b64::{selected_csv_b64}"
+    content_version += "||from_coordinator::1"
 
     payload_dict = {
         "type"            : "fl_algorithm",
@@ -828,7 +909,7 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
         log.error(f"[coordinator] No se pudo derivar DataApp URL de {peer_ecc_url}")
         return False
         
-    forward_target = f"{peer_dataapp}/data"
+    forward_target = _ecc_forward_url(peer_ecc_url) if FL_IDS_ECC_ONLY else f"{peer_dataapp}/data"
 
     log.info(
         f"[coordinator->IDS] Enviando algoritmo via IDS ArtifactRequestMessage\n"
@@ -841,9 +922,11 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
             forward_to_url       = forward_target,
             forward_to_connector = peer_conn_uri,
             message_type         = "ids:ArtifactRequestMessage",
+            requested_artifact   = requested_artifact,
             transfer_contract    = transfer_contract,
             payload              = payload_dict,
-            extra_header         = {"ids:contentVersion": f"fl_algorithm::{combined}"},
+            extra_header         = {"ids:contentVersion": content_version},
+            use_local_ecc        = FL_IDS_ECC_ONLY,
         )
         status_ok = (
             ids_result.get("status") in ("everything_received", "ok")
@@ -882,7 +965,7 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
         )
 
     # --- Fallback: POST directo al DataApp (sin capa IDS multipart) ---
-    if not ALLOW_IDS_BYPASS:
+    if FL_IDS_ECC_ONLY or not ALLOW_IDS_BYPASS:
         log.error("[coordinator->IDS] Fallo el envio via IDS y ALLOW_IDS_BYPASS=false. No se hara bypass HTTP al DataApp.")
         return False
 
@@ -983,7 +1066,11 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
     global is_coordinator
     log.info(f"[fetch-algorithm] Iniciando fetch desde {source_ecc_url} ({source_connector_uri})")
     try:
-        desc     = _ids_send(source_ecc_url, source_connector_uri, "ids:DescriptionRequestMessage")
+        source_target = _ecc_forward_url(source_ecc_url) if FL_IDS_ECC_ONLY else source_ecc_url
+        desc     = _ids_send(
+            source_target, source_connector_uri, "ids:DescriptionRequestMessage",
+            use_local_ecc=FL_IDS_ECC_ONLY,
+        )
         catalogs = desc.get("ids:resourceCatalog", [{}])
         resource = (catalogs[0].get("ids:offeredResource", [{}]) or [{}])[0]
         contract = (resource.get("ids:contractOffer",   [{}]) or [{}])[0]
@@ -999,7 +1086,7 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
         log.info(f"[fetch-algorithm] 1/4 Description OK -- artifact={contract_artifact}")
 
         agreement = _ids_send(
-            source_ecc_url, source_connector_uri, "ids:ContractRequestMessage",
+            source_target, source_connector_uri, "ids:ContractRequestMessage",
             requested_element=contract_artifact,
             payload={
                 "@context"      : _ids_context(),
@@ -1010,24 +1097,27 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
                 "ids:obligation": [], "ids:prohibition": [],
                 "ids:consumer"  : {"@id": CONNECTOR_URI},
             },
+            use_local_ecc=FL_IDS_ECC_ONLY,
         )
         transfer_contract = agreement.get("@id", "")
         log.info(f"[fetch-algorithm] 2/4 ContractAgreement OK -- transfer={transfer_contract}")
 
         _ids_send(
-            source_ecc_url, source_connector_uri, "ids:ContractAgreementMessage",
+            source_target, source_connector_uri, "ids:ContractAgreementMessage",
             requested_artifact=contract_artifact,
             transfer_contract=transfer_contract,
             correlation_message=transfer_contract,
             payload=agreement,
+            use_local_ecc=FL_IDS_ECC_ONLY,
         )
         log.info("[fetch-algorithm] 3/4 Acuerdo confirmado")
 
         resp = _ids_send(
-            source_ecc_url, source_connector_uri, "ids:ArtifactRequestMessage",
+            source_target, source_connector_uri, "ids:ArtifactRequestMessage",
             requested_artifact=contract_artifact,
             transfer_contract=transfer_contract,
             correlation_message=transfer_contract,
+            use_local_ecc=FL_IDS_ECC_ONLY,
         )
         log.info(f"[fetch-algorithm] 4/4 ArtifactResponse recibida -- type={resp.get('type','?')!r}")
 
@@ -1179,7 +1269,9 @@ def _train_local(global_weights_b64: str, round_num: int, csv_path: str | None =
 
 
 def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
-                          weights_b64: str, round_num: int):
+                          weights_b64: str, round_num: int,
+                          transfer_contract: str | None = None,
+                          requested_artifact: str | None = None):
     import re as _re_gw
     peer_dataapp = _dataapp_url_from_ecc(peer_ecc_url)
     if not peer_dataapp:
@@ -1187,10 +1279,11 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
         return
 
     payload_size = len(weights_b64) if weights_b64 else 0
+    local_transfer_contract, local_requested_artifact = _local_contract_artifact()
 
     # --- Canal WebSocket (data-plane): intentar primero si el túnel está activo ---
     _m_gw = _re_gw.search(r"worker(\d+)", peer_ecc_url) or _re_gw.search(r"worker(\d+)", peer_conn_uri)
-    if _m_gw:
+    if _m_gw and not FL_WEIGHTS_VIA_ECC:
         _peer_wid = _m_gw.group(1)
         t_start = time.time()
         if _send_global_weights_ws(_peer_wid, weights_b64, round_num):
@@ -1222,33 +1315,39 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                 f"-- fallback HTTP DataApp-to-DataApp"
             )
 
-    # --- Fallback: IDS Multipart o HTTP directo al DataApp del peer ---
+    # --- Canal IDS por ECC (el tramo ECC<->ECC puede ir por WSS/IDSCP segun config) ---
     t_start = time.time()
     payload_dict = {
+        "type"              : "fl_global_weights",
         "round"             : round_num,
         "global_weights_b64": weights_b64,
         "from_coordinator"  : INSTANCE_ID,
         "coordinator_ecc"   : f"https://{ECC_HOSTNAME}:8889/data",
         "coordinator_uri"   : CONNECTOR_URI,
+        "coordinator_transfer_contract": local_transfer_contract,
+        "coordinator_requested_artifact": local_requested_artifact,
     }
+    payload_b64 = base64.b64encode(json.dumps(payload_dict).encode()).decode()
     try:
-        if not ALLOW_IDS_BYPASS:
-            payload_dict["type"] = "fl_global_weights"
-            forward_target = f"{peer_dataapp}/data"
+        if FL_WEIGHTS_VIA_ECC or not ALLOW_IDS_BYPASS:
+            forward_target = _ecc_forward_url(peer_ecc_url) if FL_IDS_ECC_ONLY else peer_ecc_url
             _ids_send(
                 forward_to_url       = forward_target,
                 forward_to_connector = peer_conn_uri,
                 message_type         = "ids:ArtifactRequestMessage",
+                requested_artifact   = requested_artifact,
+                transfer_contract    = transfer_contract,
                 payload              = payload_dict,
-                extra_header         = {"ids:contentVersion": f"fl_global_weights::{round_num}"},
+                extra_header         = {"ids:contentVersion": f"fl_global_weights::{round_num}::payload::{payload_b64}"},
+                use_local_ecc        = FL_IDS_ECC_ONLY or FL_WEIGHTS_VIA_ECC,
             )
             elapsed_ms = (time.time() - t_start) * 1000
             log.info(
                 f"  Pesos globales ronda {round_num} -> {forward_target} "
-                f"[OK IDS fallback]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
+                f"[OK IDS via ECC]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
             )
-            _record_ws_perf("http_ids", elapsed_ms, payload_size, round_num, f"global->{forward_target}")
-            # --- CH [GAP 3-IDS]: Pesos globales enviados via IDS multipart fallback ---
+            _record_ws_perf("ids_ecc", elapsed_ms, payload_size, round_num, f"global->{forward_target}")
+            # --- CH: Pesos globales enviados via IDS sobre el trayecto ECC->ECC ---
             _report_to_ch(
                 message_type="ids:ArtifactRequestMessage",
                 source_connector=CONNECTOR_URI,
@@ -1256,11 +1355,11 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                 status="success",
                 response_time_ms=elapsed_ms,
                 additional_data={
-                    "event": "global_weights_sent_ids_fallback",
+                    "event": "global_weights_sent_ids_ecc",
                     "round": round_num,
                     "forward_target": forward_target,
                     "payload_kb": round(payload_size / 1024, 1),
-                    "channel": "ids_multipart",
+                    "channel": "ids_ecc",
                 },
             )
         else:
@@ -1294,12 +1393,13 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
             )
     except Exception as exc:
         with _ws_perf_lock:
-            _ws_perf_stats["http_failures"] += 1
+            _ws_perf_stats["ids_ecc_failures" if (FL_WEIGHTS_VIA_ECC or FL_IDS_ECC_ONLY) else "http_failures"] += 1
         log.error(f"Error enviando pesos globales a {peer_dataapp}: {exc}")
 
 
 def _send_local_weights(weights_b64: str, n_samples: int,
                          metrics: dict, round_num: int):
+    global coordinator_transfer_contract, coordinator_requested_artifact
     if not coordinator_ecc_url:
         log.error("coordinator_ecc_url no definido")
         return
@@ -1318,9 +1418,26 @@ def _send_local_weights(weights_b64: str, n_samples: int,
         "n_samples"  : n_samples,
         "metrics"    : metrics,
     }
+    payload_b64 = base64.b64encode(json.dumps(_ws_payload).encode()).decode()
+
+    if not coordinator_requested_artifact and coordinator_conn_uri:
+        _coord_contract, _coord_artifact = _peer_contract_artifact(
+            coordinator_ecc_url, coordinator_conn_uri
+        )
+        if _coord_artifact:
+            coordinator_requested_artifact = _coord_artifact
+        if not coordinator_transfer_contract and _coord_contract:
+            coordinator_transfer_contract = _coord_contract
+
+    if not coordinator_requested_artifact:
+        log.error(
+            f"[fl_weights] No se pudo resolver ids:requestedArtifact del coordinator "
+            f"({coordinator_conn_uri or coordinator_ecc_url})"
+        )
+        return
 
     t_start = time.time()
-    if _send_local_weights_ws(_ws_payload):
+    if not FL_WEIGHTS_VIA_ECC and _send_local_weights_ws(_ws_payload):
         elapsed_ms = (time.time() - t_start) * 1000
         log.info(
             f"  Pesos locales ronda {round_num} -> coordinator (WS) "
@@ -1331,23 +1448,37 @@ def _send_local_weights(weights_b64: str, n_samples: int,
 
     t_start = time.time()
     try:
-        if not ALLOW_IDS_BYPASS:
+        if FL_WEIGHTS_VIA_ECC or not ALLOW_IDS_BYPASS:
+            # Evita que varios workers golpeen el mismo ECC/coordinator exactamente
+            # al mismo tiempo; en pruebas reales esto ha reducido bloqueos
+            # intermitentes en rondas avanzadas.
+            if FL_IDS_ECC_ONLY:
+                send_delay_s = min(2.0, max(0.0, 0.5 * float(INSTANCE_ID)))
+                if send_delay_s > 0:
+                    log.info(
+                        f"[fl_weights] Esperando {send_delay_s:.1f}s antes de enviar "
+                        f"pesos locales de ronda {round_num} para evitar colisiones ECC"
+                    )
+                    time.sleep(send_delay_s)
             if not coordinator_conn_uri:
                 raise ValueError("coordinator_conn_uri no definido para enviar por IDS")
-            forward_target = f"{coord_dataapp}/data"
+            forward_target = _ecc_forward_url(coordinator_ecc_url) if FL_IDS_ECC_ONLY else coordinator_ecc_url
             _ids_send(
                 forward_to_url       = forward_target,
                 forward_to_connector = coordinator_conn_uri,
                 message_type         = "ids:ArtifactRequestMessage",
+                requested_artifact   = coordinator_requested_artifact,
+                transfer_contract    = coordinator_transfer_contract,
                 payload              = _ws_payload,
-                extra_header         = {"ids:contentVersion": f"fl_weights::{INSTANCE_ID}::{round_num}"},
+                extra_header         = {"ids:contentVersion": f"fl_weights::{INSTANCE_ID}::{round_num}::payload::{payload_b64}"},
+                use_local_ecc        = FL_IDS_ECC_ONLY or FL_WEIGHTS_VIA_ECC,
             )
             elapsed_ms = (time.time() - t_start) * 1000
             log.info(
                 f"  Pesos locales ronda {round_num} -> {forward_target} "
-                f"[OK IDS fallback]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
+                f"[OK IDS via ECC]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
             )
-            _record_ws_perf("ws_fallback", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}->coord")
+            _record_ws_perf("ids_ecc", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}->coord")
         else:
             resp = requests.post(
                 f"{coord_dataapp}/fl/receive-local-weights",
@@ -1364,7 +1495,7 @@ def _send_local_weights(weights_b64: str, n_samples: int,
             _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}->coord")
     except Exception as exc:
         with _ws_perf_lock:
-            _ws_perf_stats["http_failures"] += 1
+            _ws_perf_stats["ids_ecc_failures" if (FL_WEIGHTS_VIA_ECC or FL_IDS_ECC_ONLY) else "http_failures"] += 1
         log.error(f"Error enviando pesos locales a {coord_dataapp}: {exc}")
 
 
@@ -1893,7 +2024,11 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
         # firewall del ECC. Si falla, usamos la REST API publica del peer (puerto 8449)
         # que esta accesible desde cualquier cliente en la red Docker.
         try:
-            desc     = _ids_send(ecc_url, connector_uri, "ids:DescriptionRequestMessage")
+            _peer_target = _ecc_forward_url(ecc_url) if FL_IDS_ECC_ONLY else ecc_url
+            desc     = _ids_send(
+                _peer_target, connector_uri, "ids:DescriptionRequestMessage",
+                use_local_ecc=FL_IDS_ECC_ONLY,
+            )
             real_uri = desc.get("@id", "") or connector_uri
             log.info(f"[broker-discover] [OK] Catalogo IDS obtenido de {ecc_url}")
             # --- CH [GAP 1]: DescriptionRequestMessage saliente al peer ---
@@ -2262,51 +2397,67 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
 
         if algo_bytes:
             log.info(f"[ronda {round_num}] Distribuyendo algorithm.py + fl_config.json a peers...")
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(PEER_ECC_URLS), 1)) as ex:
-                _peer_csvs = PEER_SELECTED_CSVS if PEER_SELECTED_CSVS else [None] * len(PEER_ECC_URLS)
-                futures = {
-                    ex.submit(_negotiate_and_send_algorithm, p, u, algo_bytes,
-                              config_bytes or b"{}", csv,
-                              next((w.get("transfer_contract") for w in _accepted_workers if w["connector_uri"] == u), None)
-                              ): p
-                    for p, u, csv in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS, _peer_csvs)
-                }
-                for fut in concurrent.futures.as_completed(futures):
-                    peer = futures[fut]
+            _peer_csvs = PEER_SELECTED_CSVS if PEER_SELECTED_CSVS else [None] * len(PEER_ECC_URLS)
+            if FL_IDS_ECC_ONLY:
+                for p, u, csv in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS, _peer_csvs):
                     try:
-                        ok = fut.result()
-                        log.info(f"  [ronda {round_num}] -> {peer}: {'[OK]' if ok else 'OK'}")
+                        ok = _negotiate_and_send_algorithm(
+                            p, u, algo_bytes, config_bytes or b"{}", csv,
+                            next((w.get("transfer_contract") for w in _accepted_workers if w["connector_uri"] == u), None),
+                            next((w.get("requested_artifact") for w in _accepted_workers if w["connector_uri"] == u), None),
+                        )
+                        log.info(f"  [ronda {round_num}] -> {p}: {'[OK]' if ok else 'OK'}")
                     except Exception as exc:
-                        log.error(f"  [ronda {round_num}] -> {peer}: OK {exc}")
+                        log.error(f"  [ronda {round_num}] -> {p}: OK {exc}")
+                    time.sleep(0.25)
+            else:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(PEER_ECC_URLS), 1)) as ex:
+                    futures = {
+                        ex.submit(_negotiate_and_send_algorithm, p, u, algo_bytes,
+                                  config_bytes or b"{}", csv,
+                                  next((w.get("transfer_contract") for w in _accepted_workers if w["connector_uri"] == u), None),
+                                  next((w.get("requested_artifact") for w in _accepted_workers if w["connector_uri"] == u), None)
+                                  ): p
+                        for p, u, csv in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS, _peer_csvs)
+                    }
+                    for fut in concurrent.futures.as_completed(futures):
+                        peer = futures[fut]
+                        try:
+                            ok = fut.result()
+                            log.info(f"  [ronda {round_num}] -> {peer}: {'[OK]' if ok else 'OK'}")
+                        except Exception as exc:
+                            log.error(f"  [ronda {round_num}] -> {peer}: OK {exc}")
 
         if algo_bytes:
             time.sleep(3)
 
-        # -- Enviar pesos globales: WS high-speed primero, HTTP como fallback --
-        import re as _re_gw
-        for peer_url, peer_uri in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS):
-            _m_gw  = _re_gw.search(r"worker(\d+)", peer_url)
-            _wid_gw = _m_gw.group(1) if _m_gw else None
-            _t0_gw  = time.time()
-            _used_ws_gw = bool(_wid_gw and _send_global_weights_ws(
-                _wid_gw, global_weights_b64, round_num
-            ))
-            if _used_ws_gw:
-                _ms_gw = (time.time() - _t0_gw) * 1000
-                _kb_gw = len(global_weights_b64) / 1024 if global_weights_b64 else 0
-                log.info(
-                    f"  Pesos globales ronda {round_num} "
-                    f"-> be-dataapp-worker{_wid_gw}:8500 "
-                    f"[OK]  {_kb_gw:.0f} KB en {_ms_gw:.1f}ms [WS]"
-                )
-                _record_ws_perf(
-                    "ws", _ms_gw, len(global_weights_b64 or ""),
-                    round_num, f"global->worker{_wid_gw}"
-                )
-            else:
+        # -- Enviar pesos globales usando la politica de transporte configurada --
+        if FL_IDS_ECC_ONLY:
+            for peer_url, peer_uri in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS):
+                try:
+                    _send_global_weights(
+                        peer_url,
+                        peer_uri,
+                        global_weights_b64,
+                        round_num,
+                        next((w.get("transfer_contract") for w in _accepted_workers if w["connector_uri"] == peer_uri), None),
+                        next((w.get("requested_artifact") for w in _accepted_workers if w["connector_uri"] == peer_uri), None),
+                    )
+                except Exception as exc:
+                    log.error(f"Error enviando pesos globales a {peer_url}: {exc}")
+                time.sleep(0.25)
+        else:
+            for peer_url, peer_uri in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS):
                 threading.Thread(
                     target=_send_global_weights,
-                    args=(peer_url, peer_uri, global_weights_b64, round_num),
+                    args=(
+                        peer_url,
+                        peer_uri,
+                        global_weights_b64,
+                        round_num,
+                        next((w.get("transfer_contract") for w in _accepted_workers if w["connector_uri"] == peer_uri), None),
+                        next((w.get("requested_artifact") for w in _accepted_workers if w["connector_uri"] == peer_uri), None),
+                    ),
                     daemon=True,
                 ).start()
 
@@ -2470,6 +2621,8 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
 @app.post("/data")
 async def ids_data(request: Request):
     global is_coordinator, coordinator_ecc_url, coordinator_conn_uri
+    global coordinator_transfer_contract, coordinator_requested_artifact
+    global coordinator_transfer_contract, coordinator_requested_artifact
 
     raw_body     = await request.body()
     content_type = request.headers.get("content-type", "")
@@ -2752,9 +2905,18 @@ async def ids_data(request: Request):
                     )
                     if _looks_like_fl_algo:
                         from_coord = False
+                        selected_csv = None
+                        if content_version.startswith("fl_algorithm::"):
+                            content_version = content_version[len("fl_algorithm::"):]
                         if "||from_coordinator::1" in content_version:
                             content_version = content_version.replace("||from_coordinator::1", "")
                             from_coord = True
+                        if "||selected_csv_b64::" in content_version:
+                            content_version, selected_csv_b64 = content_version.split("||selected_csv_b64::", 1)
+                            try:
+                                selected_csv = base64.b64decode(selected_csv_b64).decode("utf-8")
+                            except Exception as _e:
+                                log.error(f"[ArtifactRequest] Error decodificando selected_csv_b64: {_e}")
                         if "||fl_config::" in content_version:
                             algo_part, config_part = content_version.split("||fl_config::", 1)
                         else:
@@ -2764,6 +2926,7 @@ async def ids_data(request: Request):
                             "content"         : algo_part,
                             "config"          : config_part,
                             "from_coordinator": from_coord,
+                            "selected_csv"    : selected_csv,
                     }
                     log.info(f"[ArtifactRequest] fl_algorithm recuperado desde ids:contentVersion | config={'present' if config_part else 'absent'} | from_coordinator={from_coord}")
 
@@ -2797,15 +2960,25 @@ async def ids_data(request: Request):
                             log.error(f"[ArtifactRequest] Error decodificando tokenValue {prefix}: {e}")
                     break
 
-        # Intentar extraer config del payload JSON si falta
-        if payload_dict.get("type") == "fl_algorithm" and not payload_dict.get("config"):
-            if payload_val:
-                try:
-                    pv = json.loads(payload_val)
-                    if pv.get("config"):
-                        payload_dict["config"] = pv["config"]
-                except Exception:
-                    pass
+        # Intentar recuperar metadatos del payload JSON si el ECC obligo a
+        # reconstruir el artefacto desde ids:contentVersion.
+        if payload_dict.get("type") == "fl_algorithm" and payload_val:
+            try:
+                pv = json.loads(payload_val)
+                if isinstance(pv, dict):
+                    for key in (
+                        "config",
+                        "selected_csv",
+                        "coordinator_uri",
+                        "coordinator_ecc",
+                        "from_coordinator",
+                        "coordinator_transfer_contract",
+                        "coordinator_requested_artifact",
+                    ):
+                        if key in pv and pv.get(key) not in (None, ""):
+                            payload_dict[key] = pv[key]
+            except Exception:
+                pass
 
         artifact_type = payload_dict.get("type", "")
         log.info(f"[ArtifactRequest] artifact_type={artifact_type!r}")
@@ -2870,15 +3043,20 @@ async def ids_data(request: Request):
                         log.info(f"[fl_global_weights] coordinator_ecc_url inferido del issuerConnector: {_coord_ecc}")
                 coordinator_ecc_url  = _coord_ecc
                 coordinator_conn_uri = _coord_uri
-                _start_worker_ws_client()
+                coordinator_transfer_contract = payload_dict.get("coordinator_transfer_contract")
+                coordinator_requested_artifact = payload_dict.get("coordinator_requested_artifact")
+                if not FL_WEIGHTS_VIA_ECC:
+                    _start_worker_ws_client()
+
+            with _fl_lock:
+                fl_state["current_round"] = round_num
+                if fl_state.get("status") == "idle":
+                    fl_state["status"] = f"round_{round_num}"
 
             def _train_and_reply():
                 try:
                     deadline_algo = time.time() + 15
                     while time.time() < deadline_algo:
-                        with _fl_lock:
-                            if fl_state.get("status") == "idle":
-                                return
                         if os.path.exists(ALGO_IDS_PATH) or os.path.exists(ALGO_BAKED_PATH):
                             break
                         log.info(f"[fl_global_weights] Esperando algorithm.py... (ronda {round_num})")
@@ -2888,7 +3066,7 @@ async def ids_data(request: Request):
                         return
                     result = _train_local(global_weights_b64, round_num, _my_selected_csv)
                     with _fl_lock:
-                        if fl_state.get("status") == "idle":
+                        if fl_state.get("status") == "idle" and fl_state.get("current_round") != round_num:
                             log.warning(f"Ronda {round_num} cancelada durante train_local. Ignorando resultados descartan envío local.")
                             return
                     _send_local_weights(result["weights_b64"], result["n_samples"],
@@ -2922,7 +3100,20 @@ async def ids_data(request: Request):
 
             if payload_dict.get("from_coordinator"):
                 global _my_selected_csv
+                is_coordinator = False
                 sel_csv = payload_dict.get("selected_csv")
+                coord_ecc = payload_dict.get("coordinator_ecc")
+                coord_uri = payload_dict.get("coordinator_uri")
+                coord_transfer = payload_dict.get("coordinator_transfer_contract")
+                coord_artifact = payload_dict.get("coordinator_requested_artifact")
+                if coord_ecc:
+                    coordinator_ecc_url = coord_ecc
+                if coord_uri:
+                    coordinator_conn_uri = coord_uri
+                if coord_transfer:
+                    coordinator_transfer_contract = coord_transfer
+                if coord_artifact:
+                    coordinator_requested_artifact = coord_artifact
                 if sel_csv:
                     full_path = os.path.join(INPUT_DIR, sel_csv)
                     if os.path.exists(full_path):
@@ -2936,6 +3127,9 @@ async def ids_data(request: Request):
                             f"[fl_algorithm] CSV '{sel_csv}' no encontrado en {INPUT_DIR}"
                             f" -- se usara seleccion automatica"
                         )
+                with _fl_lock:
+                    fl_state["status"] = "worker_ready"
+                    fl_state["current_round"] = 0
                 log.info(f"OK algorithm.py + config recibidos del coordinator -- worker-{INSTANCE_ID} = WORKER")
             else:
                 is_coordinator = True
@@ -3785,6 +3979,7 @@ async def fl_receive_global_weights(request: Request):
     Dispara el entrenamiento local y devuelve los pesos locales al coordinator.
     """
     global coordinator_ecc_url, coordinator_conn_uri
+    global coordinator_transfer_contract, coordinator_requested_artifact
     body = await request.json()
 
     round_num       = body.get("round", 0)
@@ -3895,6 +4090,8 @@ async def fl_accept_negotiation(request: Request):
 
     coord_uri = body.get("coordinator_uri", "")
     coord_ecc = body.get("coordinator_ecc", "")
+    coord_transfer_contract = body.get("coordinator_transfer_contract", "")
+    coord_requested_artifact = body.get("coordinator_requested_artifact", "")
     sel_csv   = body.get("selected_csv", "")
 
     if FL_OPT_OUT:
@@ -3932,9 +4129,14 @@ async def fl_accept_negotiation(request: Request):
         coordinator_ecc_url  = coord_ecc
     if coord_uri:
         coordinator_conn_uri = coord_uri
+    if coord_transfer_contract:
+        coordinator_transfer_contract = coord_transfer_contract
+    if coord_requested_artifact:
+        coordinator_requested_artifact = coord_requested_artifact
 
-    # Iniciar tunel WS hacia el coordinator en background (si no esta ya activo)
-    _start_worker_ws_client()
+    # Solo abrir tunel DataApp->DataApp cuando no estemos forzando transporte via ECC.
+    if not FL_WEIGHTS_VIA_ECC:
+        _start_worker_ws_client()
 
     log.info(
         f"[/fl/accept-negotiation] ACEPTADO -- worker-{INSTANCE_ID} participara en FL\n"
@@ -4030,36 +4232,50 @@ async def fl_negotiate():
                 "connector_uri": uri,
                 "ecc_url"      : ecc_url,
                 "reason"       : "error",
-                "message"      : "No se pudo derivar el worker_id del peer para contactar su DataApp.",
+                "message"      : "No se pudo derivar el worker_id del peer para contactar su ECC.",
             })
             continue
 
         log.info(
             f"[/fl/negotiate] Negociando con worker-{peer_worker_id} "
-            f"via ContractRequestMessage -> DataApp {peer_dataapp_url}/data"
+            f"via ContractRequestMessage -> {_ecc_forward_url(ecc_url) if FL_IDS_ECC_ONLY else f'{peer_dataapp_url}/data'}"
         )
+
+        peer_desc = _ids_send(
+            _ecc_forward_url(ecc_url) if FL_IDS_ECC_ONLY else ecc_url,
+            uri,
+            "ids:DescriptionRequestMessage",
+            use_local_ecc=FL_IDS_ECC_ONLY,
+        )
+        peer_contract_offer, peer_requested_artifact = _first_contract_artifact(peer_desc)
+        if not peer_requested_artifact:
+            rejected.append({
+                "connector_uri": uri,
+                "ecc_url"      : ecc_url,
+                "reason"       : "error",
+                "message"      : "No se pudo derivar el artifact IDS del peer.",
+            })
+            continue
 
         # Payload del ContractRequest FL
         _contract_payload = {
             "@context"      : _ids_context(),
             "@type"         : "ids:ContractRequest",
-            "@id"           : f"https://w3id.org/idsa/autogen/contractRequest/fl_nego_{uuid.uuid4()}",
+            "@id"           : peer_contract_offer or f"https://w3id.org/idsa/autogen/contractRequest/fl_nego_{uuid.uuid4()}",
             "ids:permission": [],
             "ids:provider"  : {"@id": uri},
             "ids:obligation": [], "ids:prohibition": [],
             "ids:consumer"  : {"@id": CONNECTOR_URI},
         }
 
-        # -- Paso 1: ContractRequestMessage directo al DataApp del peer ----------
-        # La negociacion FL es un protocolo interno entre DataApps en la red Docker.
-        # El ECC (puerto 8889) no enruta este tipo de mensajes de negociacion FL,
-        # por lo que se contacta directamente al DataApp (be-dataapp-workerN:8500).
-        # La soberania del dato se garantiza mediante FL_OPT_OUT en el DataApp peer.
+        # -- Paso 1: ContractRequestMessage via ECC->ECC --------------------------
         ids_result = _ids_send(
-            forward_to_url       = f"{peer_dataapp_url}/data",
+            forward_to_url       = _ecc_forward_url(ecc_url) if FL_IDS_ECC_ONLY else f"{peer_dataapp_url}/data",
             forward_to_connector = uri,
             message_type         = "ids:ContractRequestMessage",
+            requested_element    = peer_requested_artifact,
             payload              = _contract_payload,
+            use_local_ecc        = FL_IDS_ECC_ONLY,
         )
 
         # -- Paso 2: Evaluar la respuesta (viene del ECC o del fallback DataApp) -
@@ -4088,22 +4304,24 @@ async def fl_negotiate():
                 "ecc_url"          : ecc_url,
                 "match_ratio"      : worker["match_ratio"],
                 "transfer_contract": transfer_contract_id,
+                "requested_artifact": peer_requested_artifact,
                 "selected_csv"     : sel_csv,
             })
-            # Notificar al peer sus datos de coordinator para que abra el tunel WS
-            try:
-                requests.post(
-                    f"{peer_dataapp_url}/fl/accept-negotiation",
-                    json={
-                        "coordinator_uri": CONNECTOR_URI,
-                        "coordinator_ecc": my_ecc_url,
-                        "selected_csv"   : sel_csv,
-                    },
-                    timeout=10,
-                    verify=TLS_CERT,
-                )
-            except Exception:
-                pass   # El tunel WS se iniciara en /fl/start de todos modos
+            if not FL_IDS_ECC_ONLY:
+                # Notificar al peer sus datos de coordinator para que abra el tunel WS
+                try:
+                    requests.post(
+                        f"{peer_dataapp_url}/fl/accept-negotiation",
+                        json={
+                            "coordinator_uri": CONNECTOR_URI,
+                            "coordinator_ecc": my_ecc_url,
+                            "selected_csv"   : sel_csv,
+                        },
+                        timeout=10,
+                        verify=TLS_CERT,
+                    )
+                except Exception:
+                    pass   # El tunel WS se iniciara en /fl/start de todos modos
 
         elif ("Rejection" in ids_type
               or "rejection" in ids_result.get("reason", "")
@@ -4197,6 +4415,7 @@ def system_reset():
     global fl_state, _my_selected_csv
     global is_coordinator, _published_fl_contract
     global coordinator_ecc_url, coordinator_conn_uri
+    global coordinator_transfer_contract, coordinator_requested_artifact
 
 
     # --- MEMORIA: Reset de todas las variables de estado ---
@@ -4215,6 +4434,8 @@ def system_reset():
     _published_fl_contract = {}
     coordinator_ecc_url  = None
     coordinator_conn_uri = None
+    coordinator_transfer_contract = None
+    coordinator_requested_artifact = None
 
     PEER_SELECTED_CSVS.clear()
 
@@ -4227,8 +4448,9 @@ def system_reset():
     with _ws_perf_lock:
         _ws_perf_stats.update({
             "ws_sends": 0, "ws_total_ms": 0.0, "ws_bytes": 0,
+            "ids_ecc_sends": 0, "ids_ecc_total_ms": 0.0, "ids_ecc_bytes": 0,
             "http_sends": 0, "http_total_ms": 0.0, "http_bytes": 0,
-            "ws_failures": 0, "http_failures": 0, "history": [],
+            "ws_failures": 0, "ids_ecc_failures": 0, "http_failures": 0, "history": [],
         })
 
     deleted = []
@@ -4439,7 +4661,12 @@ def _record_ws_perf(channel: str, elapsed_ms: float, payload_bytes: int,
                     round_num: int, label: str):
     """Registra una transferencia en las metricas de rendimiento WS vs HTTP."""
     with _ws_perf_lock:
-        key = "ws" if channel == "ws" else "http"
+        if channel == "ws":
+            key = "ws"
+        elif channel == "ids_ecc":
+            key = "ids_ecc"
+        else:
+            key = "http"
         _ws_perf_stats[f"{key}_sends"] += 1
         _ws_perf_stats[f"{key}_total_ms"] += elapsed_ms
         _ws_perf_stats[f"{key}_bytes"] += payload_bytes
@@ -4690,6 +4917,8 @@ def _get_tunnel_status_data():
         "fl_status_clients"       : len(_ws_manager._clients),
         "worker_tunnels_active"   : list(fl_ws_manager.active_workers.keys()),
         "coordinator_tunnel_active": fl_ws_client_conn is not None,
+        "ecc_wss_enabled"         : WS_ECC_ENABLED,
+        "ids_ecc_only"            : FL_IDS_ECC_ONLY,
         "role"                    : "coordinator" if is_coordinator else "worker",
     }
 
@@ -4717,13 +4946,32 @@ def _get_performance_data():
         history = list(stats.pop("history", []))
 
     ws_avg = (stats["ws_total_ms"] / stats["ws_sends"]) if stats["ws_sends"] > 0 else 0
+    ids_ecc_avg = (stats["ids_ecc_total_ms"] / stats["ids_ecc_sends"]) if stats["ids_ecc_sends"] > 0 else 0
     http_avg = (stats["http_total_ms"] / stats["http_sends"]) if stats["http_sends"] > 0 else 0
-    speedup = (http_avg / ws_avg) if ws_avg > 0 and http_avg > 0 else None
+    speedup = (ids_ecc_avg / ws_avg) if ws_avg > 0 and ids_ecc_avg > 0 else None
 
     return {
         "instance": INSTANCE_ID,
         "role": "coordinator" if is_coordinator else "worker",
         "summary": {
+            "ws_dataapp": {
+                "sends": stats["ws_sends"],
+                "avg_ms": round(ws_avg, 2),
+                "total_kb": round(stats["ws_bytes"] / 1024, 1),
+                "failures": stats["ws_failures"],
+            },
+            "ids_ecc": {
+                "sends": stats["ids_ecc_sends"],
+                "avg_ms": round(ids_ecc_avg, 2),
+                "total_kb": round(stats["ids_ecc_bytes"] / 1024, 1),
+                "failures": stats["ids_ecc_failures"],
+            },
+            "http_fallback": {
+                "sends": stats["http_sends"],
+                "avg_ms": round(http_avg, 2),
+                "total_kb": round(stats["http_bytes"] / 1024, 1),
+                "failures": stats["http_failures"],
+            },
             "ws": {
                 "sends": stats["ws_sends"],
                 "avg_ms": round(ws_avg, 2),
@@ -4736,7 +4984,7 @@ def _get_performance_data():
                 "total_kb": round(stats["http_bytes"] / 1024, 1),
                 "failures": stats["http_failures"],
             },
-            "ws_speedup_factor": round(speedup, 2) if speedup else "N/A (datos insuficientes)",
+            "ws_speedup_factor_vs_ids_ecc": round(speedup, 2) if speedup else "N/A (datos insuficientes)",
         },
         "recent_transfers": history[-20:],
     }
@@ -4799,68 +5047,6 @@ async def ws_fl_status(websocket: WebSocket):
 # en lugar de usar HTTP POST /data.
 # Este endpoint lo deserializa y delega en la misma logica que /data.
 # =============================================================================
-
-@app.websocket("/ws/ids-data")
-async def ws_ids_data(websocket: WebSocket):
-    """
-    Receptor WebSocket de mensajes IDS (equivalente a POST /data pero por WSS).
-    El ECC conecta aqui cuando application.dataApp.websocket.isEnabled=true.
-    """
-    await websocket.accept()
-    client_host = websocket.client.host if websocket.client else "unknown"
-    log.info(f"[WS /ids-data] Conexion aceptada desde {client_host}")
-    try:
-        while True:
-            raw = await websocket.receive_text()
-            try:
-                msg = json.loads(raw)
-            except Exception:
-                await websocket.send_text(json.dumps({"error": "invalid JSON"}))
-                continue
-
-            header_val  = msg.get("header", "")
-            payload_val = msg.get("payload", None)
-
-            if not header_val:
-                await websocket.send_text(json.dumps({"error": "missing header"}))
-                continue
-
-            _notify_ids_monitor({
-                "event": "ids_proxy_request",
-                "instance": INSTANCE_ID,
-                "payload_snippet": payload_val[:150] if payload_val else ""
-            })
-
-            # -- Reutiliza la logica de /data creando un Request sintetico ----
-            # Para no duplicar codigo, construimos un multipart encoder
-            # simulando un POST request valido compatible con ids_data.
-            _fields = {"header": ("header", header_val, "application/json")}
-            if payload_val is not None:
-                _fields["payload"] = ("payload", payload_val, "text/plain")
-            _encoder = MultipartEncoder(fields=_fields)
-            _raw_body_bytes = _encoder.to_string()
-
-            class _FakeRequest:
-                """Adapta el mensaje WS a la interfaz que espera ids_data."""
-                async def body(self):
-                    return _raw_body_bytes
-
-                @property
-                def headers(self):
-                    return {"content-type": _encoder.content_type}
-
-            # Procesar con la misma logica que el endpoint HTTP /data
-            response = await ids_data(_FakeRequest())
-            if hasattr(response, "body"):
-                await websocket.send_text(response.body.decode())
-            else:
-                await websocket.send_text(json.dumps({"status": "processed"}))
-
-    except WebSocketDisconnect:
-        log.info(f"[WS /ids-data] ECC/cliente desconectado ({client_host})")
-    except Exception as exc:
-        log.error(f"[WS /ids-data] Error inesperado: {exc}", exc_info=True)
-
 
 @app.websocket("/ws/logs")
 async def ws_logs(websocket: WebSocket):

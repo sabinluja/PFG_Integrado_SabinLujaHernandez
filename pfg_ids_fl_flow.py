@@ -824,6 +824,10 @@ def _ids_log(direction, msg_type, src, dst):
     print(f"      {color}[IDS {arrow}]  {short:<44}{GRAY}{src}    {dst}{RESET}")
 
 
+def _coord_ecc_label(cid):
+    return f"ecc-worker{cid}:8889"
+
+
 def _print_ronda_header(rnd_num, total_rounds, cid):
     print()
     print(f"    {CYAN}{'' * 54}{RESET}")
@@ -838,19 +842,20 @@ def _print_handshake_algoritmo(rnd_num, wid, peer_lbl, cid):
     En app.py esto ocurre en _negotiate_and_send_algorithm, que se llama
     en CADA ronda (el coordinator lo reenvia para asegurar sincronia).
     """
+    coord_lbl = _coord_ecc_label(cid)
     print(f"\n      {BOLD}-> Worker-{wid}{RESET}")
     _ids_log("out", "ids:DescriptionRequestMessage",
-             f"coordinator-{cid}", peer_lbl)
+             coord_lbl, peer_lbl)
     _ids_log("in",  "ids:DescriptionResponseMessage",
-             peer_lbl, f"coordinator-{cid}")
+             peer_lbl, coord_lbl)
     _ids_log("out", "ids:ContractRequestMessage",
-             f"coordinator-{cid}", peer_lbl)
+             coord_lbl, peer_lbl)
     _ids_log("in",  "ids:ContractAgreementMessage",
-             peer_lbl, f"coordinator-{cid}")
+             peer_lbl, coord_lbl)
     _ids_log("out", "ids:ContractAgreementMessage (confirmacion)",
-             f"coordinator-{cid}", peer_lbl)
+             coord_lbl, peer_lbl)
     _ids_log("in",  "ids:MessageProcessedNotificationMessage",
-             peer_lbl, f"coordinator-{cid}")
+             peer_lbl, coord_lbl)
     print(f"      {GRAY}[ronda {rnd_num}] algorithm.py + fl_config.json "
           f"-> {peer_lbl}  {GREEN}{RESET}")
 
@@ -896,13 +901,16 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
             ws_status_clients  = td.get("fl_status_clients", 0)
             ws_workers_active  = td.get("worker_tunnels_active", [])
             ws_coord_tunnel    = td.get("coordinator_tunnel_active", False)
+            ecc_wss_enabled = td.get("ecc_wss_enabled", False)
+            ids_ecc_only = td.get("ids_ecc_only", False)
             info(f"[WS] /ws/fl-status   -> {ws_status_clients} cliente(s) de monitorizacion")
             if ws_workers_active:
-                ok(f"[WS] Tuneles High-Speed ACTIVOS -> workers: {ws_workers_active}")
+                ok(f"[WS] Tuneles directos DataApp↔DataApp ACTIVOS -> workers: {ws_workers_active}")
             else:
-                warn("[WS] Ningun tunel High-Speed WS activo aun -- "
-                     "los pesos se enviaran via IDS HTTP (fallback normal)")
-            info(f"[WS] Tunel hacia coordinator: {'Activo ' if ws_coord_tunnel else 'Inactivo (fallback HTTP)'}")
+                info("[WS] Tuneles directos DataApp↔DataApp inactivos")
+            info(f"[WS] Tunel WS hacia coordinator: {'Activo' if ws_coord_tunnel else 'Inactivo'}")
+            if ids_ecc_only:
+                info(f"[WS] Transporte FL activo: IDS via ECC↔ECC sobre {'WSS' if ecc_wss_enabled else 'HTTPS'}")
         else:
             warn(f"GET /ws/tunnel-status respondio {ts.status_code}")
     except Exception as _te:
@@ -1006,7 +1014,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                                         wid = m.group(1) if m else "?"
                                         pe  = endpoints["peers"].get(f"worker{wid}", {})
                                         pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
-                                        print(f"      {CYAN}[WS ]  fl_global_weights::round{rnd_num}  {GRAY}coordinator-{cid}  --  {pl}{RESET}")
+                                        print(f"      {CYAN}[WS ]  fl_global_weights::round{rnd_num}  {GRAY}{_coord_ecc_label(cid)}  --  {pl}{RESET}")
                                         print(f"      {GRAY}Pesos globales ronda {rnd_num} "
                                               f"-> {pl}  {GREEN}{RESET}")
                                     print()
@@ -1061,7 +1069,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                                     wid = m.group(1) if m else "?"
                                     pe  = endpoints["peers"].get(f"worker{wid}", {})
                                     pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
-                                    print(f"      {CYAN}[WS ]  fl_global_weights::round{rnd_num}  {GRAY}coordinator-{cid}  --  {pl}{RESET}")
+                                    print(f"      {CYAN}[WS ]  fl_global_weights::round{rnd_num}  {GRAY}{_coord_ecc_label(cid)}  --  {pl}{RESET}")
                                     print(f"      {GRAY}Pesos globales ronda {rnd_num} "
                                           f"-> {pl}  {GREEN}{RESET}")
 
@@ -1100,7 +1108,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                                     print()
                                     print(f"    {BOLD}[ronda {rnd_num}]  Pesos locales "
                                           f"recibidos de worker-{wid} (WebSocket):{RESET}")
-                                    print(f"      {GREEN}[WS ]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  --  coordinator-{cid}{RESET}")
+                                    print(f"      {GREEN}[WS ]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  --  {_coord_ecc_label(cid)}{RESET}")
                                     print(f"    {GRAY}[WS] [fl_weights]  Pesos de worker-{wid} "
                                           f"ronda {rnd_num} acumulados "
                                           f"({total_so_far}/{n_exp}){RESET}")
@@ -1249,7 +1257,7 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
                     pl   = pe.get("ecc_label", f"ecc-worker{wid}:8889")
                     print()
                     print(f"    {BOLD}[ronda {rnd_num}]  Pesos recibidos de worker-{wid} (WebSocket):{RESET}")
-                    print(f"      {GREEN}[WS ]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  --  coordinator-{cid}{RESET}")
+                    print(f"      {GREEN}[WS ]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  --  {_coord_ecc_label(cid)}{RESET}")
                     print(f"    {GRAY} Pesos acumulados ({total_so_far}/{n_exp}){RESET}")
             weights_shown[rnd_num] = already
 
@@ -1675,41 +1683,43 @@ def main():
             raw_metrics = requests.get(f"{coordinator_url}/metrics", timeout=req_timeout, verify=TLS_CERT).text
             perf = json.loads(raw_metrics)
             
-            print(f"  {CYAN}[RENDIMIENTO] DE TRANSFERENCIAS (Data Plane vs Control Plane IDS){RESET}")
+            print(f"  {CYAN}[RENDIMIENTO] DE TRANSFERENCIAS (WS directo vs IDS por ECC){RESET}")
             print(f"  {CYAN}----------------------------------------------------------------------{RESET}")
             
             ws_sends  = perf.get("ws_sends", 0)
             ws_ms     = perf.get("ws_total_ms", 0.0)
             ws_bytes  = perf.get("ws_bytes", 0)
 
+            ids_ecc_sends = perf.get("ids_ecc_sends", 0)
+            ids_ecc_ms    = perf.get("ids_ecc_total_ms", 0.0)
+            ids_ecc_bytes = perf.get("ids_ecc_bytes", 0)
+
             http_sends = perf.get("http_sends", 0)
             http_ms    = perf.get("http_total_ms", 0.0)
             http_bytes = perf.get("http_bytes", 0)
 
-            ws_fails   = perf.get("ws_failures", 0)
+            ids_ecc_fails = perf.get("ids_ecc_failures", 0)
             http_fails = perf.get("http_failures", 0)
 
-            print(f"  {BOLD}Túnel WebSocket (Data Plane){RESET}")
-            print(f"    Envíos exitosos : {ws_sends}   (Fallos: {ws_fails})")
-            if ws_sends > 0:
-                print(f"    Latencia Media  : {ws_ms / ws_sends:.1f} ms")
-                print(f"    Volumen total   : {ws_bytes / 1024:.1f} KB")
+            print()
+            print(f"  {BOLD}IDS vía ECC↔ECC (tramo externo WSS si está activo){RESET}")
+            print(f"    Envíos exitosos : {ids_ecc_sends}   (Fallos: {ids_ecc_fails})")
+            if ids_ecc_sends > 0:
+                print(f"    Latencia Media  : {ids_ecc_ms / ids_ecc_sends:.1f} ms")
+                print(f"    Volumen total   : {ids_ecc_bytes / 1024:.1f} KB")
 
             print()
-            print(f"  {BOLD}Fallback HTTP / IDS Multipart (Control Plane IDS){RESET}")
+            print(f"  {BOLD}HTTP fallback real{RESET}")
             print(f"    Envíos exitosos : {http_sends}   (Fallos: {http_fails})")
             if http_sends > 0:
                 print(f"    Latencia Media  : {http_ms / http_sends:.1f} ms")
                 print(f"    Volumen total   : {http_bytes / 1024:.1f} KB")
 
             print()
-            if ws_sends > 0 and http_sends > 0:
-                ratio = (http_ms / http_sends) / (ws_ms / ws_sends)
-                print(f"  {GREEN}► CONCLUSIÓN: WebSockets fue {ratio:.1f}x más rápido (ahorró {100 - (1/ratio)*100:.1f}% de overhead).{RESET}")
-            elif http_sends > 0:
-                print(f"  {YELLOW}► CONCLUSIÓN: El entrenamiento FL fue realizado 100% sobre el túnel IDS.{RESET}")
-            elif ws_sends > 0:
-                print(f"  {GREEN}► CONCLUSIÓN: Velocidad máxima obtenida mediante túnel asíncrono WebSocket.{RESET}")
+            if ids_ecc_sends > 0 and http_sends == 0 and ws_sends == 0:
+                print(f"  {GREEN}► CONCLUSIÓN: El entrenamiento FL fue realizado 100% sobre IDS usando ECC↔ECC.{RESET}")
+            elif ids_ecc_sends > 0 and http_sends > 0:
+                print(f"  {YELLOW}► CONCLUSIÓN: El flujo principal usó IDS vía ECC, con algo de HTTP fallback real.{RESET}")
             print()
         except Exception as e:
             warn(f"No se pudieron cargar las métricas de rendimiento: {e}")

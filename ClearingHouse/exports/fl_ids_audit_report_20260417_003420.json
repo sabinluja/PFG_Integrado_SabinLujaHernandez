@@ -1,0 +1,2190 @@
+{
+  "export_timestamp": "2026-04-16T22:34:22.550128",
+  "total_records": 58,
+  "filters": {
+    "source_connector": null,
+    "target_connector": null,
+    "message_type": null,
+    "status": null,
+    "date_from": null,
+    "date_to": null
+  },
+  "data": [
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:ContractAgreementMessage",
+      "message_header": {
+        "message_type": "ids:ContractAgreementMessage",
+        "issued": "2026-04-16T22:34:22.412463Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker3"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "contract_id": "https://w3id.org/idsa/autogen/contractAgreement/da4a6779-692d-4405-a054-40bd9e8b2dc0",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "contract_agreement",
+        "worker": "2",
+        "consumer": "http://w3id.org/engrd/connector/worker3",
+        "contract_offer_id": "https://w3id.org/idsa/autogen/contractOffer/e92e4169-f7fb-472d-9563-f45425970166"
+      },
+      "transaction_id": "e0defaf8-ee82-4bb2-a996-2ac19e26afec",
+      "timestamp": "2026-04-16T22:34:22.415000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "78ddfbfb1b67ead38c6e4347d371ce67c73e9def66b6314631235bd5739484e5",
+      "current_hash": "cad47b789d21ece4cbe76c1e6b43d8f21f90ef3521cc69869352ab3a65bb0b23"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:ContractAgreementMessage",
+      "message_header": {
+        "message_type": "ids:ContractAgreementMessage",
+        "issued": "2026-04-16T22:34:21.514868Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker1"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "contract_id": "https://w3id.org/idsa/autogen/contractAgreement/e4764d22-6d62-437a-b108-20c6ca3809c4",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "contract_agreement",
+        "worker": "2",
+        "consumer": "http://w3id.org/engrd/connector/worker1",
+        "contract_offer_id": "https://w3id.org/idsa/autogen/contractOffer/e92e4169-f7fb-472d-9563-f45425970166"
+      },
+      "transaction_id": "64ea825a-aa16-4381-b26f-fc2666f10669",
+      "timestamp": "2026-04-16T22:34:21.516000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "9200f9ad4e0957d9acc0a170639ce186e1dfb0c2cb0d1632827b17e4430ec239",
+      "current_hash": "78ddfbfb1b67ead38c6e4347d371ce67c73e9def66b6314631235bd5739484e5"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:ResourceUpdateMessage",
+      "message_header": {
+        "message_type": "ids:ResourceUpdateMessage",
+        "issued": "2026-04-16T22:34:20.587907Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "contract_id": "https://w3id.org/idsa/autogen/contractOffer/e92e4169-f7fb-472d-9563-f45425970166",
+      "resource_id": "https://w3id.org/idsa/autogen/textResource/fl_model_coordinator2_20260416_223418",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_model_published",
+        "coordinator": "2",
+        "artifact_id": "http://w3id.org/engrd/connector/artifact/fl_model_final_coordinator2_20260416_223418",
+        "n_authorized_peers": 2,
+        "global_metrics": {
+          "loss": 0.16098,
+          "accuracy": 0.933617,
+          "auc": 0.983881,
+          "precision": 0.926808,
+          "recall": 0.949884
+        },
+        "n_rounds": 5
+      },
+      "transaction_id": "0d357d05-9675-43dc-8c7f-ca3eadaa1a6d",
+      "timestamp": "2026-04-16T22:34:20.591000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "2f8eecef0712ffce3035fcbec1f94c6b7ea1eaacc42bdfeb799ceb358dc4fe59",
+      "current_hash": "9200f9ad4e0957d9acc0a170639ce186e1dfb0c2cb0d1632827b17e4430ec239"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "broadcast:http://w3id.org/engrd/connector/worker1,http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:NotificationMessage",
+      "message_header": {
+        "message_type": "ids:NotificationMessage",
+        "issued": "2026-04-16T22:34:18.312450Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "broadcast:http://w3id.org/engrd/connector/worker1,http://w3id.org/engrd/connector/worker3"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_completed",
+        "coordinator": "2",
+        "n_rounds": 5,
+        "best_round": 5,
+        "best_metrics": {
+          "loss": 0.16098,
+          "accuracy": 0.933617,
+          "auc": 0.983881,
+          "precision": 0.926808,
+          "recall": 0.949884
+        },
+        "peers": [
+          "http://w3id.org/engrd/connector/worker1",
+          "http://w3id.org/engrd/connector/worker3"
+        ]
+      },
+      "transaction_id": "5a831ec3-cc37-45d4-ac13-6da89d4e1ca6",
+      "timestamp": "2026-04-16T22:34:18.317000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "7246483f7260f9538b34d10ce33c918ef269ed69f2b0a88f0230f371c293a624",
+      "current_hash": "2f8eecef0712ffce3035fcbec1f94c6b7ea1eaacc42bdfeb799ceb358dc4fe59"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:ArtifactResponseMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactResponseMessage",
+        "issued": "2026-04-16T22:34:18.299347Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "response_time_ms": 18330.0,
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_round_completed",
+        "round": 5,
+        "total_rounds": 5,
+        "workers_ok": 3,
+        "total_samples": 65866,
+        "elapsed_seconds": 18.33,
+        "global_metrics": {
+          "loss": 0.16098,
+          "accuracy": 0.933617,
+          "auc": 0.983881,
+          "precision": 0.926808,
+          "recall": 0.949884
+        },
+        "coordinator": "2"
+      },
+      "transaction_id": "0e076eb6-dbe3-4142-afed-370e17167615",
+      "timestamp": "2026-04-16T22:34:18.301000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "28e0752c433e8d872ba3d2fc677de515c2062b26f9bd1e8ddaaae0b631bf5282",
+      "current_hash": "7246483f7260f9538b34d10ce33c918ef269ed69f2b0a88f0230f371c293a624"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:34:10.749394Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker3"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "response_time_ms": 3763.2596492767334,
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "global_weights_sent_ids_ecc",
+        "round": 5,
+        "forward_target": "wss://ecc-worker3:8086/data",
+        "payload_kb": 48.8,
+        "channel": "ids_ecc"
+      },
+      "transaction_id": "53764753-25ae-4653-a586-1e8b911b19a8",
+      "timestamp": "2026-04-16T22:34:10.751000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "a2fbaffbbad5c7370e8932a242f26ad9b0f9d7e19c2affda75b891645b603895",
+      "current_hash": "28e0752c433e8d872ba3d2fc677de515c2062b26f9bd1e8ddaaae0b631bf5282"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:34:06.490085Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker1"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "response_time_ms": 998.2705116271973,
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "global_weights_sent_ids_ecc",
+        "round": 5,
+        "forward_target": "wss://ecc-worker1:8086/data",
+        "payload_kb": 48.8,
+        "channel": "ids_ecc"
+      },
+      "transaction_id": "51e5fddc-da2a-4b8d-8bdb-ff794aac2e5d",
+      "timestamp": "2026-04-16T22:34:06.492000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "8706ba5cbd59805f9b907b7199378b1c20164b820cba5a9f61ef8822b0986871",
+      "current_hash": "a2fbaffbbad5c7370e8932a242f26ad9b0f9d7e19c2affda75b891645b603895"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:34:02.002112Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker3"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_algorithm_distributed",
+        "coordinator": "2",
+        "peer_uri": "http://w3id.org/engrd/connector/worker3",
+        "selected_csv": "unsw_nb15_worker_3.csv"
+      },
+      "transaction_id": "22c317c1-6f1d-4091-91d4-49f91f2fe68d",
+      "timestamp": "2026-04-16T22:34:02.005000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "98c553a3435659b63488537b0008378c9e0ba4723cb84a32e95ecc4e190f2e10",
+      "current_hash": "8706ba5cbd59805f9b907b7199378b1c20164b820cba5a9f61ef8822b0986871"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:34:00.682080Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker1"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_algorithm_distributed",
+        "coordinator": "2",
+        "peer_uri": "http://w3id.org/engrd/connector/worker1",
+        "selected_csv": "unsw_nb15_worker_1.csv"
+      },
+      "transaction_id": "c082d652-2fa4-4e2d-9e69-ec30784f8d71",
+      "timestamp": "2026-04-16T22:34:00.684000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "efdccbfabd392027831d0b70c05231c0eb8ad6a8789fa5b2c79007789b917ae0",
+      "current_hash": "98c553a3435659b63488537b0008378c9e0ba4723cb84a32e95ecc4e190f2e10"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:NotificationMessage",
+      "message_header": {
+        "message_type": "ids:NotificationMessage",
+        "issued": "2026-04-16T22:33:59.971944Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_round_started",
+        "round": 5,
+        "total_rounds": 5,
+        "coordinator": "2"
+      },
+      "transaction_id": "f0a01a95-fa25-4618-a02e-636408fa8b8a",
+      "timestamp": "2026-04-16T22:33:59.979000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "eb2abd7727645148c20237a7102c167651ee8026970ddaf93a1cdc5ceecb7ede",
+      "current_hash": "efdccbfabd392027831d0b70c05231c0eb8ad6a8789fa5b2c79007789b917ae0"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:ArtifactResponseMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactResponseMessage",
+        "issued": "2026-04-16T22:33:59.965595Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "response_time_ms": 15220.0,
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_round_completed",
+        "round": 4,
+        "total_rounds": 5,
+        "workers_ok": 3,
+        "total_samples": 65866,
+        "elapsed_seconds": 15.22,
+        "global_metrics": {
+          "loss": 0.169659,
+          "accuracy": 0.931977,
+          "auc": 0.98176,
+          "precision": 0.938167,
+          "recall": 0.934234
+        },
+        "coordinator": "2"
+      },
+      "transaction_id": "18f4269b-3c59-4a56-97a0-5ff9fb7a0f08",
+      "timestamp": "2026-04-16T22:33:59.968000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "885d3a48a2fc1cf20755546fa01d389fdf930ad92f54ce8d2ec376c8ea467192",
+      "current_hash": "eb2abd7727645148c20237a7102c167651ee8026970ddaf93a1cdc5ceecb7ede"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:33:52.918148Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker3"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "response_time_ms": 1061.7589950561523,
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "global_weights_sent_ids_ecc",
+        "round": 4,
+        "forward_target": "wss://ecc-worker3:8086/data",
+        "payload_kb": 48.8,
+        "channel": "ids_ecc"
+      },
+      "transaction_id": "65a29338-3bf1-46c1-ba4b-6834e86f85ab",
+      "timestamp": "2026-04-16T22:33:52.920000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "772493a69fe8ecddfa5d715d7c9027bc6113326e967531d1920cab99e48d1674",
+      "current_hash": "885d3a48a2fc1cf20755546fa01d389fdf930ad92f54ce8d2ec376c8ea467192"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:33:51.296137Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker1"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "response_time_ms": 1206.8321704864502,
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "global_weights_sent_ids_ecc",
+        "round": 4,
+        "forward_target": "wss://ecc-worker1:8086/data",
+        "payload_kb": 48.8,
+        "channel": "ids_ecc"
+      },
+      "transaction_id": "dd66e9ec-761b-4af4-9187-f8816e02d6d0",
+      "timestamp": "2026-04-16T22:33:51.299000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "8aabb205da6fa138d103809297b9268568758651268e023ec8e0df32d201bde1",
+      "current_hash": "772493a69fe8ecddfa5d715d7c9027bc6113326e967531d1920cab99e48d1674"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:33:46.614127Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker3"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_algorithm_distributed",
+        "coordinator": "2",
+        "peer_uri": "http://w3id.org/engrd/connector/worker3",
+        "selected_csv": "unsw_nb15_worker_3.csv"
+      },
+      "transaction_id": "4c7a47d3-39ad-473c-8842-91e9f89a1edb",
+      "timestamp": "2026-04-16T22:33:46.616000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "2e113b1b7552624aa1f5214d91c77be4ccc8af3de4b7f3d49347b470df2164e7",
+      "current_hash": "8aabb205da6fa138d103809297b9268568758651268e023ec8e0df32d201bde1"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:33:45.500807Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker1"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_algorithm_distributed",
+        "coordinator": "2",
+        "peer_uri": "http://w3id.org/engrd/connector/worker1",
+        "selected_csv": "unsw_nb15_worker_1.csv"
+      },
+      "transaction_id": "0574b3f4-854a-4602-9bd9-1a92d488390e",
+      "timestamp": "2026-04-16T22:33:45.503000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "0dcb4d7d07c71cea6a40520288fe712bafceb781608f2889f235520416bfa18a",
+      "current_hash": "2e113b1b7552624aa1f5214d91c77be4ccc8af3de4b7f3d49347b470df2164e7"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:NotificationMessage",
+      "message_header": {
+        "message_type": "ids:NotificationMessage",
+        "issued": "2026-04-16T22:33:44.742580Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_round_started",
+        "round": 4,
+        "total_rounds": 5,
+        "coordinator": "2"
+      },
+      "transaction_id": "7a60406f-4073-4632-a08f-ae0e300db328",
+      "timestamp": "2026-04-16T22:33:44.745000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "350337b377e8941f4eda4af7141582dc01ae941039b7bb0840ec3defb5fedd40",
+      "current_hash": "0dcb4d7d07c71cea6a40520288fe712bafceb781608f2889f235520416bfa18a"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:ArtifactResponseMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactResponseMessage",
+        "issued": "2026-04-16T22:33:44.732526Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "response_time_ms": 18850.0,
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_round_completed",
+        "round": 3,
+        "total_rounds": 5,
+        "workers_ok": 3,
+        "total_samples": 65866,
+        "elapsed_seconds": 18.85,
+        "global_metrics": {
+          "loss": 0.187206,
+          "accuracy": 0.920255,
+          "auc": 0.978042,
+          "precision": 0.924006,
+          "recall": 0.927622
+        },
+        "coordinator": "2"
+      },
+      "transaction_id": "3697e68d-4576-41bf-a715-dc669770e5a1",
+      "timestamp": "2026-04-16T22:33:44.735000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "9b49fac23842efc1bff2380587bbe2eab8e15759508ca5a279fee332648d257a",
+      "current_hash": "350337b377e8941f4eda4af7141582dc01ae941039b7bb0840ec3defb5fedd40"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:33:33.908436Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker3"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "response_time_ms": 1155.25484085083,
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "global_weights_sent_ids_ecc",
+        "round": 3,
+        "forward_target": "wss://ecc-worker3:8086/data",
+        "payload_kb": 48.9,
+        "channel": "ids_ecc"
+      },
+      "transaction_id": "9a6bb430-b6e6-46dd-8429-615f394ca231",
+      "timestamp": "2026-04-16T22:33:33.911000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "7d46ad3396382addcdf5963dda6ffa71025022c2fa5eb26e4f2a622fdf299581",
+      "current_hash": "9b49fac23842efc1bff2380587bbe2eab8e15759508ca5a279fee332648d257a"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:33:32.256556Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker1"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "response_time_ms": 1120.650291442871,
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "global_weights_sent_ids_ecc",
+        "round": 3,
+        "forward_target": "wss://ecc-worker1:8086/data",
+        "payload_kb": 48.9,
+        "channel": "ids_ecc"
+      },
+      "transaction_id": "a5b5fa9a-1761-4d3a-a01d-e9a8c265ecf3",
+      "timestamp": "2026-04-16T22:33:32.259000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "d9b3e231ead572ee26e1206d581111be6a313dc6d4c13fe75764fe623be2ce90",
+      "current_hash": "7d46ad3396382addcdf5963dda6ffa71025022c2fa5eb26e4f2a622fdf299581"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:33:27.594726Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker3"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_algorithm_distributed",
+        "coordinator": "2",
+        "peer_uri": "http://w3id.org/engrd/connector/worker3",
+        "selected_csv": "unsw_nb15_worker_3.csv"
+      },
+      "transaction_id": "26ff295c-9102-40af-8f2e-ce7075d5ae98",
+      "timestamp": "2026-04-16T22:33:27.596000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "7c59a4143e7268c6564f2ae1a024eb48eede836a05240a183f1b217dd4fd4b7b",
+      "current_hash": "d9b3e231ead572ee26e1206d581111be6a313dc6d4c13fe75764fe623be2ce90"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:33:26.760269Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker1"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_algorithm_distributed",
+        "coordinator": "2",
+        "peer_uri": "http://w3id.org/engrd/connector/worker1",
+        "selected_csv": "unsw_nb15_worker_1.csv"
+      },
+      "transaction_id": "f96ef687-7116-48c3-9b07-53dd24dc5874",
+      "timestamp": "2026-04-16T22:33:26.762000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "03fb376ce5f2c5931e39e5e552537ae6645e10d6579732dd1644af098181f8a8",
+      "current_hash": "7c59a4143e7268c6564f2ae1a024eb48eede836a05240a183f1b217dd4fd4b7b"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:NotificationMessage",
+      "message_header": {
+        "message_type": "ids:NotificationMessage",
+        "issued": "2026-04-16T22:33:25.878730Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_round_started",
+        "round": 3,
+        "total_rounds": 5,
+        "coordinator": "2"
+      },
+      "transaction_id": "ec36affd-90d4-4dac-a0b4-12d5d1c0b1d4",
+      "timestamp": "2026-04-16T22:33:25.889000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "1e4f1a6b73ba4486f95e76e33f3fdab8ef41d01b4bbbda08c2152333944a71cb",
+      "current_hash": "03fb376ce5f2c5931e39e5e552537ae6645e10d6579732dd1644af098181f8a8"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:ArtifactResponseMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactResponseMessage",
+        "issued": "2026-04-16T22:33:25.871340Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "response_time_ms": 14670.0,
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_round_completed",
+        "round": 2,
+        "total_rounds": 5,
+        "workers_ok": 3,
+        "total_samples": 65866,
+        "elapsed_seconds": 14.67,
+        "global_metrics": {
+          "loss": 0.217303,
+          "accuracy": 0.90659,
+          "auc": 0.97091,
+          "precision": 0.912544,
+          "recall": 0.910371
+        },
+        "coordinator": "2"
+      },
+      "transaction_id": "3d783601-8845-49aa-8b21-93c31a1329d0",
+      "timestamp": "2026-04-16T22:33:25.874000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "d19c7e272f007b72e26af56d9de29a4c31642f439bae0bcea0acddb0063e92a9",
+      "current_hash": "1e4f1a6b73ba4486f95e76e33f3fdab8ef41d01b4bbbda08c2152333944a71cb"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:33:19.231914Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker3"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "response_time_ms": 992.903470993042,
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "global_weights_sent_ids_ecc",
+        "round": 2,
+        "forward_target": "wss://ecc-worker3:8086/data",
+        "payload_kb": 49.3,
+        "channel": "ids_ecc"
+      },
+      "transaction_id": "e2e6a4c4-0e7b-4e87-93c3-ca5cf9aecc57",
+      "timestamp": "2026-04-16T22:33:19.235000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "38f5cd1c0d7f145cca9b7f2885253f7c643342257f814b373741f10531373f3d",
+      "current_hash": "d19c7e272f007b72e26af56d9de29a4c31642f439bae0bcea0acddb0063e92a9"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:33:17.680196Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker1"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "response_time_ms": 904.4795036315918,
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "global_weights_sent_ids_ecc",
+        "round": 2,
+        "forward_target": "wss://ecc-worker1:8086/data",
+        "payload_kb": 49.3,
+        "channel": "ids_ecc"
+      },
+      "transaction_id": "0ec8cc59-8545-45ac-bce7-c6a477ce218e",
+      "timestamp": "2026-04-16T22:33:17.682000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "66ebf3a2a431c1cece444877682def1639fec79eb2616e4344403ef3e69b3e4d",
+      "current_hash": "38f5cd1c0d7f145cca9b7f2885253f7c643342257f814b373741f10531373f3d"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:33:13.293772Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker3"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_algorithm_distributed",
+        "coordinator": "2",
+        "peer_uri": "http://w3id.org/engrd/connector/worker3",
+        "selected_csv": "unsw_nb15_worker_3.csv"
+      },
+      "transaction_id": "eddb9f60-d339-40d2-8984-d792e9355d75",
+      "timestamp": "2026-04-16T22:33:13.295000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "45f4c6195b5a0406493326b823d94b664aa4862c80412829dae8a7fe193f9676",
+      "current_hash": "66ebf3a2a431c1cece444877682def1639fec79eb2616e4344403ef3e69b3e4d"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:33:12.269676Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker1"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_algorithm_distributed",
+        "coordinator": "2",
+        "peer_uri": "http://w3id.org/engrd/connector/worker1",
+        "selected_csv": "unsw_nb15_worker_1.csv"
+      },
+      "transaction_id": "b01f3040-05d9-43f8-96a7-8aa4b9288989",
+      "timestamp": "2026-04-16T22:33:12.271000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "6d26636254ccc3371a711e788cd0ec7857f8dd6e078ae9ed4b93c76f01cc759b",
+      "current_hash": "45f4c6195b5a0406493326b823d94b664aa4862c80412829dae8a7fe193f9676"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:NotificationMessage",
+      "message_header": {
+        "message_type": "ids:NotificationMessage",
+        "issued": "2026-04-16T22:33:11.204491Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_round_started",
+        "round": 2,
+        "total_rounds": 5,
+        "coordinator": "2"
+      },
+      "transaction_id": "8e20765e-978c-4870-9e0f-abaf80d5b52b",
+      "timestamp": "2026-04-16T22:33:11.274000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "5e42059f1ab9acb17ab9a469eebe73b259f4458a9eb853576be13e5d632718bf",
+      "current_hash": "6d26636254ccc3371a711e788cd0ec7857f8dd6e078ae9ed4b93c76f01cc759b"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:ArtifactResponseMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactResponseMessage",
+        "issued": "2026-04-16T22:33:11.198100Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "response_time_ms": 26310.0,
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_round_completed",
+        "round": 1,
+        "total_rounds": 5,
+        "workers_ok": 3,
+        "total_samples": 65866,
+        "elapsed_seconds": 26.31,
+        "global_metrics": {
+          "loss": 0.230301,
+          "accuracy": 0.89997,
+          "auc": 0.967599,
+          "precision": 0.897391,
+          "recall": 0.915336
+        },
+        "coordinator": "2"
+      },
+      "transaction_id": "bb0647fa-87f3-4341-b21a-6dd4a218da59",
+      "timestamp": "2026-04-16T22:33:11.200000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "0ac4695fe9ca4d3a4ea2722813501bb499dbfa087ab96fc179cd4ac1212a9322",
+      "current_hash": "5e42059f1ab9acb17ab9a469eebe73b259f4458a9eb853576be13e5d632718bf"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:32:53.872540Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker3"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "response_time_ms": 737.1795177459717,
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "global_weights_sent_ids_ecc",
+        "round": 1,
+        "forward_target": "wss://ecc-worker3:8086/data",
+        "payload_kb": 0.0,
+        "channel": "ids_ecc"
+      },
+      "transaction_id": "4ecffdc6-1b81-4017-bdd1-780ba0c188a0",
+      "timestamp": "2026-04-16T22:32:53.874000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "72c385fd09277f639adbd66e6b36fc66e34e8d14b73da5a3d72a7397e9f8532c",
+      "current_hash": "0ac4695fe9ca4d3a4ea2722813501bb499dbfa087ab96fc179cd4ac1212a9322"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:32:52.642228Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker1"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "response_time_ms": 812.5190734863281,
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "global_weights_sent_ids_ecc",
+        "round": 1,
+        "forward_target": "wss://ecc-worker1:8086/data",
+        "payload_kb": 0.0,
+        "channel": "ids_ecc"
+      },
+      "transaction_id": "c579759f-9e0a-4222-91f0-ae3d7bc71aec",
+      "timestamp": "2026-04-16T22:32:52.644000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "59fe7dfd4f8218039765deb5577d329b5ff6626c2d56925225d88535c619c52a",
+      "current_hash": "72c385fd09277f639adbd66e6b36fc66e34e8d14b73da5a3d72a7397e9f8532c"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:32:48.298753Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker3"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_algorithm_distributed",
+        "coordinator": "2",
+        "peer_uri": "http://w3id.org/engrd/connector/worker3",
+        "selected_csv": "unsw_nb15_worker_3.csv"
+      },
+      "transaction_id": "31207057-e219-4c74-b88c-4b77a480a6c2",
+      "timestamp": "2026-04-16T22:32:48.300000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "67ad42ffd889293f8f9cf9acea0df032a76e937642c05bb4b2a33220f3924f3a",
+      "current_hash": "59fe7dfd4f8218039765deb5577d329b5ff6626c2d56925225d88535c619c52a"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:ArtifactRequestMessage",
+      "message_header": {
+        "message_type": "ids:ArtifactRequestMessage",
+        "issued": "2026-04-16T22:32:45.835906Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker1"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_algorithm_distributed",
+        "coordinator": "2",
+        "peer_uri": "http://w3id.org/engrd/connector/worker1",
+        "selected_csv": "unsw_nb15_worker_1.csv"
+      },
+      "transaction_id": "c09bf74d-cc2d-4344-8500-fbec3f11e895",
+      "timestamp": "2026-04-16T22:32:45.839000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "ed6ff211b5e36db1d69cd25d1e4d0d5c06e6c9a69ac3a26b95a6816a9cb5ba4a",
+      "current_hash": "67ad42ffd889293f8f9cf9acea0df032a76e937642c05bb4b2a33220f3924f3a"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:NotificationMessage",
+      "message_header": {
+        "message_type": "ids:NotificationMessage",
+        "issued": "2026-04-16T22:32:44.889222Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_round_started",
+        "round": 1,
+        "total_rounds": 5,
+        "coordinator": "2"
+      },
+      "transaction_id": "8ef8ba3d-a91b-4c47-ab20-f31613b7084d",
+      "timestamp": "2026-04-16T22:32:44.894000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "754dcda894eb171faed8b9609a80d81ce037876baf623ac9ef0ea52abe700247",
+      "current_hash": "ed6ff211b5e36db1d69cd25d1e4d0d5c06e6c9a69ac3a26b95a6816a9cb5ba4a"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "broadcast:http://w3id.org/engrd/connector/worker1,http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:NotificationMessage",
+      "message_header": {
+        "message_type": "ids:NotificationMessage",
+        "issued": "2026-04-16T22:32:44.884915Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "broadcast:http://w3id.org/engrd/connector/worker1,http://w3id.org/engrd/connector/worker3"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "fl_started",
+        "coordinator": "2",
+        "total_rounds": 5,
+        "min_workers": 1,
+        "peers": [
+          "http://w3id.org/engrd/connector/worker1",
+          "http://w3id.org/engrd/connector/worker3"
+        ]
+      },
+      "transaction_id": "993e1d42-b546-4c1c-ac76-fc055db9e26a",
+      "timestamp": "2026-04-16T22:32:44.887000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "5bf04b6ce3c54f63b8fbb36065d4f05c9626126adc04ea824e726aa3c396dc49",
+      "current_hash": "754dcda894eb171faed8b9609a80d81ce037876baf623ac9ef0ea52abe700247"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:ContractAgreementMessage",
+      "message_header": {
+        "message_type": "ids:ContractAgreementMessage",
+        "issued": "2026-04-16T22:32:44.849183Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker3"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "contract_id": "https://w3id.org/idsa/autogen/contractAgreement/02884214-1e16-4070-a0ef-39c2e045b77c",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "negotiate_peer_accepted",
+        "coordinator": "2",
+        "peer_worker": "3",
+        "match_ratio": 1.0,
+        "selected_csv": "unsw_nb15_worker_3.csv"
+      },
+      "transaction_id": "fdfb33e4-c124-4154-87fd-53e3a1d07fad",
+      "timestamp": "2026-04-16T22:32:44.851000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "ce02aa32fb944bfd3d5b0fa7327d33a7d87aa886b5e1206073e0315a970692d6",
+      "current_hash": "5bf04b6ce3c54f63b8fbb36065d4f05c9626126adc04ea824e726aa3c396dc49"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker3",
+      "target_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:ContractAgreementMessage",
+      "message_header": {
+        "message_type": "ids:ContractAgreementMessage",
+        "issued": "2026-04-16T22:32:44.634926Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker3",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker2"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiMEE6MUY6QTI6QTk6RkQ6OUQ6OTA6QjY6NDQ6Rjk6QzM6Q0I6QjY6Njg6Qzg6NDQ6OTE6NjM6NDk6MTE6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg2MDcsImlhdCI6MTc3NjM3ODYwNywianRpIjoiOGM0M2ZmNjItZjk2NC00MjkxLTk0MmUtMDY2NjZmMDM1ZjRlIiwiZXhwIjoxNzc2MzgyMjA3LCJjbGllbnRfaWQiOiIwQToxRjpBMjpBOTpGRDo5RDo5MDpCNjo0NDpGOTpDMzpDQjpCNjo2ODpDODo0NDo5MTo2Mzo0OToxMTprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIzIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiIyMDExY2RmMmI1YzViZWFiNGViMzRkOTY0YTdlYzM3MDEwZTU1ZmJlMDhlZmZhZjIxMWQwMDI1MTY0YjkxZTAyIn0.lndBf8EAf4sVRg7nfUIK4SbNzxzFjRpTayL_asdXNPeDPs8tHd8Cj_Uh1tJm25MPGb4VMuoCjPh4Fn9vKYLkeGMe1cnU2pj9HVIhSZGWUExMyQO8G51cZpa86Ugft3dnqVOS0m82mmiXvf_aZYMBF5U27-jlmcnWYCyHHKuBAa4nrV28w1w85uPdrYdgIXk4Idt_XmmC75PecUTm6nC9wmZ8q4wY2uIEpT6ZiO5oSfQPsQaE1HKc6X7RyGQ_QuD9t-VbMugA_FGUu0tgBjfH5BzSL0EGN-sXx_OnHLKcGD3OlC2IFhGTBE-DZyLy1h03KYJzZOMn14s044FtF5A7WQ",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "contract_id": "https://w3id.org/idsa/autogen/contractAgreement/02884214-1e16-4070-a0ef-39c2e045b77c",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_3",
+        "event": "contract_agreement",
+        "worker": "3",
+        "consumer": "http://w3id.org/engrd/connector/worker2",
+        "contract_offer_id": "https://w3id.org/idsa/autogen/contractOffer/f9aafb8c-46f1-4436-9cd6-553a9a9f597b"
+      },
+      "transaction_id": "234e44d8-ca8e-419a-9de3-8bde3c020897",
+      "timestamp": "2026-04-16T22:32:44.637000",
+      "client_ip": "172.18.0.15",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "2e7cd1d750bb50a975b3cbb6ee8dc8b22ff09b8f19f9732272140485305b5b06",
+      "current_hash": "ce02aa32fb944bfd3d5b0fa7327d33a7d87aa886b5e1206073e0315a970692d6"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:ContractAgreementMessage",
+      "message_header": {
+        "message_type": "ids:ContractAgreementMessage",
+        "issued": "2026-04-16T22:32:41.943038Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker1"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "contract_id": "https://w3id.org/idsa/autogen/contractAgreement/6d83d96a-e5f9-4181-83d8-f6552ba236ea",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "negotiate_peer_accepted",
+        "coordinator": "2",
+        "peer_worker": "1",
+        "match_ratio": 1.0,
+        "selected_csv": "unsw_nb15_worker_1.csv"
+      },
+      "transaction_id": "0e99c0e2-fa30-4a84-a357-a033b0ca5954",
+      "timestamp": "2026-04-16T22:32:41.945000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "165034ce0641949fd9aeb85b620a32b9328b2c92d856bc5af053a205b3078a4c",
+      "current_hash": "2e7cd1d750bb50a975b3cbb6ee8dc8b22ff09b8f19f9732272140485305b5b06"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker1",
+      "target_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:ContractAgreementMessage",
+      "message_header": {
+        "message_type": "ids:ContractAgreementMessage",
+        "issued": "2026-04-16T22:32:41.717339Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker1",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker2"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiOUQ6QzU6OUI6REI6MDY6REE6RkM6RTE6MEQ6MDc6QTc6RkY6NjU6Q0I6MkM6ODQ6OUY6MkY6Nzg6ODc6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1MTAsImlhdCI6MTc3NjM3ODUxMCwianRpIjoiOGFlMDcxZGUtMDI0OS00MjVlLWJlZTUtZTgwMzY0ZThjZDk0IiwiZXhwIjoxNzc2MzgyMTEwLCJjbGllbnRfaWQiOiI5RDpDNTo5QjpEQjowNjpEQTpGQzpFMTowRDowNzpBNzpGRjo2NTpDQjoyQzo4NDo5RjoyRjo3ODo4NzprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIxIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI1ZGNiYjc2MWFlZTdmYzMzMDNiYTIxNTgzYWY5ODNmZjY4Yzg2MDkzNmVmMDQyYTJjYTY1N2JhZWNkYzU1OTkxIn0.lSEAItXoo2dd8NB0O2cHIudzmuyv0PCH287Yi1_-I9ZQq1nvIxlGI7A65R-h4Og1o1dgiXEtxT1-Jg3_TqEEq_AwXRaOdYukcADmukavBa3DuEkeSXb18VW6O8VZGtbLEvzrjFYFuFugBymqgN3ZEiL7bFBjMD9YXHu6ugA0zz1YioDwbMJKc0NtTsK-pt6-L9x2glkUgjrrgbA6h5BDgboKJxXGPLaYdL5IO8YqD6kDmucBodl2X6_BU6AZxejGB6WBoPEM5cDgwjAKRDtlN5nRR00Mf1Oc-r20IHdMCmTmyjh-wRnL_3svoX-vzrhakOUv3ECC1EdVJUbPcBGE_Q",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "contract_id": "https://w3id.org/idsa/autogen/contractAgreement/6d83d96a-e5f9-4181-83d8-f6552ba236ea",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_1",
+        "event": "contract_agreement",
+        "worker": "1",
+        "consumer": "http://w3id.org/engrd/connector/worker2",
+        "contract_offer_id": "https://w3id.org/idsa/autogen/contractOffer/0e2a2594-eec7-44f5-bb9e-219cbcd0139a"
+      },
+      "transaction_id": "b8c941a0-a553-442a-9fe4-ff23687cc381",
+      "timestamp": "2026-04-16T22:32:41.720000",
+      "client_ip": "172.18.0.11",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "5402b3afd9412e163ae764565817181b35d5662fb74a22e5cd3b8701bffe76f6",
+      "current_hash": "165034ce0641949fd9aeb85b620a32b9328b2c92d856bc5af053a205b3078a4c"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:ResultMessage",
+      "message_header": {
+        "message_type": "ids:ResultMessage",
+        "issued": "2026-04-16T22:32:24.799204Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "llm_dataset_recommendation",
+        "model": "llama3.2",
+        "selected_filename": "unsw_nb15_worker_3.csv",
+        "confidence": 1.0,
+        "worker": "2"
+      },
+      "transaction_id": "0f1176de-5960-4117-8771-17a85529a5c8",
+      "timestamp": "2026-04-16T22:32:24.804000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "c0e049c5e4821bc0dd16c7dcf8f9ecaa89976465274ce472ad1796651373ac36",
+      "current_hash": "5402b3afd9412e163ae764565817181b35d5662fb74a22e5cd3b8701bffe76f6"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:DescriptionResponseMessage",
+      "message_header": {
+        "message_type": "ids:DescriptionResponseMessage",
+        "issued": "2026-04-16T22:31:47.049631Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker3"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "peer_catalog_obtained_ids",
+        "peer_ecc_url": "https://ecc-worker3:8889/data",
+        "worker": "2",
+        "channel": "ids_multipart"
+      },
+      "transaction_id": "5be85575-df51-4135-a183-7dbeb015aa34",
+      "timestamp": "2026-04-16T22:31:47.051000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "b26e31e8ba489acd78897a1caaa9166d45043d0a4c74dcaae1ca2b046182e945",
+      "current_hash": "c0e049c5e4821bc0dd16c7dcf8f9ecaa89976465274ce472ad1796651373ac36"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:ResultMessage",
+      "message_header": {
+        "message_type": "ids:ResultMessage",
+        "issued": "2026-04-16T22:31:39.374788Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "llm_dataset_recommendation",
+        "model": "llama3.2",
+        "selected_filename": "unsw_nb15_worker_1.csv",
+        "confidence": 1.0,
+        "worker": "2"
+      },
+      "transaction_id": "8fce2c94-011a-4eab-bdf0-43214eb843a0",
+      "timestamp": "2026-04-16T22:31:39.394000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "242f9378e0aee66dfda4732f1dd7da270aeda3c95b8f78008866fc00cd2790e5",
+      "current_hash": "b26e31e8ba489acd78897a1caaa9166d45043d0a4c74dcaae1ca2b046182e945"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker4",
+      "message_type": "ids:ResourceUpdateMessage",
+      "message_header": {
+        "message_type": "ids:ResourceUpdateMessage",
+        "issued": "2026-04-16T22:30:55.531054Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker4",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiOEY6MDk6NTU6MTI6Mjk6MkM6QzU6ODg6ODI6NkI6MTU6REM6MkQ6NjU6M0M6MUQ6Qjc6NTY6MDg6RDU6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg2NTUsImlhdCI6MTc3NjM3ODY1NSwianRpIjoiN2I5Mjk3ODYtOTQ4OC00ZDc2LTgyMWQtOGFiNDdlYmQ3ZjgwIiwiZXhwIjoxNzc2MzgyMjU1LCJjbGllbnRfaWQiOiI4RjowOTo1NToxMjoyOToyQzpDNTo4ODo4Mjo2QjoxNTpEQzoyRDo2NTozQzoxRDpCNzo1NjowODpENTprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXI0IiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiIxMmJkNGM0MDc3MjFjNzA0ODgzMTlkNGY1NWVjNzJlYzA4NWQyNDA2M2QwZmEwMWYyM2FhMDFhZWU3NjE2Y2NiIn0.bhwW8-cbip9ibd3-L2uAkPLVEKjhI1RKXJoaqav15XRpfUy9rkFyj7_J9EdRl6MALpD48lBbtmAESenDduuPvq03odA1fnAhP5V-HJIif5_ogwlFByLkEMhYeG5q_1YEjznGU5k5LG8YVxGGkKZq9HijuGgE5EM_UoF8R5OjCGrlGHuj5onmmKZ3c2gmHZPCIstBd_28uEOiYOaKOLqHHsmFA-Rew3r7XJdQY91tgRRtDeiRps0D2-3C22q49t0RpmmgfKte4soxoaoMR2P8PS35FwUfU-4r6s5wwPhPB_OthEBLOFLzAF8kcznWY3y3FZiU2zfFgSMlT1nULRXSoA",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "resource_id": "https://w3id.org/idsa/autogen/textResource/dataset_043aeac3-655c-4f68-8c85-43657f0073cc",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_4",
+        "event": "dataset_published",
+        "filename": "phising_url_detection_worker_4.csv",
+        "worker": "4"
+      },
+      "transaction_id": "58d38f47-e647-4a9f-a6b1-2337b9186419",
+      "timestamp": "2026-04-16T22:30:55.916000",
+      "client_ip": "172.18.0.17",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "44bec42a672f54c03d0de6a02e4192a4df5f4cf23f7ebfa0c6c92c3c0343a24a",
+      "current_hash": "242f9378e0aee66dfda4732f1dd7da270aeda3c95b8f78008866fc00cd2790e5"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker4",
+      "message_type": "ids:ResourceUpdateMessage",
+      "message_header": {
+        "message_type": "ids:ResourceUpdateMessage",
+        "issued": "2026-04-16T22:30:55.530283Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker4",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiOEY6MDk6NTU6MTI6Mjk6MkM6QzU6ODg6ODI6NkI6MTU6REM6MkQ6NjU6M0M6MUQ6Qjc6NTY6MDg6RDU6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg2NTUsImlhdCI6MTc3NjM3ODY1NSwianRpIjoiYTMzOTk2NzktODlhYS00OWRmLWFiNDItYmM2Y2UwOTFmMzU1IiwiZXhwIjoxNzc2MzgyMjU1LCJjbGllbnRfaWQiOiI4RjowOTo1NToxMjoyOToyQzpDNTo4ODo4Mjo2QjoxNTpEQzoyRDo2NTozQzoxRDpCNzo1NjowODpENTprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXI0IiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiIxMmJkNGM0MDc3MjFjNzA0ODgzMTlkNGY1NWVjNzJlYzA4NWQyNDA2M2QwZmEwMWYyM2FhMDFhZWU3NjE2Y2NiIn0.enIDp0Q_hS8DffgMReFdc5ZBzKqk3VLYdmH6uP93D8UTk-qjMLe__yf4B9jB6LvGZit1LmXaeF0PFHfT58XHhPw6w1N7JQfOl4RT3ElmB-DlOWc3egxh6Oe20gGe0uE-vXHDDYOxVqNZO3TPM16BKNixMvK0Orbbbu9vrOZApqzES1PhnvpJ8hzSdo-ikM-bujPi4gy2Lg3h66mm8h5oqyhzqZwObzqkGM2jPEIfeYN4QcoOL-AxPqgekqCwp9ravc8aJ5B-0J3gy8wuZqEbrTJPDhJx5vulDdQv_RIt8c5AHonuCzm6fhCY0XKIh4mXFehiZAX1Wi5QNntf9L8-Ew",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "resource_id": "https://w3id.org/idsa/autogen/textResource/dataset_5c6b8655-b3a7-4276-a4d9-e6872c335f6b",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_4",
+        "event": "dataset_published",
+        "filename": "consolidated_traffic_worker_4.csv",
+        "worker": "4"
+      },
+      "transaction_id": "3e062cd4-8f28-4f95-8d3d-a6ce3badd9e2",
+      "timestamp": "2026-04-16T22:30:55.911000",
+      "client_ip": "172.18.0.17",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "0099829352dab2f11ffca4554d532c95d8020fa92b03abbf5488f34da508f2b2",
+      "current_hash": "44bec42a672f54c03d0de6a02e4192a4df5f4cf23f7ebfa0c6c92c3c0343a24a"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker4",
+      "message_type": "ids:ResourceUpdateMessage",
+      "message_header": {
+        "message_type": "ids:ResourceUpdateMessage",
+        "issued": "2026-04-16T22:30:55.529782Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker4",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiOEY6MDk6NTU6MTI6Mjk6MkM6QzU6ODg6ODI6NkI6MTU6REM6MkQ6NjU6M0M6MUQ6Qjc6NTY6MDg6RDU6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg2NTUsImlhdCI6MTc3NjM3ODY1NSwianRpIjoiZWRjODg3YTMtNTEwNC00NTg4LTk5ZDUtOWMyODhjMmE3YzI0IiwiZXhwIjoxNzc2MzgyMjU1LCJjbGllbnRfaWQiOiI4RjowOTo1NToxMjoyOToyQzpDNTo4ODo4Mjo2QjoxNTpEQzoyRDo2NTozQzoxRDpCNzo1NjowODpENTprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXI0IiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiIxMmJkNGM0MDc3MjFjNzA0ODgzMTlkNGY1NWVjNzJlYzA4NWQyNDA2M2QwZmEwMWYyM2FhMDFhZWU3NjE2Y2NiIn0.SzUa1-foSfZPCAjjmKkgiRnJWtMcrq-QOZ8ZxVr914p9bDtcykZaj7aErC7Ugr2PioJJDJtXC5Yot5ThZBuZL_hOYR-_xJFZzsPQ5mEgaUTMorQBbztzgIesM7xTXvvECsQ98murwWc6RJzAQSsYbS3S9oEkXl3GE4xxEDZKOfa5RCfh9HJvy401GbDWhXYIOuQkR5BAXDrwPssqq3L2O4pdNCKYEfoUuSCVHhd2AfWUvRXv5Wyx_hUfv92wp49O6dK0x9oUd2kxu5eVvCfVvFVdEJ4rMGl-jmGx41zY2MCT9qP_ZbVS62GCoyPCwXRd0yQIFyfBrc7KlH1olboP1Q",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "resource_id": "https://w3id.org/idsa/autogen/textResource/dataset_a35315d4-86c8-4d6b-a744-d28c6d56a81b",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_4",
+        "event": "dataset_published",
+        "filename": "ai_skepticism_worker_4.csv",
+        "worker": "4"
+      },
+      "transaction_id": "c904ee6a-d2ef-4d88-994a-f2cb2a8ff524",
+      "timestamp": "2026-04-16T22:30:55.906000",
+      "client_ip": "172.18.0.17",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "d3066be0e9b2e2046cacb88d9d995b4e7e478dff26fb0a7a672fa9e866d3b15e",
+      "current_hash": "0099829352dab2f11ffca4554d532c95d8020fa92b03abbf5488f34da508f2b2"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker4",
+      "message_type": "ids:ResourceUpdateMessage",
+      "message_header": {
+        "message_type": "ids:ResourceUpdateMessage",
+        "issued": "2026-04-16T22:30:55.531723Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker4",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiOEY6MDk6NTU6MTI6Mjk6MkM6QzU6ODg6ODI6NkI6MTU6REM6MkQ6NjU6M0M6MUQ6Qjc6NTY6MDg6RDU6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg2NTUsImlhdCI6MTc3NjM3ODY1NSwianRpIjoiNzg5OWU3NzktNjgzMi00YTE3LTgzNGItNDhkNjE0YWUwNjRiIiwiZXhwIjoxNzc2MzgyMjU1LCJjbGllbnRfaWQiOiI4RjowOTo1NToxMjoyOToyQzpDNTo4ODo4Mjo2QjoxNTpEQzoyRDo2NTozQzoxRDpCNzo1NjowODpENTprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXI0IiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiIxMmJkNGM0MDc3MjFjNzA0ODgzMTlkNGY1NWVjNzJlYzA4NWQyNDA2M2QwZmEwMWYyM2FhMDFhZWU3NjE2Y2NiIn0.MeYk326Jqa_46LZ2pD5UHTgutVawHDpfTSr6AoLXop4xJtGDqHWlVh1wC10JwuG021jzYOL1AdXE86nO9VYKfhC8hHUU_GuSMyaI443q0dn5pXdjHvLK46_xpsmq4Yaw4bkIa6gVFHIZUtJtJIAQytvx9RJCUai4OpWkAzNhurP1SoD5aRZKHqdDiJ6I2Qc7qlZMR2Z7_18KpVDRNyQoTWntNytB2b7CUGgt6kjgyejpjzEHQs7o1iPjLbYkQB1-ST1OEI7lIeFMV_s6jNaZal5PDBvj10tg0ejM2-k3FIZMXFA44vY071Z9NtQSr7kYVOfOOe8Ha9GkOBehd9mrUw",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "resource_id": "https://w3id.org/idsa/autogen/textResource/dataset_45e9becd-9743-43d3-828f-7266cfa82189",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_4",
+        "event": "dataset_published",
+        "filename": "unsw_nb15_worker_4.csv",
+        "worker": "4"
+      },
+      "transaction_id": "24494969-45b5-42bd-b173-4b1a35c9c59a",
+      "timestamp": "2026-04-16T22:30:55.895000",
+      "client_ip": "172.18.0.17",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "de70b50f4798b6b2faae64b78d5603be04154241de35eb30420d8f8d999ddb68",
+      "current_hash": "d3066be0e9b2e2046cacb88d9d995b4e7e478dff26fb0a7a672fa9e866d3b15e"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:DescriptionResponseMessage",
+      "message_header": {
+        "message_type": "ids:DescriptionResponseMessage",
+        "issued": "2026-04-16T22:30:47.512462Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "http://w3id.org/engrd/connector/worker1"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "peer_catalog_obtained_ids",
+        "peer_ecc_url": "https://ecc-worker1:8889/data",
+        "worker": "2",
+        "channel": "ids_multipart"
+      },
+      "transaction_id": "21683ac6-f34f-44fd-85c8-bc4646785a6f",
+      "timestamp": "2026-04-16T22:30:47.514000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "44c30f97fa5decd0248b5205ee1a068e3e8b0cafbd8ee1dab10e1e2b39899d4a",
+      "current_hash": "de70b50f4798b6b2faae64b78d5603be04154241de35eb30420d8f8d999ddb68"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "https://broker-reverseproxy/infrastructure",
+      "message_type": "ids:QueryMessage",
+      "message_header": {
+        "message_type": "ids:QueryMessage",
+        "issued": "2026-04-16T22:30:41.518498Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "https://broker-reverseproxy/infrastructure"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "broker_discovery",
+        "connectors_found": 3,
+        "worker": "2"
+      },
+      "transaction_id": "64d065dd-b020-431e-aef2-9dff54ee3c10",
+      "timestamp": "2026-04-16T22:30:41.521000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "5aa223d96635a1de968beed05bbd544ddc9b51b099a724e9147737252bab734d",
+      "current_hash": "44c30f97fa5decd0248b5205ee1a068e3e8b0cafbd8ee1dab10e1e2b39899d4a"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "target_connector": "https://broker-reverseproxy/infrastructure",
+      "message_type": "ids:QueryMessage",
+      "message_header": {
+        "message_type": "ids:QueryMessage",
+        "issued": "2026-04-16T22:30:39.372629Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [
+          "https://broker-reverseproxy/infrastructure"
+        ],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "broker_discovery",
+        "connectors_found": 3,
+        "worker": "2"
+      },
+      "transaction_id": "af60d9fb-f972-47f7-8888-441da143b01a",
+      "timestamp": "2026-04-16T22:30:39.376000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "625214e5b8d5042747927629a7a8c6008fabc017a39e617c337a9fad91e2297d",
+      "current_hash": "5aa223d96635a1de968beed05bbd544ddc9b51b099a724e9147737252bab734d"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:ResourceUpdateMessage",
+      "message_header": {
+        "message_type": "ids:ResourceUpdateMessage",
+        "issued": "2026-04-16T22:30:07.085449Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker3",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiMEE6MUY6QTI6QTk6RkQ6OUQ6OTA6QjY6NDQ6Rjk6QzM6Q0I6QjY6Njg6Qzg6NDQ6OTE6NjM6NDk6MTE6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg2MDcsImlhdCI6MTc3NjM3ODYwNywianRpIjoiOGM0M2ZmNjItZjk2NC00MjkxLTk0MmUtMDY2NjZmMDM1ZjRlIiwiZXhwIjoxNzc2MzgyMjA3LCJjbGllbnRfaWQiOiIwQToxRjpBMjpBOTpGRDo5RDo5MDpCNjo0NDpGOTpDMzpDQjpCNjo2ODpDODo0NDo5MTo2Mzo0OToxMTprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIzIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiIyMDExY2RmMmI1YzViZWFiNGViMzRkOTY0YTdlYzM3MDEwZTU1ZmJlMDhlZmZhZjIxMWQwMDI1MTY0YjkxZTAyIn0.lndBf8EAf4sVRg7nfUIK4SbNzxzFjRpTayL_asdXNPeDPs8tHd8Cj_Uh1tJm25MPGb4VMuoCjPh4Fn9vKYLkeGMe1cnU2pj9HVIhSZGWUExMyQO8G51cZpa86Ugft3dnqVOS0m82mmiXvf_aZYMBF5U27-jlmcnWYCyHHKuBAa4nrV28w1w85uPdrYdgIXk4Idt_XmmC75PecUTm6nC9wmZ8q4wY2uIEpT6ZiO5oSfQPsQaE1HKc6X7RyGQ_QuD9t-VbMugA_FGUu0tgBjfH5BzSL0EGN-sXx_OnHLKcGD3OlC2IFhGTBE-DZyLy1h03KYJzZOMn14s044FtF5A7WQ",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "resource_id": "https://w3id.org/idsa/autogen/textResource/dataset_06cf7603-37fd-41f4-b7f0-fb8858aa93a3",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_3",
+        "event": "dataset_published",
+        "filename": "ai_skepticism_worker_3.csv",
+        "worker": "3"
+      },
+      "transaction_id": "b4ef2e71-ea73-472a-9f18-c08668e9ee5e",
+      "timestamp": "2026-04-16T22:30:07.385000",
+      "client_ip": "172.18.0.15",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "f3cc7b08ab01aacfb77bd4011daad152e23a61106aa269b63cd579dd5d6f531f",
+      "current_hash": "625214e5b8d5042747927629a7a8c6008fabc017a39e617c337a9fad91e2297d"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:ResourceUpdateMessage",
+      "message_header": {
+        "message_type": "ids:ResourceUpdateMessage",
+        "issued": "2026-04-16T22:30:07.086144Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker3",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiMEE6MUY6QTI6QTk6RkQ6OUQ6OTA6QjY6NDQ6Rjk6QzM6Q0I6QjY6Njg6Qzg6NDQ6OTE6NjM6NDk6MTE6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg2MDcsImlhdCI6MTc3NjM3ODYwNywianRpIjoiYmVmMzQ5MTItMWYxNC00MmU1LWE1NzItZGE3ZTQ2Y2VkNTQxIiwiZXhwIjoxNzc2MzgyMjA3LCJjbGllbnRfaWQiOiIwQToxRjpBMjpBOTpGRDo5RDo5MDpCNjo0NDpGOTpDMzpDQjpCNjo2ODpDODo0NDo5MTo2Mzo0OToxMTprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIzIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiIyMDExY2RmMmI1YzViZWFiNGViMzRkOTY0YTdlYzM3MDEwZTU1ZmJlMDhlZmZhZjIxMWQwMDI1MTY0YjkxZTAyIn0.hmwISjI5mo5GMc5mmK5mmRXQsp9qVF9bILB5oYadwGWrKo9cNbys3VithXDMO-gnWFFcuUl1RKheOgibcx_pmJmi69UoR0XYUYmxBlMkKIDGnABzszRrheOXwWAIU7cHj6dstkEOClupMQZLI0OHJqENA6JMjJ8Itp0a8UFQ0AIYxDryH0rnSrZywH6fW10ANXVpArWisWeK43HsExdVQHAKADtzlYjtmWoAtot0VyUJOvCrMHSmSLUgS1M23dC3zmXlXdzbpTI_yZx8z774o6ZIY1aSODh6FQUD5IN7f1M4mqvvVTnABL9AM0VpmT_wXMcHu5YVI91acLbGT9RI2Q",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "resource_id": "https://w3id.org/idsa/autogen/textResource/dataset_9752a453-9340-47cf-b2cf-76bb012700d5",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_3",
+        "event": "dataset_published",
+        "filename": "unsw_nb15_worker_3.csv",
+        "worker": "3"
+      },
+      "transaction_id": "a2e9849d-489c-4fce-a07c-2cec5208616d",
+      "timestamp": "2026-04-16T22:30:07.378000",
+      "client_ip": "172.18.0.15",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "4ad74503e3623984f3283746e9c365779bfe1c707dc00fb3f945b5f886f4caad",
+      "current_hash": "f3cc7b08ab01aacfb77bd4011daad152e23a61106aa269b63cd579dd5d6f531f"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker3",
+      "message_type": "ids:ResourceUpdateMessage",
+      "message_header": {
+        "message_type": "ids:ResourceUpdateMessage",
+        "issued": "2026-04-16T22:30:07.085792Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker3",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiMEE6MUY6QTI6QTk6RkQ6OUQ6OTA6QjY6NDQ6Rjk6QzM6Q0I6QjY6Njg6Qzg6NDQ6OTE6NjM6NDk6MTE6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg2MDcsImlhdCI6MTc3NjM3ODYwNywianRpIjoiMWEyNDgzZWUtODQ0NC00ZWE5LTlhNzgtMzliZjBhYjdlNDEzIiwiZXhwIjoxNzc2MzgyMjA3LCJjbGllbnRfaWQiOiIwQToxRjpBMjpBOTpGRDo5RDo5MDpCNjo0NDpGOTpDMzpDQjpCNjo2ODpDODo0NDo5MTo2Mzo0OToxMTprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIzIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiIyMDExY2RmMmI1YzViZWFiNGViMzRkOTY0YTdlYzM3MDEwZTU1ZmJlMDhlZmZhZjIxMWQwMDI1MTY0YjkxZTAyIn0.y62FjY0Sx02xLIsLL-BmhhexY3ht_bNytcgpjQKfFAW8uy7iMlg5WHINicAMlIyZclTZc9fQEr0Xiv_O2QaA5xUmbwyr_vP_FOwYamcUQ-KXysv-rzUJ_8Y2S5-3WD8-f1AuEa-a5iZShRIQq4EEw1V4wyeEFeRBAUyFEmb6Y_wqLjEbrkyH6mkBhdbR0uS8Jn28nqVeSVm39OCnkc-p2fY8WHa4CQc5eOvqmAxT7sVfdyzZNSVeeKy4KfOmLCRYNtx7WpeG5SEsSUGp4e_JA_gbMaWtMMccNedjF1O8fZED7AVkvu5BD1N07TTsxMiIUHLcGtNORKpHmXIIGiEQNg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "resource_id": "https://w3id.org/idsa/autogen/textResource/dataset_7518c82a-ba3e-441c-b3a5-b3ff22ec6107",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_3",
+        "event": "dataset_published",
+        "filename": "consolidated_traffic_worker_3.csv",
+        "worker": "3"
+      },
+      "transaction_id": "49fca9a7-0972-4eaf-b48a-533a2464e2de",
+      "timestamp": "2026-04-16T22:30:07.369000",
+      "client_ip": "172.18.0.15",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "f974b7111672f493628c399402dab23c760f7b575cf2d2392637b0f444c4b4c8",
+      "current_hash": "4ad74503e3623984f3283746e9c365779bfe1c707dc00fb3f945b5f886f4caad"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:ResourceUpdateMessage",
+      "message_header": {
+        "message_type": "ids:ResourceUpdateMessage",
+        "issued": "2026-04-16T22:29:18.643471Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiN2Q0OGIwZGMtNjJmYS00OGI5LThiZjAtZGUzZmE5MWExYWU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.jqLIj3zBSx6ykAduO8oWJUKg59mdNTagaJvapKs4EAJGZ0kn_nm1wE1rdUDqUF948C6xplfXQwdSH_eh8g8c_MAf66OpqSaVO_q0HHn85tVaL0Uu93VSMqwljAfznndV_BJss1dbVvJIuNoDMGJrLZTmeX78Mew1pNcRKGsEsjatejcDN-QdxIoz2qjDVLrK_s8r-kMhwKPI1Y4B9VD4wN5nMgv1iVCYg2B8D86dX6KPkflAbv4ZAuIXbrwn_3bhsMIQf3TXvPYjbtVL8u__ZbFRqAkIBZOyHscSrq8wbLNOv3cgedHPM0HORJ3znFm-T_qXmNCC3ekF3eDzotCYtg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "resource_id": "https://w3id.org/idsa/autogen/textResource/dataset_84a61342-15bc-4589-8e1e-fd46da1475b5",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "dataset_published",
+        "filename": "ai_skepticism_worker_2.csv",
+        "worker": "2"
+      },
+      "transaction_id": "a97c9cb1-074a-4337-ad86-15a12454000e",
+      "timestamp": "2026-04-16T22:29:18.892000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "8e95b222addbfca07774f207f5540bbf6da9b67d7c0b2e12134847ddc6edfdc0",
+      "current_hash": "f974b7111672f493628c399402dab23c760f7b575cf2d2392637b0f444c4b4c8"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:ResourceUpdateMessage",
+      "message_header": {
+        "message_type": "ids:ResourceUpdateMessage",
+        "issued": "2026-04-16T22:29:18.643849Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiNmZmMDhiNDgtZjJkOC00YTI5LThmMTQtZjc3MGRjMzZhMDU2IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.pvR-Mk0YM_PhXVbpyTLO5OStusijRtzhEdVIwXMdSk1Lfj0AIW89uKDiBJ6SXpiJ2k6JUDIBBQkK742qCbNs--22l0ECQNTNC9dwfjVnwU5MCX_XxIdi2BqdjnRTx8I8xDk5umnydea1xR1qSIOBYmWoRJ-sO2AFVwQzahsvJrKNKwsbXBFVJY0BnoJaxe4lLjhdri0EOHcAzdqM82UeuHCfH5tuorsV6lXIkmi7Sd15tjUXiHFVs8EZhr6mFNrB3osoXkDi6UFZq58EljfZ4ntxl1ZNDZJwIBJLXuB2Yia0SjNLi3a1Zy3l3CmdsZxY6lrAlRxUtJL9r0rgKudRdg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "resource_id": "https://w3id.org/idsa/autogen/textResource/dataset_9342b242-749d-43cf-9d48-284a324a7843",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "dataset_published",
+        "filename": "phising_url_detection_worker_2.csv",
+        "worker": "2"
+      },
+      "transaction_id": "668a548c-7f14-4eea-8602-8cfdd0fcbe73",
+      "timestamp": "2026-04-16T22:29:18.885000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "57c09133a32cb8f20415b62c534a7e08b91408aaa393fd9bfe789f5b2960b739",
+      "current_hash": "8e95b222addbfca07774f207f5540bbf6da9b67d7c0b2e12134847ddc6edfdc0"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker2",
+      "message_type": "ids:ResourceUpdateMessage",
+      "message_header": {
+        "message_type": "ids:ResourceUpdateMessage",
+        "issued": "2026-04-16T22:29:18.644123Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker2",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiQ0U6NDA6OTI6RkI6RjY6MkE6NzI6Qzk6NUQ6QzQ6MTQ6RkQ6REU6REE6MTI6MUM6RDM6REI6MTA6RUY6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1NTgsImlhdCI6MTc3NjM3ODU1OCwianRpIjoiOTFjMDNmOTctYjZhNy00N2VmLTlkOTctN2IwMGQ4MGIwNTM1IiwiZXhwIjoxNzc2MzgyMTU4LCJjbGllbnRfaWQiOiJDRTo0MDo5MjpGQjpGNjoyQTo3MjpDOTo1RDpDNDoxNDpGRDpERTpEQToxMjoxQzpEMzpEQjoxMDpFRjprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIyIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI0ZWZmOTFiZTVjMDM0YTdhYjdhMGM5YTYxNTZiODg2ZDA1NzdjOThlODI4NTg0M2ZiMjE2MmVlMzZlNmMyYWQyIn0.MjqOpn3aG95-VR6Ugtb3mt0j9J38TuGVY4JbloZJ6V-O7X3Vx1yrhWESYoeV_RU3rCWbWn_wcCSfBcJkp08PzigRTCpsXP6J0HEhoteVUEF6b8LljSwmAu1lrcistTOnl4uMFFqPIxQov8CS9gk-YtyDcanBHJPbRyEp-5guQg4Bem6B6HC15U73AOcLoePR1HQs3ivhMp5gcCNk32Ct0wDWwlEyBMgwtgCSRTDZKde6DcEua1fBWYmXyD5Vdeiy94O_cqUwuGuzmj2CE3YFd-ThEx3PsLO66_TJIXjQ6iPM66I4mje4ooq_ZMnD5GwC1rdr0LXQU9VlT8XlFOyGzg",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "resource_id": "https://w3id.org/idsa/autogen/textResource/dataset_1aaf193b-eed7-4774-9012-4452754cec9b",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_2",
+        "event": "dataset_published",
+        "filename": "unsw_nb15_worker_2.csv",
+        "worker": "2"
+      },
+      "transaction_id": "7eebe01c-911e-4752-8eca-dbb3568e190b",
+      "timestamp": "2026-04-16T22:29:18.879000",
+      "client_ip": "172.18.0.13",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "9c7f60de8b1f48e92538fadec50b9aad28222eca681a751dcf021fe1e2d0560f",
+      "current_hash": "57c09133a32cb8f20415b62c534a7e08b91408aaa393fd9bfe789f5b2960b739"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:ResourceUpdateMessage",
+      "message_header": {
+        "message_type": "ids:ResourceUpdateMessage",
+        "issued": "2026-04-16T22:28:30.592901Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker1",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiOUQ6QzU6OUI6REI6MDY6REE6RkM6RTE6MEQ6MDc6QTc6RkY6NjU6Q0I6MkM6ODQ6OUY6MkY6Nzg6ODc6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1MTAsImlhdCI6MTc3NjM3ODUxMCwianRpIjoiOGFlMDcxZGUtMDI0OS00MjVlLWJlZTUtZTgwMzY0ZThjZDk0IiwiZXhwIjoxNzc2MzgyMTEwLCJjbGllbnRfaWQiOiI5RDpDNTo5QjpEQjowNjpEQTpGQzpFMTowRDowNzpBNzpGRjo2NTpDQjoyQzo4NDo5RjoyRjo3ODo4NzprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIxIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI1ZGNiYjc2MWFlZTdmYzMzMDNiYTIxNTgzYWY5ODNmZjY4Yzg2MDkzNmVmMDQyYTJjYTY1N2JhZWNkYzU1OTkxIn0.lSEAItXoo2dd8NB0O2cHIudzmuyv0PCH287Yi1_-I9ZQq1nvIxlGI7A65R-h4Og1o1dgiXEtxT1-Jg3_TqEEq_AwXRaOdYukcADmukavBa3DuEkeSXb18VW6O8VZGtbLEvzrjFYFuFugBymqgN3ZEiL7bFBjMD9YXHu6ugA0zz1YioDwbMJKc0NtTsK-pt6-L9x2glkUgjrrgbA6h5BDgboKJxXGPLaYdL5IO8YqD6kDmucBodl2X6_BU6AZxejGB6WBoPEM5cDgwjAKRDtlN5nRR00Mf1Oc-r20IHdMCmTmyjh-wRnL_3svoX-vzrhakOUv3ECC1EdVJUbPcBGE_Q",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "resource_id": "https://w3id.org/idsa/autogen/textResource/dataset_9ef293ba-00bc-4b4f-bef2-8fea4adb49eb",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_1",
+        "event": "dataset_published",
+        "filename": "phising_url_detection_worker_1.csv",
+        "worker": "1"
+      },
+      "transaction_id": "62f94978-e691-426e-83e0-c59bda96afef",
+      "timestamp": "2026-04-16T22:28:30.891000",
+      "client_ip": "172.18.0.11",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "3ee7a4c4f496ec6470e7dff7e7e87d9d981ea35d5a9b3834cb04cabacb2283da",
+      "current_hash": "9c7f60de8b1f48e92538fadec50b9aad28222eca681a751dcf021fe1e2d0560f"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:ResourceUpdateMessage",
+      "message_header": {
+        "message_type": "ids:ResourceUpdateMessage",
+        "issued": "2026-04-16T22:28:30.592372Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker1",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiOUQ6QzU6OUI6REI6MDY6REE6RkM6RTE6MEQ6MDc6QTc6RkY6NjU6Q0I6MkM6ODQ6OUY6MkY6Nzg6ODc6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1MTAsImlhdCI6MTc3NjM3ODUxMCwianRpIjoiZDQ3MzBkN2YtMjEyMS00ZTVlLWEzNGEtNjg3YTA1OTJmNmMzIiwiZXhwIjoxNzc2MzgyMTEwLCJjbGllbnRfaWQiOiI5RDpDNTo5QjpEQjowNjpEQTpGQzpFMTowRDowNzpBNzpGRjo2NTpDQjoyQzo4NDo5RjoyRjo3ODo4NzprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIxIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI1ZGNiYjc2MWFlZTdmYzMzMDNiYTIxNTgzYWY5ODNmZjY4Yzg2MDkzNmVmMDQyYTJjYTY1N2JhZWNkYzU1OTkxIn0.cvpyZ0FTJE3tL-QGIoP8jV8PyR4yOb-U4vazWrrJQMt3U46p8PC9OlUT0-uTo8aSHaWk_qFLXo-aM7XtJxo9u1BNuFEUzcq_P3l3ns2fobG_oMj5zN54Ja-1UOx4NPRFN9p-UFa-WbLlmN1ShY51a6TS4J3p0LyEBz8W6z_VRWNqhUeuOIzZjNSpNI0CxW6dqGYEIJAKVwyvskmOrfQNR4F9baagQQ2MSh8DJ3naOJ9V_tO9Pjrvh7ZJKSbt1o-8MM1CsnGzntmSofd57lJfHtv1gDLwh3cpqO_s-wNGeoLEmlN7SKgKfxghocXj7RKyx3lMZzEWF-wEmFrC2Nar3Q",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "resource_id": "https://w3id.org/idsa/autogen/textResource/dataset_f3a1b7a1-e50a-4066-93c9-cd74be07ae05",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_1",
+        "event": "dataset_published",
+        "filename": "consolidated_traffic_worker_1.csv",
+        "worker": "1"
+      },
+      "transaction_id": "8dfd859f-fa57-4c7b-b376-d93dbcdd18f3",
+      "timestamp": "2026-04-16T22:28:30.886000",
+      "client_ip": "172.18.0.11",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "1d0c13d91179eda9eb51f5c6200608c1474ab521e64a233c76ff917421b53772",
+      "current_hash": "3ee7a4c4f496ec6470e7dff7e7e87d9d981ea35d5a9b3834cb04cabacb2283da"
+    },
+    {
+      "source_connector": "http://w3id.org/engrd/connector/worker1",
+      "message_type": "ids:ResourceUpdateMessage",
+      "message_header": {
+        "message_type": "ids:ResourceUpdateMessage",
+        "issued": "2026-04-16T22:28:30.593252Z",
+        "issuer_connector": "http://w3id.org/engrd/connector/worker1",
+        "recipient_connector": [],
+        "security_token": {
+          "@type": "ids:DynamicAttributeToken",
+          "ids:tokenValue": "eyJ0eXAiOiJhdCtqd3QiLCJraWQiOiI5ODM3ZTYyOTA5MTNjZTNlN2ZiYTE1YjYxZmIxYTJiMzkzZjYzOTA2NTNhNTFkMGJlMjEyOTdiMWZkOWY0ZjlhIiwiYWxnIjoiUlMyNTYifQ.eyJzY29wZSI6Imlkc2M6SURTX0NPTk5FQ1RPUl9BVFRSSUJVVEVTX0FMTCIsImF1ZCI6WyJpZHNjOklEU19DT05ORUNUT1JTX0FMTCJdLCJpc3MiOiJodHRwczovL29tZWpkbi9hdXRoIiwic3ViIjoiOUQ6QzU6OUI6REI6MDY6REE6RkM6RTE6MEQ6MDc6QTc6RkY6NjU6Q0I6MkM6ODQ6OUY6MkY6Nzg6ODc6a2V5aWQ6QzQ6NzY6RDA6QUE6Q0Q6OTM6Nzk6MzU6MEY6RUI6QTc6NjQ6NjA6OTA6QTQ6NkI6QjQ6Mzg6NEQ6MzMiLCJuYmYiOjE3NzYzNzg1MTAsImlhdCI6MTc3NjM3ODUxMCwianRpIjoiMjVhODI4ODEtM2M5MC00MzgxLTg0NDgtYzFlMDlhYTk2ZjZkIiwiZXhwIjoxNzc2MzgyMTEwLCJjbGllbnRfaWQiOiI5RDpDNTo5QjpEQjowNjpEQTpGQzpFMTowRDowNzpBNzpGRjo2NTpDQjoyQzo4NDo5RjoyRjo3ODo4NzprZXlpZDpDNDo3NjpEMDpBQTpDRDo5Mzo3OTozNTowRjpFQjpBNzo2NDo2MDo5MDpBNDo2QjpCNDozODo0RDozMyIsInNlY3VyaXR5UHJvZmlsZSI6Imlkc2M6QkFTRV9TRUNVUklUWV9QUk9GSUxFIiwicmVmZXJyaW5nQ29ubmVjdG9yIjoiaHR0cDovL3czaWQub3JnL2VuZ3JkL2Nvbm5lY3Rvci93b3JrZXIxIiwiQHR5cGUiOiJpZHM6RGF0UGF5bG9hZCIsIkBjb250ZXh0IjoiaHR0cHM6Ly93M2lkLm9yZy9pZHNhL2NvbnRleHRzL2NvbnRleHQuanNvbmxkIiwidHJhbnNwb3J0Q2VydHNTaGEyNTYiOiI1ZGNiYjc2MWFlZTdmYzMzMDNiYTIxNTgzYWY5ODNmZjY4Yzg2MDkzNmVmMDQyYTJjYTY1N2JhZWNkYzU1OTkxIn0.mCELXHGGvFvLMSIuibbNKoYpR0EE4yEpOm3ccxYtsSbWgxDJ7OtbxdcFfbQFtgrC5k0DHKdaUJZ7zi3hgEgYla8uVdGuecdszawR2AAXRdWCzcQ7E2m5dW0nKsMGtkcaaGYkKqDUyYdpHK112eptuEoAMVLi0rRw7keOLcDwfaAZU_7uMYbgMAkaEHRl36_ioVZSiRy0EQ83YODEPdODGqTepk_yi2aGhgRg86WRKG9Lz-DhX274X6qHj3R7ZwkzsAdEZn6wKNlNprOOSaltSI4JGbzeMEw2o-EVTGiOOECyqrmK4T3E_brvk7VAP6mUf_xU46YfwMYQ_AOACqJlmA",
+          "ids:tokenFormat": {
+            "@id": "https://w3id.org/idsa/code/JWT"
+          }
+        }
+      },
+      "status": "success",
+      "security_token_valid": true,
+      "resource_id": "https://w3id.org/idsa/autogen/textResource/dataset_5f498f7d-d054-4d7c-a632-846965396490",
+      "additional_data": {
+        "app_version": "1.0.0",
+        "environment": "docker",
+        "log_source": "dataapp_worker_1",
+        "event": "dataset_published",
+        "filename": "unsw_nb15_worker_1.csv",
+        "worker": "1"
+      },
+      "transaction_id": "192312e8-581b-473c-a7a9-2df7baa5e1ff",
+      "timestamp": "2026-04-16T22:28:30.877000",
+      "client_ip": "172.18.0.11",
+      "user_agent": "python-requests/2.31.0",
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "current_hash": "1d0c13d91179eda9eb51f5c6200608c1474ab521e64a233c76ff917421b53772"
+    }
+  ]
+}

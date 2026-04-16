@@ -215,6 +215,9 @@ services:
       - LLM_MODEL=${LLM_MODEL}
       - API_USER=${API_USER}
       - API_PASS=${API_PASS}
+      - WS_ECC=${WS_ECC}
+      - FL_IDS_ECC_ONLY=${FL_IDS_ECC_ONLY}
+      - FL_WEIGHTS_VIA_ECC=${FL_WEIGHTS_VIA_ECC}
       - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
     volumes:
       - ./ia-dataapp/data/worker1:/home/nobody/data/
@@ -318,6 +321,9 @@ services:
       - LLM_MODEL=${LLM_MODEL}
       - API_USER=${API_USER}
       - API_PASS=${API_PASS}
+      - WS_ECC=${WS_ECC}
+      - FL_IDS_ECC_ONLY=${FL_IDS_ECC_ONLY}
+      - FL_WEIGHTS_VIA_ECC=${FL_WEIGHTS_VIA_ECC}
       - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
     volumes:
       - ./ia-dataapp/data/worker2:/home/nobody/data/
@@ -421,6 +427,9 @@ services:
       - LLM_MODEL=${LLM_MODEL}
       - API_USER=${API_USER}
       - API_PASS=${API_PASS}
+      - WS_ECC=${WS_ECC}
+      - FL_IDS_ECC_ONLY=${FL_IDS_ECC_ONLY}
+      - FL_WEIGHTS_VIA_ECC=${FL_WEIGHTS_VIA_ECC}
       - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
     volumes:
       - ./ia-dataapp/data/worker3:/home/nobody/data/
@@ -531,6 +540,9 @@ services:
       - LLM_MODEL=${LLM_MODEL}
       - API_USER=${API_USER}
       - API_PASS=${API_PASS}
+      - WS_ECC=${WS_ECC}
+      - FL_IDS_ECC_ONLY=${FL_IDS_ECC_ONLY}
+      - FL_WEIGHTS_VIA_ECC=${FL_WEIGHTS_VIA_ECC}
       - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
     volumes:
       - ./ia-dataapp/data/worker4:/home/nobody/data/
