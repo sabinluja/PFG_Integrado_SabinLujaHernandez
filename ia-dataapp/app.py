@@ -119,6 +119,9 @@ LLM_MODEL    = os.getenv("LLM_MODEL",    "llama3.2")
 # Todos los eventos IDS relevantes se reportan de forma no bloqueante.
 # =============================================================================
 CLEARING_HOUSE_URL = os.getenv("CLEARING_HOUSE_URL", "")
+CLEARING_HOUSE_CONNECTOR_URI = os.getenv("CLEARING_HOUSE_CONNECTOR_URI", "")
+CLEARING_HOUSE_ECC_URL = os.getenv("CLEARING_HOUSE_ECC_URL", "")
+_ch_transport_logged = False
 
 
 def _report_to_ch(
@@ -136,10 +139,11 @@ def _report_to_ch(
     Reporta un evento IDS al Clearing House (notario digital).
     Incluye un toque profesional inyectando el DAT Token para validación de identidad.
     """
-    if not CLEARING_HOUSE_URL:
+    if not CLEARING_HOUSE_URL and not (CLEARING_HOUSE_CONNECTOR_URI and CLEARING_HOUSE_ECC_URL):
         return
 
     def _send():
+        global _ch_transport_logged
         try:
             # Construir cabecera profesional estilo IDS
             header = {
@@ -189,17 +193,164 @@ def _report_to_ch(
                 
             payload["additional_data"] = professional_metadata
 
-            requests.post(
-                f"{CLEARING_HOUSE_URL}/api/transactions",
-                json=payload,
-                timeout=5,
-                verify=False,
-            )
+            if CLEARING_HOUSE_CONNECTOR_URI and CLEARING_HOUSE_ECC_URL:
+                _ids_send(
+                    # Para el notario priorizamos IDS multipart sobre ECC (HTTPS)
+                    # en lugar de WSS: el payload es pequeno y evitamos errores
+                    # de framing binario en el canal WS del gateway de auditoria.
+                    forward_to_url=CLEARING_HOUSE_ECC_URL,
+                    forward_to_connector=CLEARING_HOUSE_CONNECTOR_URI,
+                    message_type="ids:LogMessage",
+                    payload=payload,
+                    use_local_ecc=FL_IDS_ECC_ONLY,
+                )
+                if not _ch_transport_logged:
+                    log.info(
+                        "[CLEARING HOUSE] Auditoría enviada (Strict IDS/ECC) "
+                        f"hacia {CLEARING_HOUSE_CONNECTOR_URI}"
+                    )
+                    _ch_transport_logged = True
+            else:
+                rest_resp = requests.post(
+                    f"{CLEARING_HOUSE_URL}/api/transactions",
+                    json=payload,
+                    timeout=5,
+                    verify=False,
+                )
+                rest_resp.raise_for_status()
+                if not _ch_transport_logged:
+                    log.warning(
+                        "[CLEARING HOUSE] Despliegue sin conector IDS detectado; "
+                        "usando REST heredado."
+                    )
+                    _ch_transport_logged = True
             event_name = professional_metadata.get("event", "")
             event_str = f" ({event_name})" if event_name else ""
             log.info(f"🏛️  [CLEARING HOUSE] Evento notarizado: {message_type}{event_str}")
         except Exception as exc:
             log.warning(f"⚠️  [CLEARING HOUSE] No se pudo notarizar {message_type}: {exc}")
+
+    threading.Thread(target=_send, daemon=True).start()
+
+
+# Restauracion del comportamiento estable de auditoria del Clearing House.
+# Se redefine el helper para dejar como ruta oficial:
+#   DataApp -> ECC local -> ecc-clearinghouse (HTTPS multipart IDS)
+# y se mantiene una persistencia espejo en la API del notario para que
+# dashboard/export reflejen siempre los eventos.
+def _report_to_ch(
+    message_type: str,
+    source_connector: str,
+    target_connector: str | None = None,
+    status: str = "success",
+    contract_id: str | None = None,
+    resource_id: str | None = None,
+    response_time_ms: float | None = None,
+    error_message: str | None = None,
+    additional_data: dict | None = None,
+):
+    if not CLEARING_HOUSE_URL and not (CLEARING_HOUSE_CONNECTOR_URI and CLEARING_HOUSE_ECC_URL):
+        return
+
+    def _send():
+        global _ch_transport_logged
+        try:
+            header = {
+                "message_type": message_type,
+                "issued": _now_iso(),
+                "issuer_connector": source_connector,
+                "recipient_connector": [target_connector] if target_connector else [],
+            }
+
+            try:
+                token_val = _get_dat_token()
+                if token_val:
+                    header["security_token"] = {
+                        "@type": "ids:DynamicAttributeToken",
+                        "ids:tokenValue": token_val,
+                        "ids:tokenFormat": {"@id": "https://w3id.org/idsa/code/JWT"},
+                    }
+            except Exception:
+                pass
+
+            payload = {
+                "source_connector": source_connector,
+                "target_connector": target_connector,
+                "message_type": message_type,
+                "status": status,
+                "message_header": header,
+                "security_token_valid": "security_token" in header,
+            }
+            if contract_id:
+                payload["contract_id"] = contract_id
+            if resource_id:
+                payload["resource_id"] = resource_id
+            if response_time_ms is not None:
+                payload["response_time_ms"] = response_time_ms
+            if error_message:
+                payload["error_message"] = error_message
+
+            professional_metadata = {
+                "app_version": "1.0.0",
+                "environment": os.getenv("SPRING_PROFILES_ACTIVE", "docker"),
+                "log_source": f"dataapp_worker_{INSTANCE_ID}",
+            }
+            if additional_data:
+                professional_metadata.update(additional_data)
+            payload["additional_data"] = professional_metadata
+
+            mirrored_to_rest = False
+            if CLEARING_HOUSE_CONNECTOR_URI and CLEARING_HOUSE_ECC_URL:
+                _ids_send(
+                    forward_to_url=CLEARING_HOUSE_ECC_URL,
+                    forward_to_connector=CLEARING_HOUSE_CONNECTOR_URI,
+                    message_type="ids:LogMessage",
+                    payload=payload,
+                    use_local_ecc=FL_IDS_ECC_ONLY,
+                )
+                if not _ch_transport_logged:
+                    log.info(
+                        "[CLEARING HOUSE] Auditoria enviada por IDS/ECC "
+                        f"hacia {CLEARING_HOUSE_CONNECTOR_URI}"
+                    )
+                    _ch_transport_logged = True
+
+                if CLEARING_HOUSE_URL:
+                    rest_resp = requests.post(
+                        f"{CLEARING_HOUSE_URL}/api/transactions",
+                        json=payload,
+                        timeout=5,
+                        verify=False,
+                    )
+                    rest_resp.raise_for_status()
+                    mirrored_to_rest = True
+            else:
+                rest_resp = requests.post(
+                    f"{CLEARING_HOUSE_URL}/api/transactions",
+                    json=payload,
+                    timeout=5,
+                    verify=False,
+                )
+                rest_resp.raise_for_status()
+                if not _ch_transport_logged:
+                    log.warning(
+                        "[CLEARING HOUSE] El despliegue actual no expone un connector IDS; "
+                        "se usa la API REST heredada como fallback."
+                    )
+                    _ch_transport_logged = True
+                mirrored_to_rest = True
+
+            if mirrored_to_rest:
+                log.info(
+                    "[CLEARING HOUSE] Persistencia espejo confirmada en la API "
+                    "para dashboard/export."
+                )
+
+            event_name = professional_metadata.get("event", "")
+            event_str = f" ({event_name})" if event_name else ""
+            log.info(f"[CLEARING HOUSE] Evento notarizado: {message_type}{event_str}")
+        except Exception as exc:
+            log.warning(f"[CLEARING HOUSE] No se pudo notarizar {message_type}: {exc}")
 
     threading.Thread(target=_send, daemon=True).start()
 
@@ -339,7 +490,9 @@ async def _startup_identity_log():
     log.info(f"  CONNECTOR_URI   : {CONNECTOR_URI}")
     log.info(f"  ECC_HOSTNAME    : {ECC_HOSTNAME}")
     log.info(f"  BROKER_URL      : {BROKER_URL}")
-    log.info(f"  BROKER_SPARQL   : {BROKER_SPARQL_URL}")
+    log.info(f"  BROKER_QUERY    : IDS QueryMessage via ECC local -> {BROKER_URL}")
+    if ALLOW_IDS_BYPASS:
+        log.warning(f"  BROKER_SPARQL   : {BROKER_SPARQL_URL} (fallback legacy habilitado)")
     log.info(f"  PEER_ECC_URLS   : {PEER_ECC_URLS or '(vacio -- se rellenara via broker)'}")
     log.info(f"  PEER_CONN_URIS  : {PEER_CONNECTOR_URIS or '(vacio -- se rellenara via broker)'}")
     if FL_OPT_OUT:
@@ -352,10 +505,19 @@ async def _startup_identity_log():
         log.info("  FL_OPT_OUT      : False (Participara en entrenamientos FL validos).")
     log.info("=" * 60)
     # --- Clearing House info ---
-    if CLEARING_HOUSE_URL:
+    if CLEARING_HOUSE_CONNECTOR_URI and CLEARING_HOUSE_ECC_URL:
+        log.info("=" * 60)
+        log.info(
+            f"  CLEARING HOUSE (Notario IDS) via ECC: "
+            f"{CLEARING_HOUSE_CONNECTOR_URI} @ {CLEARING_HOUSE_ECC_URL}"
+        )
+        log.info("  Los eventos de auditoria se envian como ids:LogMessage.")
+        log.info("=" * 60)
+    elif CLEARING_HOUSE_URL:
         log.info("=" * 60)
         log.info(f"  CLEARING HOUSE (Notario IDS) activo en: {CLEARING_HOUSE_URL}")
         log.info(f"  Todos los eventos IDS son auditados automaticamente.")
+        log.warning("  Transporte de auditoria: REST fallback (sin connector IDS del notario).")
         log.info(f"  -------------------------------------------------------")
         log.info(f"  DASHBOARD (para abrir en el navegador local de Windows):")
         log.info(f"  - Todas las transacciones : http://localhost:8100/api/transactions")
@@ -367,7 +529,7 @@ async def _startup_identity_log():
     else:
         log.warning(
             "  CLEARING_HOUSE_URL no definida -- auditoría IDS desactivada en este worker. "
-            "Define CLEARING_HOUSE_URL=http://clearing-house:8000 en .env para habilitarla."
+            "Define CLEARING_HOUSE_URL o el par CLEARING_HOUSE_CONNECTOR_URI/CLEARING_HOUSE_ECC_URL."
         )
 
     # Publicar datasets automaticamente dando tiempo al ECC a arrancar
@@ -803,8 +965,11 @@ def _ids_send(
         auth=_auth,
         timeout=60,
     )
-    resp.raise_for_status()
+    return _parse_ids_http_response(resp)
 
+
+def _parse_ids_http_response(resp: requests.Response) -> dict:
+    resp.raise_for_status()
     content_type = resp.headers.get("Content-Type", "")
     if "multipart" in content_type:
         try:
@@ -833,6 +998,25 @@ def _ids_send(
         return resp.json()
     except Exception:
         return {"raw": resp.text[:500]}
+
+
+def _broker_query_via_local_ecc(query: str) -> dict:
+    from requests.auth import HTTPBasicAuth as _HTTPBasicAuth
+
+    actual_url = f"https://ecc-worker{INSTANCE_ID}:8887/selfRegistration/query"
+    log.info(f"[IDS OUT] ids:QueryMessage -> {BROKER_URL} [via {actual_url}]")
+    resp = requests.post(
+        actual_url,
+        data=query,
+        headers={
+            "Forward-To": BROKER_URL,
+            "Content-Type": "text/plain",
+        },
+        verify=TLS_CERT,
+        auth=_HTTPBasicAuth(API_USER, API_PASS),
+        timeout=60,
+    )
+    return _parse_ids_http_response(resp)
 
 
 # =============================================================================
@@ -1453,7 +1637,7 @@ def _send_local_weights(weights_b64: str, n_samples: int,
             # al mismo tiempo; en pruebas reales esto ha reducido bloqueos
             # intermitentes en rondas avanzadas.
             if FL_IDS_ECC_ONLY:
-                send_delay_s = min(2.0, max(0.0, 0.5 * float(INSTANCE_ID)))
+                send_delay_s = 2.5 * float(INSTANCE_ID)
                 if send_delay_s > 0:
                     log.info(
                         f"[fl_weights] Esperando {send_delay_s:.1f}s antes de enviar "
@@ -1955,15 +2139,145 @@ def _get_my_columns() -> list:
     return best["columns"]
 
 
-def _get_registered_connectors() -> list:
-    query = """
-    SELECT DISTINCT ?connector ?endpoint WHERE {
-      GRAPH ?g {
-        ?connector a <https://w3id.org/idsa/core/BaseConnector> .
-        OPTIONAL { ?connector <https://w3id.org/idsa/core/hasDefaultEndpoint> ?endpoint . }
-      }
-    }
+def _ids_keyword_values(rep: dict) -> list:
+    keywords = rep.get("ids:keyword", []) or rep.get("https://w3id.org/idsa/core/keyword", [])
+    values = []
+    for kw in keywords:
+        if isinstance(kw, dict):
+            val = str(kw.get("@value", "")).strip()
+        else:
+            val = str(kw).strip()
+        if val:
+            values.append(val)
+    return values
+
+
+def _extract_csv_candidates_from_description(desc: dict) -> list:
     """
+    Extrae [{filename, columns, count}] de la MetadataRepresentation publicada
+    en el catalogo IDS del peer.
+    """
+    import re as _re
+
+    candidates = []
+    seen = set()
+
+    for cat in desc.get("ids:resourceCatalog", []) or []:
+        for res in cat.get("ids:offeredResource", []) or []:
+            for rep in res.get("ids:representation", []) or []:
+                rep_uri = rep.get("@id", "")
+                if "meta_" not in rep_uri:
+                    continue
+
+                filename = None
+                columns = []
+                for val in _ids_keyword_values(rep):
+                    if val.startswith("filename:"):
+                        filename = val.split(":", 1)[1].strip()
+                    elif val.startswith("column:"):
+                        col_name = val.split(":", 1)[1].strip()
+                        if col_name:
+                            columns.append(col_name)
+                    elif val.startswith("column_names:") and not columns:
+                        columns = [c.strip() for c in val.split(":", 1)[1].split(",") if c.strip()]
+
+                if not filename or not columns:
+                    desc_texts = rep.get("ids:description", [])
+                    if desc_texts:
+                        full_desc = desc_texts[0].get("@value", "")
+                        m_n = _re.search(r"[-:]? Nombre de Fichero:\s*(.+?)\n", full_desc)
+                        m_c = _re.search(r"[-:]? Nombres de Columnas:\s*(.+)", full_desc)
+                        if m_n and m_c:
+                            filename = filename or m_n.group(1).strip()
+                            if not columns:
+                                columns = [c.strip() for c in m_c.group(1).split(",") if c.strip()]
+
+                if not filename or not columns:
+                    continue
+
+                normalized = tuple(col.lower().strip() for col in columns if col.strip())
+                dedupe_key = (filename, normalized)
+                if dedupe_key in seen:
+                    continue
+                seen.add(dedupe_key)
+
+                candidates.append({
+                    "filename": filename,
+                    "columns": list(normalized),
+                    "count": len(normalized),
+                })
+
+    return candidates
+
+
+def _extract_connector_uris_from_query_result(result) -> list:
+    import re as _re
+
+    def _from_dict(data: dict) -> list:
+        uris = []
+        bindings = data.get("results", {}).get("bindings", [])
+        for binding in bindings:
+            for key in ("connectorUri", "connector"):
+                value = binding.get(key, {}).get("value", "")
+                if value:
+                    uris.append(value)
+        if uris:
+            return uris
+
+        for key in ("raw", "payload", "result", "body"):
+            value = data.get(key)
+            if isinstance(value, str) and value.strip():
+                return _extract_connector_uris_from_query_result(value)
+            if isinstance(value, dict):
+                nested = _from_dict(value)
+                if nested:
+                    return nested
+        return []
+
+    if isinstance(result, dict):
+        dict_uris = _from_dict(result)
+        if dict_uris:
+            return dict_uris
+
+    if isinstance(result, str):
+        text = result.strip()
+        if not text:
+            return []
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            parsed = None
+        if isinstance(parsed, dict):
+            return _extract_connector_uris_from_query_result(parsed)
+
+        urls = _re.findall(r"https?://[^\s\"'<>]+", text)
+        filtered = []
+        for url in urls:
+            if "connector/" not in url:
+                continue
+            if url == CONNECTOR_URI:
+                continue
+            filtered.append(url.rstrip(".,;"))
+        return list(dict.fromkeys(filtered))
+
+    return []
+
+
+def _extract_ids_rejection_reason(result) -> str:
+    if not isinstance(result, dict):
+        return ""
+
+    reason = result.get("ids:rejectionReason") or result.get("https://w3id.org/idsa/core/rejectionReason")
+    if isinstance(reason, dict):
+        return str(reason.get("@id", "")).strip()
+    if isinstance(reason, str):
+        return reason.strip()
+    return ""
+
+
+def _get_registered_connectors_via_sparql_fallback(query: str, reason: str = "") -> list:
+    if reason:
+        log.warning(f"[broker-discover] Activando fallback SPARQL legacy: {reason}")
     try:
         resp = requests.post(
             BROKER_SPARQL_URL,
@@ -1975,13 +2289,70 @@ def _get_registered_connectors() -> list:
         bindings = resp.json().get("results", {}).get("bindings", [])
         connectors = []
         for b in bindings:
-            uri      = b.get("connector", {}).get("value", "")
-            endpoint = b.get("endpoint",  {}).get("value", "")
+            uri = (
+                b.get("connectorUri", {}).get("value", "")
+                or b.get("connector", {}).get("value", "")
+            )
+            endpoint = b.get("endpoint", {}).get("value", "")
             if uri and uri != CONNECTOR_URI:
-                # El puerto 8889 (ECC-to-ECC) esta bloqueado en WS_ECC=true.
-                # Se debe usar la API IDS publica en el 8449.
                 connectors.append({"connector_uri": uri, "endpoint": endpoint})
-        log.info(f"[broker-discover] {len(connectors)} conectores encontrados en el broker")
+        log.info(
+            f"[broker-discover] {len(connectors)} conectores recuperados via SPARQL fallback"
+        )
+        return connectors
+    except Exception as legacy_exc:
+        log.error(f"[broker-discover] Fallback SPARQL legacy tambien fallo: {legacy_exc}")
+        return []
+
+
+def _get_registered_connectors() -> list:
+    query = f"""
+    PREFIX ids: <https://w3id.org/idsa/core/>
+    SELECT DISTINCT ?connector ?endpoint WHERE {{
+      GRAPH ?g {{
+        ?connector a ids:BaseConnector .
+        OPTIONAL {{ ?connector ids:hasDefaultEndpoint ?endpoint . }}
+        FILTER(?connector != <{CONNECTOR_URI}>)
+      }}
+    }}
+    """
+    try:
+        broker_result = _ids_send(
+            forward_to_url=BROKER_URL,
+            forward_to_connector=BROKER_URL,
+            message_type="ids:QueryMessage",
+            payload=query,
+            use_local_ecc=False,  # El Broker usa HTTP directo vía reverse-proxy (no soporta WSS/ECC fallback)
+            extra_header={
+                "ids:queryLanguage": {"@id": "https://w3id.org/idsa/code/SPARQL"},
+                "ids:queryScope": {"@id": "https://w3id.org/idsa/code/ALL"}
+            }
+        )
+        uris = _extract_connector_uris_from_query_result(broker_result)
+        connectors = []
+        for uri in uris:
+            endpoint = ""
+            if uri and uri != CONNECTOR_URI:
+                connectors.append({"connector_uri": uri, "endpoint": endpoint})
+        if not connectors:
+            raw_preview = str(broker_result)[:240].replace("\n", " ")
+            rejection_reason = _extract_ids_rejection_reason(broker_result)
+            if rejection_reason:
+                log.warning(
+                    "[broker-discover] El broker devolvio ids:RejectionMessage "
+                    f"con reason={rejection_reason}"
+                )
+            connectors = _get_registered_connectors_via_sparql_fallback(
+                query,
+                reason=(
+                    "ids:QueryMessage no devolvio conectores parseables. "
+                    f"Respuesta parcial: {raw_preview}"
+                ),
+            )
+        log.info(
+            f"[broker-discover] {len(connectors)} conectores encontrados en el broker "
+            "via ids:QueryMessage"
+        )
         # --- CH: Notificar discovery del Broker ---
         _report_to_ch(
             message_type="ids:QueryMessage",
@@ -1996,7 +2367,13 @@ def _get_registered_connectors() -> list:
         )
         return connectors
     except Exception as e:
-        log.error(f"[broker-discover] Error consultando Fuseki: {e}")
+        log.error(f"[broker-discover] Error consultando Broker via IDS QueryMessage: {e}")
+        connectors = _get_registered_connectors_via_sparql_fallback(
+            query,
+            reason=f"Error en ids:QueryMessage: {e}",
+        )
+        if connectors:
+            return connectors
         _report_to_ch(
             message_type="ids:QueryMessage",
             source_connector=CONNECTOR_URI,
@@ -2020,9 +2397,6 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
     desc = {}
     try:
         # -- Obtener Catalogo del Peer via IDS DescriptionRequestMessage ---------
-        # El puerto 8889 (ECC-to-ECC) puede estar bloqueado para DataApps por el
-        # firewall del ECC. Si falla, usamos la REST API publica del peer (puerto 8449)
-        # que esta accesible desde cualquier cliente en la red Docker.
         try:
             _peer_target = _ecc_forward_url(ecc_url) if FL_IDS_ECC_ONLY else ecc_url
             desc     = _ids_send(
@@ -2045,86 +2419,41 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
                 },
             )
         except Exception as e:
-            log.info(
-                f"[broker-discover] Puerto ECC-to-ECC (8889) no accesible desde DataApp -- "
-                f"usando REST API publica del peer (puerto 8449)"
-            )
-            # -- Fallback: REST API publica del ECC peer (puerto 8449) ---------
-            try:
-                from urllib.parse import urlparse
-                from requests.auth import HTTPBasicAuth
-                _hostname = urlparse(ecc_url).hostname
-                _rest_url = f"https://{_hostname}:8449/api/selfDescription/"
-                log.info(f"[broker-discover] GET {_rest_url}")
-                _r = requests.get(
-                    _rest_url, verify=TLS_CERT, timeout=10,
-                    auth=HTTPBasicAuth(API_USER, API_PASS)
-                )
-                if _r.status_code == 200:
-                    desc     = _r.json()
-                    real_uri = desc.get("@id", "") or connector_uri
-                    log.info(
-                        f"[broker-discover] [OK] REST API OK para {_hostname} "
-                        f"-- recursos: {len(desc.get('ids:resourceCatalog', []))}"
-                    )
-                else:
-                    log.warning(
-                        f"[broker-discover] REST API respondio HTTP {_r.status_code} "
-                        f"para {_rest_url}"
-                    )
-            except Exception as e2:
+            if ALLOW_IDS_BYPASS:
                 log.warning(
-                    f"[broker-discover] Fallback REST tambien fallo para {ecc_url}: {e2}"
+                    f"[broker-discover] IDS DescriptionRequest fallo para {ecc_url}: {e} "
+                    "-- ALLOW_IDS_BYPASS=true, usando REST del ECC como fallback legacy"
                 )
+                try:
+                    from urllib.parse import urlparse
+                    from requests.auth import HTTPBasicAuth
+                    _hostname = urlparse(ecc_url).hostname
+                    _rest_url = f"https://{_hostname}:8449/api/selfDescription/"
+                    log.info(f"[broker-discover] GET {_rest_url}")
+                    _r = requests.get(
+                        _rest_url, verify=TLS_CERT, timeout=10,
+                        auth=HTTPBasicAuth(API_USER, API_PASS)
+                    )
+                    if _r.status_code == 200:
+                        desc     = _r.json()
+                        real_uri = desc.get("@id", "") or connector_uri
+                        log.info(
+                            f"[broker-discover] [OK] REST API OK para {_hostname} "
+                            f"-- recursos: {len(desc.get('ids:resourceCatalog', []))}"
+                        )
+                    else:
+                        raise RuntimeError(f"REST API HTTP {_r.status_code}")
+                except Exception as e2:
+                    raise RuntimeError(
+                        f"DescriptionRequest IDS y fallback REST fallaron para {ecc_url}: {e2}"
+                    ) from e2
+            else:
+                raise RuntimeError(
+                    f"DescriptionRequest IDS fallo para {ecc_url} y no se permite bypass REST: {e}"
+                ) from e
 
         # -- Obtener lista completa de CSVs a traves del Information Model -------
-        import re as _re
-        all_csvs = []
-        
-        catalogs = desc.get("ids:resourceCatalog", [])
-        for cat in catalogs:
-            resources = cat.get("ids:offeredResource", [])
-            for res in resources:
-                meta_id = None
-                # Buscamos la representacion semantica que contenga "meta_"
-                for rep in res.get("ids:representation", []):
-                    rep_uri = rep.get("@id", "")
-                    if "meta_" in rep_uri:
-                        meta_id = rep_uri
-
-                        # Extraer metadata de ids:keyword de la Representacion Metadata
-                        # (labels "filename:X", "column_names:Y")
-                        try:
-                            _fname_kw = None
-                            _cols_kw  = None
-
-                            kw_list = rep.get("ids:keyword", []) or rep.get("https://w3id.org/idsa/core/keyword", [])
-                            for kw in kw_list:
-                                val = kw.get("@value", "")
-                                if val.startswith("filename:"):
-                                    _fname_kw = val.split(":", 1)[1].strip()
-                                elif val.startswith("column_names:"):
-                                    _cols_kw = val.split(":", 1)[1].strip()
-
-                            if _fname_kw and _cols_kw:
-                                cols_list = [c.strip() for c in _cols_kw.split(",") if c.strip()]
-                                all_csvs.append({"filename": _fname_kw, "columns": cols_list})
-                            else:
-                                # Fallback: regex sobre ids:description (legacy)
-                                desc_texts = rep.get("ids:description", [])
-                                if desc_texts:
-                                    full_desc = desc_texts[0].get("@value", "")
-                                    m_n = _re.search(r"[-:]? Nombre de Fichero:\s*(.+?)\n", full_desc)
-                                    m_c = _re.search(r"[-:]? Nombres de Columnas:\s*(.+)", full_desc)
-                                    if m_n and m_c:
-                                        fname = m_n.group(1).strip()
-                                        cols_str = m_c.group(1).strip()
-                                        cols_list = [c.strip() for c in cols_str.split(",") if c.strip()]
-                                        all_csvs.append({"filename": fname, "columns": cols_list})
-                        except Exception as e:
-                            log.warning(f"[broker-discover] Error parseando MetadataRepresentation {meta_id}: {e}")
-
-                        break
+        all_csvs = _extract_csv_candidates_from_description(desc)
 
         log.info(f"[broker-discover] {real_uri} -- {len(all_csvs)} CSV(s) descubiertos en catalogo IDS")
 
@@ -2240,6 +2569,32 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
     except Exception as e:
         log.warning(f"[broker-discover] Error escaneando CSVs de {connector_uri}: {e}")
         return [], real_uri, None, 0.0, None, []
+
+
+def _get_peer_csv_candidates_by_worker_id(peer_worker_id: str) -> list:
+    worker_suffix = f"worker{peer_worker_id}"
+    connectors = _get_registered_connectors()
+    connector_info = next(
+        (c for c in connectors if c.get("connector_uri", "").endswith(worker_suffix)),
+        None,
+    )
+    if not connector_info:
+        raise RuntimeError(f"No se encontro connector IDS para worker-{peer_worker_id} en el Broker")
+
+    connector_uri = connector_info["connector_uri"]
+    ecc_url = _ecc_url_from_connector_uri(connector_uri, connector_info.get("endpoint", ""))
+    _best_cols, _real_uri, _best_filename, _best_ratio, _llm, all_evaluated = _get_peer_best_csv(
+        ecc_url, connector_uri, set(c.lower().strip() for c in _get_my_columns())
+    )
+
+    return [
+        {
+            "filename": item.get("filename", ""),
+            "columns": item.get("columns", []),
+            "count": item.get("count", len(item.get("columns", []))),
+        }
+        for item in all_evaluated
+    ]
 
 
 def _ecc_url_from_connector_uri(connector_uri: str, endpoint: str) -> str:
@@ -3493,28 +3848,15 @@ async def ws_llm_recommend(websocket: WebSocket):
             log.warning(f"[ws/llm-recommend] Error parseando peer_csvs: {e} -- usando CSVs locales")
 
     if not candidates and peer_worker_id:
-        # Intentar leer los CSVs del peer desde su DataApp (misma red Docker)
-        # Puerto convencion: 8500 interno, be-dataapp-workerN como hostname
         try:
-            _peer_url = f"https://be-dataapp-worker{peer_worker_id}:8500/dataset/all-columns"
-            _r = requests.get(_peer_url, timeout=8, verify=TLS_CERT)
-            if _r.status_code == 200:
-                _data = _r.json()
-                candidates = [
-                    {
-                        "filename": c["filename"],
-                        "columns" : c.get("columns", []),
-                        "count"   : c.get("count", len(c.get("columns", []))),
-                    }
-                    for c in _data.get("csvs", _data if isinstance(_data, list) else [])
-                ]
-                log.info(
-                    f"[ws/llm-recommend] {len(candidates)} CSVs obtenidos del peer "
-                    f"worker-{peer_worker_id} via REST interno"
-                )
+            candidates = _get_peer_csv_candidates_by_worker_id(peer_worker_id)
+            log.info(
+                f"[ws/llm-recommend] {len(candidates)} CSVs obtenidos del peer "
+                f"worker-{peer_worker_id} desde su catalogo IDS"
+            )
         except Exception as e:
             log.warning(
-                f"[ws/llm-recommend] No se pudo obtener CSVs de peer worker-{peer_worker_id}: {e}"
+                f"[ws/llm-recommend] No se pudo obtener CSVs IDS de peer worker-{peer_worker_id}: {e}"
                 f" -- usando CSVs locales como fallback"
             )
 
@@ -3678,7 +4020,12 @@ def _publish_local_csvs() -> dict:
                 "ids:keyword": [
                     {"@value": f"size_mb:{_size_mb}",        "@type": _xsd_str},
                     {"@value": f"filename:{fname}",          "@type": _xsd_str},
+                    {"@value": f"rows:{_n_rows}",            "@type": _xsd_str},
+                    {"@value": f"columns_count:{_n_cols}",   "@type": _xsd_str},
                     {"@value": f"column_names:{cols_str}",   "@type": _xsd_str},
+                ] + [
+                    {"@value": f"column:{col}", "@type": _xsd_str}
+                    for col in c["columns"]
                 ],
                 "ids:mediaType": {"@id": "https://w3id.org/idsa/code/JSON"}
             }
@@ -5033,7 +5380,8 @@ async def ws_fl_status(websocket: WebSocket):
     except WebSocketDisconnect:
         log.info("[WS /fl-status] Cliente desconectado")
     except Exception as exc:
-        log.warning(f"[WS /fl-status] Error: {exc}")
+        if "1000" not in str(exc) and "1001" not in str(exc):
+            log.warning(f"[WS /fl-status] Error: {exc}")
     finally:
         await _ws_manager.disconnect(websocket)
 

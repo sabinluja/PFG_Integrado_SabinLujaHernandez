@@ -1,0 +1,13 @@
+{
+  "export_timestamp": "2026-04-17T21:02:12.980784",
+  "total_records": 0,
+  "filters": {
+    "source_connector": null,
+    "target_connector": null,
+    "message_type": null,
+    "status": null,
+    "date_from": null,
+    "date_to": null
+  },
+  "data": []
+}

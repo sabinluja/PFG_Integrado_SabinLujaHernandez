@@ -1683,7 +1683,7 @@ def main():
             raw_metrics = requests.get(f"{coordinator_url}/metrics", timeout=req_timeout, verify=TLS_CERT).text
             perf = json.loads(raw_metrics)
             
-            print(f"  {CYAN}[RENDIMIENTO] DE TRANSFERENCIAS (WS directo vs IDS por ECC){RESET}")
+            print(f"  {CYAN}[RENDIMIENTO] DE TRANSFERENCIAS (WS directo - IDS por ECC){RESET}")
             print(f"  {CYAN}----------------------------------------------------------------------{RESET}")
             
             ws_sends  = perf.get("ws_sends", 0)

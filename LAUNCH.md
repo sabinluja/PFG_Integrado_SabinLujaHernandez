@@ -31,7 +31,7 @@ docker compose up -d --build
 docker compose build --no-cache
 
 docker build -t ia-dataapp:latest ./ia-dataapp
-docker-compose up -d
+docker compose up -d
 
 docker-compose build ia-dataapp-1
 docker compose build be-dataapp-consumer

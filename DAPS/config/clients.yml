@@ -89,3 +89,21 @@
     value: https://w3id.org/idsa/contexts/context.jsonld
   - key: transportCertsSha256
     value: 12bd4c407721c70488319d4f55ec72ec085d24063d0fa01f23aa01aee7616ccb
+- client_id: 4C:2D:93:F0:8A:0A:EC:76:21:C0:D4:C6:17:25:31:AB:B2:31:B0:CC:keyid:4C:2D:93:F0:8A:0A:EC:76:21:C0:D4:C6:17:25:31:AB:B2:31:B0:CC
+  client_name: clearinghouse
+  grant_types: client_credentials
+  token_endpoint_auth_method: private_key_jwt
+  scope: idsc:IDS_CONNECTOR_ATTRIBUTES_ALL
+  attributes:
+  - key: idsc
+    value: IDS_CONNECTOR_ATTRIBUTES_ALL
+  - key: securityProfile
+    value: idsc:BASE_SECURITY_PROFILE
+  - key: referringConnector
+    value: http://w3id.org/engrd/connector/clearinghouse
+  - key: "@type"
+    value: ids:DatPayload
+  - key: "@context"
+    value: https://w3id.org/idsa/contexts/context.jsonld
+  - key: transportCertsSha256
+    value: a612fc8f719eeab2c4692fee8f33f4a75a27ab0d1ec57ca171423e0ce1842e8f

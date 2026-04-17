@@ -219,6 +219,8 @@ services:
       - FL_IDS_ECC_ONLY=${FL_IDS_ECC_ONLY}
       - FL_WEIGHTS_VIA_ECC=${FL_WEIGHTS_VIA_ECC}
       - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
+      - CLEARING_HOUSE_CONNECTOR_URI=${CLEARING_HOUSE_CONNECTOR_URI}
+      - CLEARING_HOUSE_ECC_URL=${CLEARING_HOUSE_ECC_URL}
     volumes:
       - ./ia-dataapp/data/worker1:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -229,6 +231,7 @@ services:
     depends_on:
       - ecc-worker1
       - clearinghouse
+      - ecc-clearinghouse
 
   # ===========================================================================
   # WORKER 2
@@ -325,6 +328,8 @@ services:
       - FL_IDS_ECC_ONLY=${FL_IDS_ECC_ONLY}
       - FL_WEIGHTS_VIA_ECC=${FL_WEIGHTS_VIA_ECC}
       - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
+      - CLEARING_HOUSE_CONNECTOR_URI=${CLEARING_HOUSE_CONNECTOR_URI}
+      - CLEARING_HOUSE_ECC_URL=${CLEARING_HOUSE_ECC_URL}
     volumes:
       - ./ia-dataapp/data/worker2:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -335,6 +340,7 @@ services:
     depends_on:
       - ecc-worker2
       - clearinghouse
+      - ecc-clearinghouse
 
   # ===========================================================================
   # WORKER 3
@@ -431,6 +437,8 @@ services:
       - FL_IDS_ECC_ONLY=${FL_IDS_ECC_ONLY}
       - FL_WEIGHTS_VIA_ECC=${FL_WEIGHTS_VIA_ECC}
       - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
+      - CLEARING_HOUSE_CONNECTOR_URI=${CLEARING_HOUSE_CONNECTOR_URI}
+      - CLEARING_HOUSE_ECC_URL=${CLEARING_HOUSE_ECC_URL}
     volumes:
       - ./ia-dataapp/data/worker3:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -441,6 +449,7 @@ services:
     depends_on:
       - ecc-worker3
       - clearinghouse
+      - ecc-clearinghouse
 
   # ===========================================================================
   # WORKER 4 — Sin acceso al modelo FL (solo intenta acceder, es rechazado)
@@ -544,6 +553,8 @@ services:
       - FL_IDS_ECC_ONLY=${FL_IDS_ECC_ONLY}
       - FL_WEIGHTS_VIA_ECC=${FL_WEIGHTS_VIA_ECC}
       - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
+      - CLEARING_HOUSE_CONNECTOR_URI=${CLEARING_HOUSE_CONNECTOR_URI}
+      - CLEARING_HOUSE_ECC_URL=${CLEARING_HOUSE_ECC_URL}
     volumes:
       - ./ia-dataapp/data/worker4:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -554,6 +565,7 @@ services:
     depends_on:
       - ecc-worker4
       - clearinghouse
+      - ecc-clearinghouse
 
   # ===========================================================================
   # LLM — Ollama Local
@@ -589,6 +601,16 @@ services:
       dockerfile: Dockerfile
     image: clearinghouse:latest
     container_name: clearinghouse
+    entrypoint:
+      - uvicorn
+    command:
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "1"
     networks:
       - idsa
     ports:
@@ -616,6 +638,61 @@ services:
       options:
         max-size: "50M"
 
+  ecc-clearinghouse:
+    image: rdlabengpa/ids_execution_core_container:v1.14.8
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1024M
+    logging:
+      options:
+        max-size: "200M"
+    networks:
+      - idsa
+    container_name: ecc-clearinghouse
+    ports:
+      - "${CLEARING_HOUSE_PORT}:8449"
+      - "8896:8889"
+      - "8088:8086"
+    environment:
+      - "JDK_JAVA_OPTIONS=-Xmx1024m"
+      - "SPRING_PROFILES_ACTIVE=docker"
+      - DATA_APP_ENDPOINT=http://clearinghouse:8000/data
+      - MULTIPART_EDGE=form
+      - MULTIPART_ECC=${MULTIPART_ECC}
+      - CONNECTOR_ID=${CLEARING_HOUSE_CONNECTOR_URI}
+      - IDSCP2=false
+      - WS_EDGE=false
+      - WS_ECC=${WS_ECC}
+      - BROKER_URL=${BROKER_URL}
+      - CACHE_TOKEN=true
+      - FETCH_TOKEN_ON_STARTUP=false
+      - KEYSTORE_NAME=${KEYSTORE_NAME}
+      - KEY_PASSWORD=${KEY_PASSWORD}
+      - KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}
+      - ALIAS=${ALIAS}
+      - DAPS_KEYSTORE_NAME=${CLEARING_HOUSE_DAPS_KEYSTORE_NAME}
+      - DAPS_KEYSTORE_PASSWORD=${CLEARING_HOUSE_DAPS_KEYSTORE_PASSWORD}
+      - DAPS_KEYSTORE_ALIAS=${CLEARING_HOUSE_DAPS_KEYSTORE_ALIAS}
+      - TRUSTORE_NAME=${TRUSTORE_NAME}
+      - TRUSTORE_PASSWORD=${TRUSTORE_PASSWORD}
+      - FIREWALL=false
+      - TZ=Europe/Rome
+      - AES256-SECRET-KEY=${AES_SECRET_KEY}
+      - DATA_APP_HEALTH_ENDPOINT=http://clearinghouse:8000/health
+      - CONNECTOR_UUID=${CLEARING_HOUSE_CONNECTOR_UUID}
+      - DEFAULT_ENDPOINT=${CLEARING_HOUSE_DEFAULT_ENDPOINT}
+    volumes:
+      - ./ClearingHouse/ecc:/config
+      - ./certs:/cert
+      - ecc_clearinghouse_data:/home/nobody/data/
+    extra_hosts:
+      - "ecc-clearinghouse:172.17.0.1"
+    depends_on:
+      clearinghouse:
+        condition: service_healthy
+
   mongo-ch:
     image: mongo:7.0
     container_name: mongo-ch
@@ -638,6 +715,7 @@ volumes:
   ecc_worker2_data: {}
   ecc_worker3_data: {}
   ecc_worker4_data: {}
+  ecc_clearinghouse_data: {}
   broker_fuseki_data: {}
   ollama_data: {}
   mongo_ch_data: {}
