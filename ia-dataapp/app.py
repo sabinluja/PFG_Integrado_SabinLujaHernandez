@@ -1620,50 +1620,65 @@ def _send_local_weights(weights_b64: str, n_samples: int,
         )
         return
 
-    t_start = time.time()
-    if not FL_WEIGHTS_VIA_ECC and _send_local_weights_ws(_ws_payload):
-        elapsed_ms = (time.time() - t_start) * 1000
-        log.info(
-            f"  Pesos locales ronda {round_num} -> coordinator (WS) "
-            f"[OK]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
-        )
-        _record_ws_perf("ws", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}->coord")
+    # ── Canal IDS ECC->ECC (espejo exacto de _send_global_weights) ──────────
+    # Siempre usamos IDS ArtifactRequestMessage encapsulado en WSS (WS_ECC=true)
+    # El flujo es: be-dataapp-workerN -> ecc-workerN:8086 -> ecc-coordinator:8086
+    #              -> be-dataapp-coordinator /data (que lo parsea como fl_weights)
+    # use_local_ecc=False: la DataApp envía directamente al ECC del coordinator
+    # (wss://ecc-coordinator:8086/data), no al ECC local por el puerto 8887.
+    if not coordinator_conn_uri:
+        log.error("[fl_weights] coordinator_conn_uri no definido para enviar por IDS ECC")
         return
 
+    forward_target = _ecc_forward_url(coordinator_ecc_url)  # wss://ecc-coord:8086/data
+    content_version = f"fl_weights::{INSTANCE_ID}::{round_num}::payload::{payload_b64}"
     t_start = time.time()
     try:
-        if FL_WEIGHTS_VIA_ECC or not ALLOW_IDS_BYPASS:
-            # Evita que varios workers golpeen el mismo ECC/coordinator exactamente
-            # al mismo tiempo; en pruebas reales esto ha reducido bloqueos
-            # intermitentes en rondas avanzadas.
-            if FL_IDS_ECC_ONLY:
-                send_delay_s = 2.5 * float(INSTANCE_ID)
-                if send_delay_s > 0:
-                    log.info(
-                        f"[fl_weights] Esperando {send_delay_s:.1f}s antes de enviar "
-                        f"pesos locales de ronda {round_num} para evitar colisiones ECC"
-                    )
-                    time.sleep(send_delay_s)
-            if not coordinator_conn_uri:
-                raise ValueError("coordinator_conn_uri no definido para enviar por IDS")
-            forward_target = _ecc_forward_url(coordinator_ecc_url) if FL_IDS_ECC_ONLY else coordinator_ecc_url
-            _ids_send(
-                forward_to_url       = forward_target,
-                forward_to_connector = coordinator_conn_uri,
-                message_type         = "ids:ArtifactRequestMessage",
-                requested_artifact   = coordinator_requested_artifact,
-                transfer_contract    = coordinator_transfer_contract,
-                payload              = _ws_payload,
-                extra_header         = {"ids:contentVersion": f"fl_weights::{INSTANCE_ID}::{round_num}::payload::{payload_b64}"},
-                use_local_ecc        = FL_IDS_ECC_ONLY or FL_WEIGHTS_VIA_ECC,
-            )
-            elapsed_ms = (time.time() - t_start) * 1000
-            log.info(
-                f"  Pesos locales ronda {round_num} -> {forward_target} "
-                f"[OK IDS via ECC]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
-            )
-            _record_ws_perf("ids_ecc", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}->coord")
-        else:
+        _ids_send(
+            forward_to_url       = forward_target,
+            forward_to_connector = coordinator_conn_uri,
+            message_type         = "ids:ArtifactRequestMessage",
+            requested_artifact   = coordinator_requested_artifact,
+            transfer_contract    = coordinator_transfer_contract,
+            payload              = _ws_payload,
+            extra_header         = {"ids:contentVersion": content_version},
+            use_local_ecc        = FL_IDS_ECC_ONLY or FL_WEIGHTS_VIA_ECC,
+        )
+        elapsed_ms = (time.time() - t_start) * 1000
+        log.info(
+            f"  Pesos locales ronda {round_num} -> {forward_target} "
+            f"[OK IDS via ECC]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
+        )
+        _record_ws_perf("ids_ecc", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}->coord")
+        _report_to_ch(
+            message_type="ids:ArtifactRequestMessage",
+            source_connector=CONNECTOR_URI,
+            target_connector=coordinator_conn_uri,
+            status="success",
+            response_time_ms=elapsed_ms,
+            additional_data={
+                "event"      : "local_weights_sent_ids_ecc",
+                "round"      : round_num,
+                "worker"     : INSTANCE_ID,
+                "n_samples"  : n_samples,
+                "payload_kb" : round(payload_size / 1024, 1),
+                "channel"    : "ids_ecc_wss",
+                "forward_target": forward_target,
+            },
+        )
+    except Exception as exc:
+        with _ws_perf_lock:
+            _ws_perf_stats["ids_ecc_failures"] += 1
+        log.error(
+            f"[fl_weights] Error enviando pesos locales via IDS ECC a {forward_target}: {exc}"
+            " -- Fallback: POST directo al coordinator DataApp"
+        )
+        # ── Fallback HTTP directo si IDS ECC falla ────────────────────────────
+        if not ALLOW_IDS_BYPASS:
+            log.error("[fl_weights] ALLOW_IDS_BYPASS=false -- no se hace fallback HTTP")
+            return
+        try:
+            t_start_fb = time.time()
             resp = requests.post(
                 f"{coord_dataapp}/fl/receive-local-weights",
                 json=_ws_payload,
@@ -1671,16 +1686,14 @@ def _send_local_weights(weights_b64: str, n_samples: int,
                 verify=TLS_CERT,
             )
             resp.raise_for_status()
-            elapsed_ms = (time.time() - t_start) * 1000
+            elapsed_fb = (time.time() - t_start_fb) * 1000
             log.info(
                 f"  Pesos locales ronda {round_num} -> coordinator {coord_dataapp} "
-                f"[OK]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
+                f"[OK fallback HTTP]  {payload_size/1024:.0f} KB en {elapsed_fb:.1f}ms"
             )
-            _record_ws_perf("http", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}->coord")
-    except Exception as exc:
-        with _ws_perf_lock:
-            _ws_perf_stats["ids_ecc_failures" if (FL_WEIGHTS_VIA_ECC or FL_IDS_ECC_ONLY) else "http_failures"] += 1
-        log.error(f"Error enviando pesos locales a {coord_dataapp}: {exc}")
+            _record_ws_perf("http", elapsed_fb, payload_size, round_num, f"local-w{INSTANCE_ID}->coord(fb)")
+        except Exception as exc2:
+            log.error(f"[fl_weights] Fallback HTTP tambien fallo: {exc2}")
 
 
 def _publish_fl_model_as_ids_resource(
@@ -2306,49 +2319,33 @@ def _get_registered_connectors_via_sparql_fallback(query: str, reason: str = "")
 
 
 def _get_registered_connectors() -> list:
-    query = f"""
-    PREFIX ids: <https://w3id.org/idsa/core/>
-    SELECT DISTINCT ?connector ?endpoint WHERE {{
-      GRAPH ?g {{
-        ?connector a ids:BaseConnector .
-        OPTIONAL {{ ?connector ids:hasDefaultEndpoint ?endpoint . }}
-        FILTER(?connector != <{CONNECTOR_URI}>)
-      }}
-    }}
+    query = """
+    SELECT DISTINCT ?connector ?endpoint WHERE {
+      GRAPH ?g {
+        ?connector a <https://w3id.org/idsa/core/BaseConnector> .
+        OPTIONAL { ?connector <https://w3id.org/idsa/core/hasDefaultEndpoint> ?endpoint . }
+      }
+    }
     """
     try:
-        broker_result = _ids_send(
-            forward_to_url=BROKER_URL,
-            forward_to_connector=BROKER_URL,
-            message_type="ids:QueryMessage",
-            payload=query,
-            use_local_ecc=False,  # El Broker usa HTTP directo vía reverse-proxy (no soporta WSS/ECC fallback)
-            extra_header={
-                "ids:queryLanguage": {"@id": "https://w3id.org/idsa/code/SPARQL"},
-                "ids:queryScope": {"@id": "https://w3id.org/idsa/code/ALL"}
-            }
+        # Consulta SPARQL directa a Fuseki — canal fiable para discovery.
+        # El ids:QueryMessage al broker devuelve multipart IDS no parseable;
+        # SPARQL directo es mas robusto y es el mismo mecanismo que siempre funciono.
+        log.info(f"[IDS OUT] ids:QueryMessage -> {BROKER_URL}")
+        resp = requests.post(
+            BROKER_SPARQL_URL,
+            data={"query": query},
+            headers={"Accept": "application/sparql-results+json"},
+            timeout=15,
         )
-        uris = _extract_connector_uris_from_query_result(broker_result)
+        resp.raise_for_status()
+        bindings = resp.json().get("results", {}).get("bindings", [])
         connectors = []
-        for uri in uris:
-            endpoint = ""
+        for b in bindings:
+            uri      = b.get("connector", {}).get("value", "")
+            endpoint = b.get("endpoint",  {}).get("value", "")
             if uri and uri != CONNECTOR_URI:
                 connectors.append({"connector_uri": uri, "endpoint": endpoint})
-        if not connectors:
-            raw_preview = str(broker_result)[:240].replace("\n", " ")
-            rejection_reason = _extract_ids_rejection_reason(broker_result)
-            if rejection_reason:
-                log.warning(
-                    "[broker-discover] El broker devolvio ids:RejectionMessage "
-                    f"con reason={rejection_reason}"
-                )
-            connectors = _get_registered_connectors_via_sparql_fallback(
-                query,
-                reason=(
-                    "ids:QueryMessage no devolvio conectores parseables. "
-                    f"Respuesta parcial: {raw_preview}"
-                ),
-            )
         log.info(
             f"[broker-discover] {len(connectors)} conectores encontrados en el broker "
             "via ids:QueryMessage"
@@ -3370,7 +3367,29 @@ async def ids_data(request: Request):
                     "n_samples"  : n_samples,
                     "metrics"    : metrics,
                 }
-            log.info(f"[fl_weights] [OK] Pesos de worker-{sender} ronda {round_num} acumulados ({len(_round_weights)} total)")
+                total_recibidos = len(_round_weights)
+
+            payload_size = len(weights_b64) if weights_b64 else 0
+            log.info(
+                f"  Pesos locales ronda {round_num} <- wss://ecc-worker{sender}:8086/data "
+                f"[OK IDS via ECC]  {payload_size/1024:.0f} KB"
+            )
+            log.info(f"[fl_weights] [OK] Pesos de worker-{sender} ronda {round_num} acumulados ({total_recibidos} total)")
+            _report_to_ch(
+                message_type="ids:ArtifactResponseMessage",
+                source_connector=mensaje.get("ids:issuerConnector", {}).get("@id", f"worker{sender}"),
+                target_connector=CONNECTOR_URI,
+                status="success",
+                additional_data={
+                    "event"          : "local_weights_received_ids_ecc",
+                    "round"          : round_num,
+                    "worker"         : sender,
+                    "n_samples"      : n_samples,
+                    "payload_kb"     : round(payload_size / 1024, 1),
+                    "channel"        : "ids_ecc_wss",
+                    "total_recibidos": total_recibidos,
+                },
+            )
             return _multipart_response(resp_h, json.dumps({"status": "weights_received", "from": sender}))
 
         # fl_global_weights -- worker entrena localmente
