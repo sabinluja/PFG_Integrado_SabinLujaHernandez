@@ -201,12 +201,14 @@ def _report_to_ch(
 
             if CLEARING_HOUSE_CONNECTOR_URI and CLEARING_HOUSE_ECC_URL:
                 _ids_send(
-                    # Para el notario priorizamos IDS multipart sobre ECC (HTTPS)
-                    # en lugar de WSS: el payload es pequeno y evitamos errores
-                    # de framing binario en el canal WS del gateway de auditoria.
+                    # [HACK INGENIERIA WSS] Spoofing del mensaje para saltar el bug del TrueConnector (Java).
+                    # Para conseguir usar WSS hacia el notario, envolvemos externamente el paquete como
+                    # un "ids:ArtifactRequestMessage" (que Java si sabe enrutar en frames WS).
+                    # El notario final (main.py) ignorara esta capa externa y leera el "message_type"
+                    # original inyectado arriba en el JSON payload, persistiendo la auditoria perfecta.
                     forward_to_url=CLEARING_HOUSE_ECC_URL,
                     forward_to_connector=CLEARING_HOUSE_CONNECTOR_URI,
-                    message_type="ids:LogMessage",
+                    message_type="ids:ArtifactRequestMessage",
                     payload=payload,
                     use_local_ecc=FL_IDS_ECC_ONLY,
                 )
@@ -308,9 +310,13 @@ def _report_to_ch(
             mirrored_to_rest = False
             if CLEARING_HOUSE_CONNECTOR_URI and CLEARING_HOUSE_ECC_URL:
                 _ids_send(
+                    # [HACK INGENIERIA WSS] Spoofing del mensaje para saltar el bug del TrueConnector (Java).
+                    # Para aplicar WSS hacia el notario, envolvemos la auditoria como un "ids:ArtifactRequestMessage"
+                    # que si soporta el canal WebSocket interno sin dar 500 Error. El Clearing House leera el verdadero
+                    # `message_type` desde dentro del payload.
                     forward_to_url=CLEARING_HOUSE_ECC_URL,
                     forward_to_connector=CLEARING_HOUSE_CONNECTOR_URI,
-                    message_type="ids:LogMessage",
+                    message_type="ids:ArtifactRequestMessage",
                     payload=payload,
                     use_local_ecc=FL_IDS_ECC_ONLY,
                 )
