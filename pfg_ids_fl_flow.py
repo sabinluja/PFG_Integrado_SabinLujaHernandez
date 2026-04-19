@@ -6,21 +6,20 @@ Arquitectura Híbrida:
   - Control Plane (IDS): Negociación de contratos y descubrimiento HTTPS.
   - Data Plane (WS): Transferencia asíncrona de alto rendimiento de pesos FL.
 
-  FASE 0   Resolver endpoints
-           - GET /status y /broker/connectors.
-  FASE 1   Explorar Catálogo IDS Dinámicamente
-           - GET /ids/self-description (Lista Datasets del Coordinator).
-  FASE 2   Descubrimiento de peers en Broker + match semántico
-           - POST /broker/discover (Umbral >= 80% compatibilidad columnas).
-  FASE 3   Negociación de contratos (Restringido > Worker4 descartado)
-           - POST /fl/negotiate (Firma de credenciales ODRL mutuas mediante DAPS).
-  FASE 4   Arranque del Entrenamiento FL vía propagación IDS
-           - POST /fl/start
-  FASE 5   Monitorización en Tiempo Real y Resultados
-           - GET /fl/status, GET /fl/results y GET /fl/model
-  FASE 6   Verificación Soberanía de Datos y Acceso de Red
-           - Intento de lecturas por nodos no autorizados para comprobar
-             que el IDS bloquea la transferencia (Security Token).
+  FASE 0   Conectividad y Topología de Red
+           Health-check del coordinador y descubrimiento de nodos via Broker Fuseki.
+  FASE 1   Catálogo IDS del Coordinador
+           Verificación del Catálogo Federado y listado de Datasets soberanos.
+  FASE 2   Preparación de Artefactos FL (Imagen Docker)
+           Compilación del algoritmo de IA en una imagen Docker inmutable.
+  FASE 3   Búsqueda de Nodos y Filtro de Compatibilidad (IA Local)
+           Descubrimiento de peers via Broker + validación con LLAMA y heurísticas.
+  FASE 4   Negociación Estricta de Contratos IDS
+           Firma de contratos GAIA-X: ContractRequest → Agreement/Rejection.
+  FASE 5   Entrenamiento Federado (Federated Learning)
+           Arranque, monitorización en tiempo real y agregación FedAvg.
+  FASE 6   Auditoría Final y Soberanía de Datos
+           Test de acceso: solo los nodos participantes pueden ver el modelo.
 
 Se incluye soporte de Cancelación Global (/system/reset) pulsando Ctrl+C.
 
@@ -139,8 +138,8 @@ def phase(num, title, description=""):
     _sep("-", color=BLUE)
 
 
-def step(num, title):
-    print(f"\n{BOLD}{WHITE}  > Paso {num}  --  {title}{RESET}")
+def step(label):
+    print(f"\n  {BOLD}{WHITE}▸ {label}{RESET}")
 
 
 def substep(msg):
@@ -330,14 +329,13 @@ def _ecc_label(ecc_url):
 def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
     phase(
         0,
-        "Resolver endpoints",
-        "Paso 0a: GET /status           -> health check del DataApp coordinator\n"
-        "Paso 0b: GET /broker/connectors -> todos los conectores registrados en Fuseki\n"
-        f"Paso 0c: Extraer Worker-{cid} del Broker -> ECC URL y rol de Coordinator"
+        "Conectividad y Topología de Red",
+        "Verificamos que el coordinador responde y consultamos al Metadata Broker (Fuseki)\n"
+        "para obtener el mapa completo de todos los conectores IDS registrados en la red."
     )
 
-    # -- 0a: health check del DataApp coordinator -------------------------------
-    step("0a", f"GET /status -- health check del Worker-{cid}")
+    # -- health check del DataApp coordinator -----------------------------------
+    step(f"Health-check del Worker-{cid} (GET /status)")
     status = http_get(f"{coordinator_url}/status", timeout=req_timeout)
     ok(f"Worker-{cid} responde correctamente en {coordinator_url}")
     field("instance",        status.get("instance", "?"))
@@ -345,8 +343,8 @@ def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
     print()
     print(f"    {BOLD}{GREEN}** Worker-{cid} asumio el rol de COORDINATOR **{RESET}")
 
-    # -- 0b: TODOS los conectores desde el broker (incluido el coordinator) -----
-    step("0b", "GET /broker/connectors -- todos los conectores del Broker Fuseki")
+    # -- TODOS los conectores desde el broker (incluido el coordinator) ----------
+    step("Descubrimiento de topología via Broker Fuseki (GET /broker/connectors)")
     bd    = http_get(f"{coordinator_url}/broker/connectors", timeout=req_timeout)
     raw_p = bd.get("connectors", [])
     count = bd.get("count", len(raw_p))
@@ -426,17 +424,36 @@ def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
 def helper_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
     """
     El coordinator (worker-N) asume su rol nativo e inicializa el modelo localmente.
-    (Totalmente silencioso en consola)
+    (Muestra si se construyó imagen Docker).
     """
+    phase(
+        2,
+        "Preparación de Artefactos FL (Imagen Docker)",
+        "El coordinador localiza el algoritmo de IA (algorithm.py), su configuración\n"
+        "(fl_config.json) y sus dependencias (requirements_algo.txt). Con estos ficheros\n"
+        "construye una imagen Docker inmutable y la registra en el Registry privado\n"
+        "para que los nodos autorizados puedan descargarla tras la negociación."
+    )
+    step("Compilación del algoritmo en imagen Docker (POST /fl/fetch-algorithm)")
+    
     try:
         r = SESSION.post(f"{coordinator_url}/fl/fetch-algorithm", json={}, timeout=req_timeout)
         r.raise_for_status()
+        data = r.json()
+        
+        mode  = data.get("delivery_mode", "ids_base64")
+        image = data.get("docker_image")
+        
+        if mode == "docker_image":
+            print(f"      {GREEN}Imagen Docker compilada y registrada:{RESET}")
+            print(f"        {BOLD}{image}{RESET}")
+            print(f"      {GRAY}↳ Contiene: algorithm.py + fl_config.json + dependencias Python{RESET}")
+            print(f"      {GRAY}↳ Los nodos autorizados la descargarán del Registry tras firmar contrato{RESET}")
+        else:
+            print(f"      {GRAY}Algoritmo cargado en memoria (modo legacy base64){RESET}")
+        print()
     except Exception as exc:
-        fail(f"El coordinator no pudo obtener el algoritmo internamente: {exc}")
-
-
-
-# =============================================================================
+        fail(f"El coordinator no pudo obtener el algoritmo internamente: {exc}")# =============================================================================
 # FASE 2 -- Descubrimiento de peers compatibles
 # =============================================================================
 
@@ -514,18 +531,15 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
     coord_ecc_url = endpoints["coordinator"]["ecc_url"]
 
     phase(
-        2,
-        "Descubrimiento de peers compatibles  (multi-CSV, umbral 80%)",
-        "POST /broker/discover/worker  (uno por uno -- resultado inmediato por peer)\n"
-        "  Para cada peer registrado en el Broker:\n"
-        "    1. GET /dataset/all-columns -> lista de todos sus CSVs con columnas\n"
-        "    2. Matching matematico: ratio columnas_comunes/columnas_propias (umbral >=80%)\n"
-        "    3. Ollama (LLM local) verifica semanticamente el CSV candidato\n"
-        "    4. Si Ollama no alcanza confianza del 80%, se usa el mejor ratio matematico\n"
-        "  El CSV ganador queda asignado a ese worker para el entrenamiento FL."
+        3,
+        "Búsqueda de Nodos y Filtro de Compatibilidad (IA Local)",
+        "El coordinador pregunta al Metadata Broker (Fuseki) por otros nodos disponibles en la red.\n"
+        "A cada nodo encontrado le pide su Catálogo IDS. Utilizando un modelo generativo\n"
+        "local (LLAMA) y algoritmos matemáticos, evalúa si los datos de los demás nodos\n"
+        "son compatibles con los suyos (umbral ≥ 80% de similitud de columnas)."
     )
 
-    step("2", "POST /broker/discover/worker -- analisis peer por peer")
+    step("Análisis de compatibilidad peer a peer (POST /broker/discover/worker)")
 
     # Obtener lista de todos los conectores del broker
     bd       = http_get(f"{coordinator_url}/broker/connectors", timeout=req_timeout)
@@ -599,21 +613,14 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
     coord_label = endpoints["coordinator"]["ecc_label"]
 
     phase(
-        3,
-        "Negociacion IDS  coordinator -> cada peer",
-        f"Coordinator ECC: {endpoints['coordinator']['ecc_url']}\n"
-        "\n"
-        "Handshake IDS por peer:\n"
-        "  1. DescriptionRequestMessage  ->  DescriptionResponseMessage\n"
-        "  2. ContractRequestMessage     ->  ContractAgreementMessage  (acepta)\n"
-        "                                ->  RejectionMessage          (rechaza)\n"
-        "  3. ContractAgreementMessage   ->  MessageProcessedNotif.    (si acepto)\n"
-        "\n"
-        "  Worker: ACEPTA  (FL_OPT_OUT no definido en docker-compose)\n"
-        "  Worker: RECHAZA (FL_OPT_OUT=true en docker-compose -- soberania del dato)"
+        4,
+        "Negociación Estricta de Contratos IDS",
+        "Se inician los protocolos de confianza GAIA-X. El coordinador envía un 'Contract Request'\n"
+        "a los nodos compatibles. Si aceptan los términos de soberanía, se firma un 'Contract Agreement'\n"
+        "y se les otorga acceso a la URL y Token para descargar la imagen Docker del Algoritmo."
     )
 
-    step("5c", "POST /fl/negotiate")
+    step("Negociación de contratos con peers (POST /fl/negotiate)")
     data     = http_post(f"{coordinator_url}/fl/negotiate", {}, timeout=req_timeout)
     accepted = data.get("accepted", [])
     rejected = data.get("rejected", [])
@@ -731,7 +738,7 @@ def verificar_coordinator(coordinator_url, cid, endpoints, req_timeout):
     print(f"{BOLD}{BLUE}  Estado del coordinator tras la negociacion{RESET}")
     _sep("-", color=BLUE)
 
-    step("6", "GET /status")
+    step("Verificación del estado del coordinador (GET /status)")
     data = http_get(f"{coordinator_url}/status", timeout=req_timeout)
 
     role      = data.get("role", "?")
@@ -776,12 +783,14 @@ def verificar_coordinator(coordinator_url, cid, endpoints, req_timeout):
 
 def fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout):
     phase(
-        4,
-        "Arranque del entrenamiento Federated Learning",
-        "POST /fl/start -- el coordinator distribuye pesos globales y arranca las rondas"
+        5,
+        "Entrenamiento Federado (Federated Learning)",
+        "Arranca la primera ronda de entrenamiento. El coordinador notifica a los trabajadores\n"
+        "autorizados que comiencen a entrenar de forma distribuida y monitoriza el progreso\n"
+        "en tiempo real vía WebSocket."
     )
 
-    step("4", "POST /fl/start")
+    step("Arranque del entrenamiento (POST /fl/start)")
     data   = http_post(f"{coordinator_url}/fl/start", {}, timeout=req_timeout)
     status = data.get("status", "?")
     peers  = data.get("peers", [])
@@ -857,7 +866,7 @@ def _print_handshake_algoritmo(rnd_num, wid, peer_lbl, cid):
     _ids_log("in",  "ids:MessageProcessedNotificationMessage",
              peer_lbl, coord_lbl)
     print(f"      {GRAY}[ronda {rnd_num}] algorithm.py + fl_config.json "
-          f"-> {peer_lbl}  {GREEN}{RESET}")
+          f"(Docker/b64) -> {peer_lbl}  {GREEN}{RESET}")
 
 
 def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
@@ -883,17 +892,12 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
         for m in [re.search(r"worker(\d+)", w.get("connector_uri", ""))] if m
     )
 
-    phase(
-        5,
-        "Monitorizacion FL en tiempo real via WebSocket",
-        f"ws://localhost:{coordinator_url.split(':')[-1]}/ws/fl-status\n"
-        f"Eventos: fl_started -> round_started -> round_completed -> fl_completed\n"
-        f"Workers participantes: {', '.join('worker-' + w for w in accepted_wids)}\n"
-        f"Fallback automatico a polling HTTP si WebSocket no esta disponible."
-    )
+    step("Monitorización en tiempo real vía WebSocket")
+    print(f"      {GRAY}Endpoint: wss://localhost:{coordinator_url.split(':')[-1]}/ws/fl-status{RESET}")
+    print(f"      {GRAY}Workers participantes: {', '.join('worker-' + w for w in accepted_wids)}{RESET}")
 
     # -- Verificar estado real de los tuneles WS -------------------------------
-    step("WS-check", "GET /ws/tunnel-status -- verificando tuneles de comunicacion activos")
+    step("Verificación de túneles WebSocket (GET /ws/tunnel-status)")
     try:
         ts = SESSION.get(f"{coordinator_url}/ws/tunnel-status", timeout=10, verify=TLS_CERT)
         if ts.ok:
@@ -1014,7 +1018,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                                         wid = m.group(1) if m else "?"
                                         pe  = endpoints["peers"].get(f"worker{wid}", {})
                                         pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
-                                        print(f"      {CYAN}[WS ]  fl_global_weights::round{rnd_num}  {GRAY}{_coord_ecc_label(cid)}  --  {pl}{RESET}")
+                                        print(f"      {CYAN}[WS]  fl_global_weights::round{rnd_num}  {GRAY}{_coord_ecc_label(cid)}  --  {pl}{RESET}")
                                         print(f"      {GRAY}Pesos globales ronda {rnd_num} "
                                               f"-> {pl}  {GREEN}{RESET}")
                                     print()
@@ -1069,7 +1073,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                                     wid = m.group(1) if m else "?"
                                     pe  = endpoints["peers"].get(f"worker{wid}", {})
                                     pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
-                                    print(f"      {CYAN}[WS ]  fl_global_weights::round{rnd_num}  {GRAY}{_coord_ecc_label(cid)}  --  {pl}{RESET}")
+                                    print(f"      {CYAN}[WS]  fl_global_weights::round{rnd_num}  {GRAY}{_coord_ecc_label(cid)}  --  {pl}{RESET}")
                                     print(f"      {GRAY}Pesos globales ronda {rnd_num} "
                                           f"-> {pl}  {GREEN}{RESET}")
 
@@ -1108,7 +1112,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                                     print()
                                     print(f"    {BOLD}[ronda {rnd_num}]  Pesos locales "
                                           f"recibidos de worker-{wid} (WebSocket):{RESET}")
-                                    print(f"      {GREEN}[WS ]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  --  {_coord_ecc_label(cid)}{RESET}")
+                                    print(f"      {GREEN}[WS]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  --  {_coord_ecc_label(cid)}{RESET}")
                                     print(f"    {GRAY}[WS] [fl_weights]  Pesos de worker-{wid} "
                                           f"ronda {rnd_num} acumulados "
                                           f"({total_so_far}/{n_exp}){RESET}")
@@ -1257,7 +1261,7 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
                     pl   = pe.get("ecc_label", f"ecc-worker{wid}:8889")
                     print()
                     print(f"    {BOLD}[ronda {rnd_num}]  Pesos recibidos de worker-{wid} (WebSocket):{RESET}")
-                    print(f"      {GREEN}[WS ]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  --  {_coord_ecc_label(cid)}{RESET}")
+                    print(f"      {GREEN}[WS]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  --  {_coord_ecc_label(cid)}{RESET}")
                     print(f"    {GRAY} Pesos acumulados ({total_so_far}/{n_exp}){RESET}")
             weights_shown[rnd_num] = already
 
@@ -1298,10 +1302,10 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
 def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout):
     phase(
         6,
-        "Test de Acceso al Modelo Global (Soberania de Datos IDS)",
-        "El coordinator crea el contrato del modelo limitando el acceso (\n"
-        "ids:rightOperand) unicamente a los workers participantes.\n"
-        "Se verifica el acceso dinamico de los workers (aceptados y rechazados)."
+        "Auditoría Final y Soberanía de Datos",
+        "El modelo global resultante se ensambla y se registra en el Catálogo IDS como un nuevo\n"
+        "Activo Digital. Su contrato dictamina que SOLO los trabajadores que participaron en\n"
+        "su entrenamiento tienen derecho a descargarlo. A continuación comprobamos este bloqueo."
     )
 
     try:
@@ -1391,7 +1395,7 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
         }
         
         print()
-        step("test", f"IDS: Contract Request Message (Worker-{target_wid} al Coordinator)")
+        step(f"Test de acceso: Worker-{target_wid} solicita el modelo al Coordinador")
         _ids_log("out", "ids:ContractRequestMessage", f"worker-{target_wid}", f"coordinator-{cid}")
         
         try:
@@ -1403,7 +1407,7 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
             ids_type = parsed.get("@type", "")
             
             if "ContractAgreement" in ids_type:
-                step("result", f"IDS: Contract Agreement Message")
+                step("Resultado: Acceso PERMITIDO (Contract Agreement)")
                 _ids_log("in", "ids:ContractAgreementMessage", f"coordinator-{cid}", f"worker-{target_wid}")
                 
                 transfer_contract = parsed.get("@id", "?")
@@ -1418,7 +1422,7 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
                 _is_expected_rejection = target_wid not in accepted_uris
 
                 if _is_expected_rejection:
-                    step("result", "IDS: Soberania Aplicada -- Acceso Denegado")
+                    step("Resultado: Acceso DENEGADO (Soberanía de Datos aplicada)")
                     _ids_log("in", "ids:RejectionMessage", f"coordinator-{cid}", f"worker-{target_wid}")
                     ok(
                         f"Worker-{target_wid} -- acceso DENEGADO   "
@@ -1428,14 +1432,14 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
                     field("Motivo de rechazo", str(_reason), indent=8)
                     field("Politica aplicada", "connector-restricted-policy (ids:rightOperand)", indent=8)
                 else:
-                    step("result", f"IDS: Rejection Message (INESPERADO)")
+                    step("Resultado: Rejection Message (INESPERADO)")
                     _ids_log("in", "ids:RejectionMessage", f"coordinator-{cid}", f"worker-{target_wid}")
                     reason = parsed.get("ids:rejectionReason", "?")
                     fail(f"Worker-{target_wid} -- acceso DENEGADO al modelo (sorprendente, era participante)")
                     field("Rejection Reason", str(reason), indent=8)
                 
             else:
-                step("result", f"IDS: Firewall / Respuesta inesperada")
+                step("Resultado: Respuesta IDS no reconocida")
                 _ids_log("in", "PolicyRejection", f"coordinator-{cid}", f"worker-{target_wid}")
                 warn(f"Worker-{target_wid} -- respuesta IDS no reconocida: {ids_type!r}")
                 field("raw_response", (raw[:200] + "...") if len(raw) > 200 else raw, indent=8)
@@ -1497,6 +1501,75 @@ def _cleanup_workers(coordinator_url, endpoints, req_timeout):
         except Exception as exc:
             print(f"  {RED}[ERR ]{RESET} No se pudo contactar a {name}: {exc}")
 
+    # -- Limpieza COMPLETA de artefactos Docker FL ------------------------------
+    try:
+        import subprocess
+
+        # 1. Eliminar imagenes fl-algo del daemon Docker local
+        result = subprocess.run(
+            ["docker", "images", "--format", "{{.Repository}}:{{.Tag}}"],
+            capture_output=True, text=True, timeout=10
+        )
+        fl_images = [img.strip() for img in result.stdout.splitlines()
+                     if "fl-algo" in img and img.strip()]
+
+        for img in fl_images:
+            rm = subprocess.run(
+                ["docker", "rmi", "-f", img],
+                capture_output=True, text=True, timeout=15
+            )
+            if rm.returncode == 0:
+                print(f"  {GREEN}[OK]{RESET} Imagen Docker eliminada: {img}")
+            else:
+                print(f"  {YELLOW}[WARN]{RESET} No se pudo eliminar {img}: {rm.stderr.strip()}")
+
+        # 2. Purgar el Registry privado (fl-registry) -- borrar catalogo de tags
+        try:
+            import requests as _req
+            # Listar tags del repositorio fl-algo en el registry
+            r_tags = _req.get("http://localhost:5050/v2/fl-algo/tags/list", timeout=5)
+            if r_tags.ok:
+                tags = r_tags.json().get("tags") or []
+                for tag in tags:
+                    # Obtener digest para poder borrar
+                    r_digest = _req.head(
+                        f"http://localhost:5050/v2/fl-algo/manifests/{tag}",
+                        headers={"Accept": "application/vnd.docker.distribution.manifest.v2+json"},
+                        timeout=5
+                    )
+                    digest = r_digest.headers.get("Docker-Content-Digest")
+                    if digest:
+                        r_del = _req.delete(
+                            f"http://localhost:5050/v2/fl-algo/manifests/{digest}",
+                            timeout=5
+                        )
+                        if r_del.status_code in (200, 202):
+                            print(f"  {GREEN}[OK]{RESET} Registry: tag fl-algo:{tag} purgado")
+                        else:
+                            print(f"  {YELLOW}[WARN]{RESET} Registry: no se pudo purgar fl-algo:{tag} (HTTP {r_del.status_code})")
+                if not tags:
+                    print(f"  {GRAY}[--]{RESET} Registry: no hay tags fl-algo pendientes.")
+            else:
+                print(f"  {GRAY}[--]{RESET} Registry: repositorio fl-algo no existe (limpio).")
+        except Exception:
+            print(f"  {GRAY}[--]{RESET} Registry fl-registry no accesible (puede estar parado).")
+
+        # 3. Limpiar directorio _docker_build temporal dentro de cada worker
+        worker_containers = ["be-dataapp-worker1", "be-dataapp-worker2",
+                             "be-dataapp-worker3", "be-dataapp-worker4"]
+        for cname in worker_containers:
+            rm_build = subprocess.run(
+                ["docker", "exec", cname, "rm", "-rf", "/home/nobody/data/_docker_build"],
+                capture_output=True, text=True, timeout=10
+            )
+            if rm_build.returncode == 0:
+                print(f"  {GREEN}[OK]{RESET} {cname}: _docker_build limpiado")
+
+        if not fl_images:
+            print(f"  {GRAY}[--]{RESET} No se encontraron imagenes Docker FL locales.")
+    except Exception as exc:
+        print(f"  {YELLOW}[WARN]{RESET} No se pudo limpiar artefactos Docker: {exc}")
+
 
 def _start_keyboard_listener(coordinator_url_ref, endpoints_ref, req_timeout):
     """
@@ -1537,16 +1610,18 @@ def fase1_verificar_catalogo_coordinator(coordinator_url, cid, req_timeout):
     y lista los Datasets CSV registrados de forma dinamica, sin hardcoding.
     """
     phase(
-        "1",
-        "Catalogo IDS del Coordinator (Datasets disponibles)",
-        "Consulta dinamica al catalogo IDS para obtener los Datasets\n"
-        "publicados en el Coordinator sin hardcodear ningun nombre."
+        1,
+        "Catálogo IDS del Coordinador (Datasets Publicados)",
+        "Antes de buscar nodos externos, el coordinador inspecciona su propio Catálogo\n"
+        "Federado (IDS Self-Description) para verificar que dispone de Datasets publicados.\n"
+        "Solo un nodo que tenga datos registrados puede actuar como orquestador legítimo."
     )
-    step("1", "GET /ids/self-description")
+    step("Inspección del Catálogo local (GET /ids/self-description)")
     
     ecc_port = 8090 if int(cid) == 1 else 8090 + int(cid)
-    info(f"Comando Manual: https://localhost:{ecc_port}/api/selfDescription/")
-    info(f"Comando Manual: https://localhost:5002/ids/self-description/")
+    # Mostramos rutas para debugging pero de forma mas limpia
+    print(f"      {GRAY}[Ruta DAPS/ECC] https://localhost:{ecc_port}/api/selfDescription/{RESET}")
+    print(f"      {GRAY}[Ruta DataApp]  https://localhost:5002/ids/self-description/{RESET}")
     
     try:
         r = SESSION.get(
@@ -1568,9 +1643,10 @@ def fase1_verificar_catalogo_coordinator(coordinator_url, cid, req_timeout):
                 datasets.append(title.replace("Dataset: ", "").strip())
         if datasets:
             print("\n")
-            info(f"Se encontraron {len(datasets)} Dataset(s) publicados en el Coordinator:")
+            print(f"      {GREEN}Catálogo IDS auto-descubierto localmente.{RESET}")
+            print(f"      {GRAY}↳ Se encontraron {len(datasets)} Dataset(s) soberanos en el nodo coordinador:{RESET}")
             for d in datasets:
-                print(f"    {CYAN}[CSV]{RESET} {GRAY}{d}{RESET}")
+                print(f"         {CYAN}[CSV]{RESET} {BOLD}{d}{RESET}")
         else:
             warn("No se detectaron Datasets CSV en el catalogo IDS.")
     except Exception as exc:
@@ -1601,9 +1677,6 @@ def main():
     field("coordinator_port", coordinator_port)
     field("Arrancar FL",     "No (--skip-fl)" if args.skip_fl else "Si")
     field("Timeout HTTP",    f"{req_timeout}s")
-    info("El coordinator obtendra algorithm.py + fl_config.json via IDS")
-    info("FASE 2: cada peer es evaluado por sus CSVs reales -- umbral coincidencia: 80%")
-    info("El CSV ganador de cada worker se comunica al worker via payload IDS en cada ronda")
 
     # Referencias mutables para que el listener las actualice en caliente
     _coord_ref     = [coordinator_url]

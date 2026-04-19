@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-dev \
     curl ca-certificates openssl \
     default-jre-headless \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/requirements.txt
@@ -21,6 +22,10 @@ RUN pip3 install --no-cache-dir -r /app/requirements.txt
 COPY app.py       /app/app.py
 COPY algorithm.py /app/algorithm.py
 COPY fl_config.json /app/fl_config.json
+
+# Template Dockerfile + requirements para construir imagen del algoritmo FL
+COPY Dockerfile.algorithm    /app/Dockerfile.algorithm
+COPY requirements_algo.txt   /app/requirements_algo.txt
 
 RUN mkdir -p \
         /home/nobody/data/input \
@@ -32,7 +37,7 @@ RUN mkdir -p \
 COPY start.sh /start.sh
 RUN chmod +x /start.sh && sed -i 's/\r//' /start.sh
 
-USER nobody
+# USER nobody
 WORKDIR /home/nobody
 
 EXPOSE 8500

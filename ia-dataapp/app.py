@@ -88,6 +88,12 @@ FL_WEIGHTS_VIA_ECC = os.getenv("FL_WEIGHTS_VIA_ECC", "true").lower() == "true"
 FL_IDS_ECC_ONLY = os.getenv("FL_IDS_ECC_ONLY", "true").lower() == "true"
 WS_ECC_ENABLED = os.getenv("WS_ECC", "true").lower() == "true"
 
+# Docker Registry para distribución de algoritmo FL via imagen Docker
+# El coordinator construye una imagen con algorithm.py + fl_config.json + deps
+# y la pushea al registry. Los workers la descargan (docker pull) via IDS.
+FL_DOCKER_REGISTRY = os.getenv("FL_DOCKER_REGISTRY", "fl-registry:5000")
+FL_ALGO_VIA_DOCKER = os.getenv("FL_ALGO_VIA_DOCKER", "false").lower() == "true"
+
 # Credenciales para la API interna del ECC
 API_USER = os.getenv("API_USER", "apiUser")
 API_PASS = os.getenv("API_PASS", "passwordApiUser")
@@ -416,6 +422,9 @@ coordinator_ecc_url  = None
 coordinator_conn_uri = None
 coordinator_transfer_contract = None
 coordinator_requested_artifact = None
+
+# Tag de la imagen Docker del algoritmo FL (construida por el coordinator)
+_docker_algo_image_tag: str | None = None
 
 _accepted_workers: list = []
 _negotiate_lock = threading.Lock()
@@ -1060,12 +1069,97 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
     """
     Envia algorithm.py + fl_config.json al peer via IDS.
 
-    Canal principal: ArtifactRequestMessage multipart a ecc-workerN:8889/data
-    (el ECC del peer valida el DAT token y reenvía al DataApp del peer).
-    El receptor procesa el payload en /data handler con artifact_type='fl_algorithm'.
-    Fallback: POST directo a be-dataapp-workerN:8500/fl/receive-algorithm si el
-    ECC no está disponible o devuelve error.
+    Modo Docker (FL_ALGO_VIA_DOCKER=true y _docker_algo_image_tag disponible):
+      Envia la referencia a la imagen Docker del algoritmo via IDS
+      ArtifactRequestMessage con type='fl_algorithm_docker'. El worker
+      hace docker pull para obtener el algoritmo con todas sus dependencias.
+
+    Modo base64 (por defecto / fallback):
+      Canal principal: ArtifactRequestMessage multipart a ecc-workerN:8889/data
+      El receptor procesa el payload en /data handler con artifact_type='fl_algorithm'.
+      Fallback: POST directo a be-dataapp-workerN:8500/fl/receive-algorithm.
     """
+    # ── Modo Docker: enviar referencia a imagen Docker ────────────────────
+    if FL_ALGO_VIA_DOCKER and _docker_algo_image_tag:
+        content_version = f"fl_algorithm_docker::{_docker_algo_image_tag}"
+        if selected_csv:
+            selected_csv_b64 = base64.b64encode(selected_csv.encode("utf-8")).decode("utf-8")
+            content_version += f"||selected_csv_b64::{selected_csv_b64}"
+        content_version += "||from_coordinator::1"
+
+        payload_dict = {
+            "type"            : "fl_algorithm_docker",
+            "docker_image"    : _docker_algo_image_tag,
+            "selected_csv"    : selected_csv,
+            "coordinator_uri" : CONNECTOR_URI,
+            "coordinator_ecc" : f"https://{ECC_HOSTNAME}:8889/data",
+            "from_coordinator": True,
+        }
+
+        peer_dataapp = _dataapp_url_from_ecc(peer_ecc_url)
+        if not peer_dataapp:
+            log.error(f"[coordinator] No se pudo derivar DataApp URL de {peer_ecc_url}")
+            return False
+
+        forward_target = _ecc_forward_url(peer_ecc_url) if FL_IDS_ECC_ONLY else f"{peer_dataapp}/data"
+
+        log.info(
+            f"[coordinator->IDS] Enviando referencia Docker via IDS ArtifactRequestMessage\n"
+            f"  Destino IDS  : {forward_target}\n"
+            f"  Peer URI     : {peer_conn_uri}\n"
+            f"  Docker Image : {_docker_algo_image_tag}\n"
+            f"  CSV asignado : {selected_csv or '(auto)'}"
+        )
+        try:
+            ids_result = _ids_send(
+                forward_to_url       = forward_target,
+                forward_to_connector = peer_conn_uri,
+                message_type         = "ids:ArtifactRequestMessage",
+                requested_artifact   = requested_artifact,
+                transfer_contract    = transfer_contract,
+                payload              = payload_dict,
+                extra_header         = {"ids:contentVersion": content_version},
+                use_local_ecc        = FL_IDS_ECC_ONLY,
+            )
+            status_ok = (
+                ids_result.get("status") in ("everything_received", "ok", "docker_image_received")
+                or "ArtifactResponse" in ids_result.get("@type", "")
+            )
+            if status_ok:
+                log.info(
+                    f"[coordinator->IDS] Referencia Docker entregada via IDS [OK]\n"
+                    f"  Peer   : {peer_conn_uri}\n"
+                    f"  Image  : {_docker_algo_image_tag}\n"
+                    f"  Status : {ids_result.get('status', ids_result.get('@type', '?'))}"
+                )
+                _report_to_ch(
+                    message_type="ids:ArtifactRequestMessage",
+                    source_connector=CONNECTOR_URI,
+                    target_connector=peer_conn_uri,
+                    status="success",
+                    additional_data={
+                        "event": "fl_algorithm_docker_distributed",
+                        "coordinator": INSTANCE_ID,
+                        "peer_uri": peer_conn_uri,
+                        "docker_image": _docker_algo_image_tag,
+                        "delivery_mode": "docker_image",
+                        "selected_csv": selected_csv or "auto",
+                    },
+                )
+                return True
+            else:
+                log.warning(
+                    f"[coordinator->IDS] Respuesta inesperada (Docker mode): {str(ids_result)[:200]}\n"
+                    f"  Fallback a distribucion base64..."
+                )
+        except Exception as exc:
+            log.warning(
+                f"[coordinator->IDS] Error enviando ref Docker via IDS: {exc}\n"
+                f"  Fallback a distribucion base64..."
+            )
+        # Si Docker mode falla, caer al modo base64 tradicional
+
+    # ── Modo base64: enviar algorithm.py codificado en el payload IDS ────
     algo_b64   = base64.b64encode(artifact_bytes).decode("utf-8")
     config_b64 = base64.b64encode(config_bytes).decode("utf-8")
     combined   = f"{algo_b64}||fl_config::{config_b64}"
@@ -1085,9 +1179,6 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
         "from_coordinator": True,
     }
 
-    # --- Canal IDS: ArtifactRequestMessage direct to peer DataApp /data ---
-    # Para la demo enviamos un mensaje IDS real multipart, pero entregándolo
-    # directamente al endpoint /data del peer (como hace /fl/negotiate).
     peer_dataapp = _dataapp_url_from_ecc(peer_ecc_url)
     if not peer_dataapp:
         log.error(f"[coordinator] No se pudo derivar DataApp URL de {peer_ecc_url}")
@@ -1123,7 +1214,6 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
                 f"  CSV    : {selected_csv or '(auto)'}\n"
                 f"  Status : {ids_result.get('status', ids_result.get('@type', '?'))}"
             )
-            # --- CH: Algoritmo entregado al worker ---
             _report_to_ch(
                 message_type="ids:ArtifactRequestMessage",
                 source_connector=CONNECTOR_URI,
@@ -1133,6 +1223,7 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
                     "event": "fl_algorithm_distributed",
                     "coordinator": INSTANCE_ID,
                     "peer_uri": peer_conn_uri,
+                    "delivery_mode": "ids_base64",
                     "selected_csv": selected_csv or "auto"
                 },
             )
@@ -1366,6 +1457,244 @@ def _save_config(data: bytes):
         f.write(data)
     cfg = json.loads(data.decode())
     log.info(f"fl_config.json guardado: {cfg}")
+
+
+# =============================================================================
+# Docker Image Distribution -- Construir, pushear y descargar imagen del algo FL
+# =============================================================================
+
+def _build_and_push_algo_image() -> str | None:
+    """
+    Construye una imagen Docker con algorithm.py + fl_config.json + dependencias
+    y la pushea al registry privado (FL_DOCKER_REGISTRY).
+
+    Devuelve el tag completo de la imagen (ej: fl-registry:5000/fl-algo:coord2-v1)
+    o None si falla.
+    """
+    global _docker_algo_image_tag
+    if not FL_ALGO_VIA_DOCKER:
+        return None
+
+    import subprocess
+    import shutil
+    import hashlib
+
+    build_dir = os.path.join(DATA_DIR, "_docker_build")
+    os.makedirs(build_dir, exist_ok=True)
+
+    # Copiar ficheros necesarios al directorio de build
+    algo_src = _algo_path()
+    if not os.path.exists(algo_src):
+        log.error(f"[docker-build] algorithm.py no encontrado en {algo_src}")
+        return None
+
+    shutil.copy(algo_src, os.path.join(build_dir, "algorithm.py"))
+
+    config_src = CONFIG_PATH if os.path.exists(CONFIG_PATH) else "/app/fl_config.json"
+    if os.path.exists(config_src):
+        shutil.copy(config_src, os.path.join(build_dir, "fl_config.json"))
+    else:
+        # Guardar config por defecto
+        with open(os.path.join(build_dir, "fl_config.json"), "w") as f:
+            json.dump(_load_fl_config(), f, indent=2)
+
+    # Copiar Dockerfile template y requirements del algoritmo
+    dockerfile_src = "/app/Dockerfile.algorithm"
+    reqs_src = "/app/requirements_algo.txt"
+    if os.path.exists(dockerfile_src):
+        shutil.copy(dockerfile_src, os.path.join(build_dir, "Dockerfile"))
+    else:
+        log.error(f"[docker-build] Dockerfile.algorithm no encontrado en {dockerfile_src}")
+        return None
+    if os.path.exists(reqs_src):
+        shutil.copy(reqs_src, os.path.join(build_dir, "requirements_algo.txt"))
+    else:
+        log.error(f"[docker-build] requirements_algo.txt no encontrado en {reqs_src}")
+        return None
+
+    # Generar tag unico basado en el contenido del algoritmo
+    with open(os.path.join(build_dir, "algorithm.py"), "rb") as f:
+        algo_hash = hashlib.sha256(f.read()).hexdigest()[:12]
+    image_tag = f"{FL_DOCKER_REGISTRY}/fl-algo:coord{INSTANCE_ID}-{algo_hash}"
+
+    log.info(
+        f"[docker-build] Construyendo imagen Docker del algoritmo FL...\n"
+        f"  Build dir : {build_dir}\n"
+        f"  Image tag : {image_tag}"
+    )
+
+    try:
+        # docker build
+        result = subprocess.run(
+            ["docker", "build", "-t", image_tag, "."],
+            cwd=build_dir,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if result.returncode != 0:
+            log.error(
+                f"[docker-build] Error en docker build:\n"
+                f"  stdout: {result.stdout[-500:]}\n"
+                f"  stderr: {result.stderr[-500:]}"
+            )
+            return None
+        log.info(f"[docker-build] Imagen construida OK: {image_tag}")
+
+        # docker push
+        result = subprocess.run(
+            ["docker", "push", image_tag],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode != 0:
+            log.error(
+                f"[docker-push] Error en docker push:\n"
+                f"  stdout: {result.stdout[-500:]}\n"
+                f"  stderr: {result.stderr[-500:]}"
+            )
+            return None
+        log.info(f"[docker-push] Imagen pusheada al registry: {image_tag}")
+
+        _docker_algo_image_tag = image_tag
+
+        # --- CH: Imagen Docker del algoritmo construida y pusheada ---
+        _report_to_ch(
+            message_type="ids:ResourceUpdateMessage",
+            source_connector=CONNECTOR_URI,
+            status="success",
+            additional_data={
+                "event": "fl_algo_docker_image_built",
+                "coordinator": INSTANCE_ID,
+                "docker_image": image_tag,
+                "algo_hash": algo_hash,
+            },
+        )
+
+        return image_tag
+
+    except subprocess.TimeoutExpired:
+        log.error("[docker-build] Timeout construyendo/pusheando la imagen Docker")
+        return None
+    except Exception as exc:
+        log.error(f"[docker-build] Error: {exc}", exc_info=True)
+        return None
+
+
+def _pull_and_extract_algo_image(docker_image: str) -> bool:
+    """
+    Descarga la imagen Docker del algoritmo FL desde el registry privado
+    y extrae algorithm.py + fl_config.json.
+
+    Este proceso se ejecuta en el worker que recibe la referencia via IDS.
+    Equivale al antiguo decode-base64 + _save_algorithm() pero usando Docker
+    como mecanismo de transporte.
+    """
+    import subprocess
+
+    log.info(
+        f"[docker-pull] Descargando imagen del algoritmo FL...\n"
+        f"  Image: {docker_image}"
+    )
+
+    try:
+        # docker pull
+        result = subprocess.run(
+            ["docker", "pull", docker_image],
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        if result.returncode != 0:
+            log.error(
+                f"[docker-pull] Error en docker pull:\n"
+                f"  stdout: {result.stdout[-500:]}\n"
+                f"  stderr: {result.stderr[-500:]}"
+            )
+            return False
+        log.info(f"[docker-pull] Imagen descargada OK: {docker_image}")
+
+        # Crear contenedor temporal para extraer ficheros
+        container_name = f"fl-algo-extract-{INSTANCE_ID}-{uuid.uuid4().hex[:8]}"
+        result = subprocess.run(
+            ["docker", "create", "--name", container_name, docker_image],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            log.error(f"[docker-extract] Error creando contenedor: {result.stderr}")
+            return False
+
+        try:
+            # Extraer algorithm.py
+            result = subprocess.run(
+                ["docker", "cp", f"{container_name}:/algo/algorithm.py", ALGO_IDS_PATH],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode != 0:
+                log.error(f"[docker-extract] Error extrayendo algorithm.py: {result.stderr}")
+                return False
+
+            # Extraer fl_config.json
+            result = subprocess.run(
+                ["docker", "cp", f"{container_name}:/algo/fl_config.json", CONFIG_PATH],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode != 0:
+                log.warning(f"[docker-extract] fl_config.json no encontrado en imagen: {result.stderr}")
+                # No es critico, se usan defaults
+
+            # Verificar que se extrajeron correctamente
+            if os.path.exists(ALGO_IDS_PATH):
+                algo_size = os.path.getsize(ALGO_IDS_PATH)
+                log.info(
+                    f"[docker-extract] algorithm.py extraido OK ({algo_size} bytes)\n"
+                    f"  Fuente: {docker_image}"
+                )
+                # Forzar recarga del modulo
+                sys.modules.pop("algorithm", None)
+            else:
+                log.error(f"[docker-extract] algorithm.py no se extrajo a {ALGO_IDS_PATH}")
+                return False
+
+            if os.path.exists(CONFIG_PATH):
+                log.info(f"[docker-extract] fl_config.json extraido OK")
+
+            # --- CH: Imagen Docker del algoritmo extraida ---
+            _report_to_ch(
+                message_type="ids:ArtifactResponseMessage",
+                source_connector=CONNECTOR_URI,
+                status="success",
+                additional_data={
+                    "event": "fl_algo_docker_image_extracted",
+                    "worker": INSTANCE_ID,
+                    "docker_image": docker_image,
+                    "algo_size_bytes": algo_size if os.path.exists(ALGO_IDS_PATH) else 0,
+                },
+            )
+
+            return True
+
+        finally:
+            # Limpiar contenedor temporal
+            subprocess.run(
+                ["docker", "rm", "-f", container_name],
+                capture_output=True,
+                timeout=10,
+            )
+
+    except subprocess.TimeoutExpired:
+        log.error(f"[docker-pull] Timeout descargando imagen {docker_image}")
+        return False
+    except Exception as exc:
+        log.error(f"[docker-pull] Error: {exc}", exc_info=True)
+        return False
 
 
 def _load_algorithm():
@@ -2143,7 +2472,7 @@ def _get_my_columns() -> list:
     else:
         best = max(csvs, key=lambda x: len(x["columns"]))
 
-    origin = "seleccionado por .env" if is_forced else "HEURISTICA (max cols)"
+    origin = "base" if is_forced else "HEURISTICA (max cols)"
     log.info(
         f"[broker-discover] CSV de referencia ({origin}): {best['filename']} "
         f"({len(best['columns'])} columnas): {best['columns'][:5]}..."
@@ -2974,7 +3303,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
 async def ids_data(request: Request):
     global is_coordinator, coordinator_ecc_url, coordinator_conn_uri
     global coordinator_transfer_contract, coordinator_requested_artifact
-    global coordinator_transfer_contract, coordinator_requested_artifact
+    global _my_selected_csv
 
     raw_body     = await request.body()
     content_type = request.headers.get("content-type", "")
@@ -3258,8 +3587,14 @@ async def ids_data(request: Request):
                     if _looks_like_fl_algo:
                         from_coord = False
                         selected_csv = None
-                        if content_version.startswith("fl_algorithm::"):
+                        is_docker = False
+
+                        if content_version.startswith("fl_algorithm_docker::"):
+                            content_version = content_version[len("fl_algorithm_docker::"):]
+                            is_docker = True
+                        elif content_version.startswith("fl_algorithm::"):
                             content_version = content_version[len("fl_algorithm::"):]
+
                         if "||from_coordinator::1" in content_version:
                             content_version = content_version.replace("||from_coordinator::1", "")
                             from_coord = True
@@ -3269,18 +3604,28 @@ async def ids_data(request: Request):
                                 selected_csv = base64.b64decode(selected_csv_b64).decode("utf-8")
                             except Exception as _e:
                                 log.error(f"[ArtifactRequest] Error decodificando selected_csv_b64: {_e}")
-                        if "||fl_config::" in content_version:
-                            algo_part, config_part = content_version.split("||fl_config::", 1)
+
+                        if is_docker:
+                            payload_dict = {
+                                "type"            : "fl_algorithm_docker",
+                                "docker_image"    : content_version,
+                                "from_coordinator": from_coord,
+                                "selected_csv"    : selected_csv,
+                            }
+                            log.info(f"[ArtifactRequest] fl_algorithm_docker recuperado desde ids:contentVersion | image={content_version}")
                         else:
-                            algo_part, config_part = content_version, None
-                        payload_dict = {
-                            "type"            : "fl_algorithm",
-                            "content"         : algo_part,
-                            "config"          : config_part,
-                            "from_coordinator": from_coord,
-                            "selected_csv"    : selected_csv,
-                    }
-                    log.info(f"[ArtifactRequest] fl_algorithm recuperado desde ids:contentVersion | config={'present' if config_part else 'absent'} | from_coordinator={from_coord}")
+                            if "||fl_config::" in content_version:
+                                algo_part, config_part = content_version.split("||fl_config::", 1)
+                            else:
+                                algo_part, config_part = content_version, None
+                            payload_dict = {
+                                "type"            : "fl_algorithm",
+                                "content"         : algo_part,
+                                "config"          : config_part,
+                                "from_coordinator": from_coord,
+                                "selected_csv"    : selected_csv,
+                            }
+                            log.info(f"[ArtifactRequest] fl_algorithm recuperado desde ids:contentVersion | config={'present' if config_part else 'absent'} | from_coordinator={from_coord}")
 
         # Fallback: intentar recuperar desde ids:securityToken.ids:tokenValue
         if not payload_dict.get("type"):
@@ -3451,6 +3796,89 @@ async def ids_data(request: Request):
             threading.Thread(target=_train_and_reply, daemon=True).start()
             return _multipart_response(resp_h, json.dumps({"status": "training_started", "round": round_num}))
 
+        # fl_algorithm_docker -- descargar imagen Docker con algorithm.py + deps
+        if artifact_type == "fl_algorithm_docker":
+            docker_image = payload_dict.get("docker_image", "")
+            if not docker_image:
+                log.error("[fl_algorithm_docker] docker_image no especificada en payload")
+                return _multipart_response(resp_h, json.dumps({
+                    "status": "error", "reason": "missing_docker_image"
+                }))
+
+            log.info(
+                f"[fl_algorithm_docker] Recibida referencia Docker via IDS\n"
+                f"  Image: {docker_image}\n"
+                f"  Coordinator: {payload_dict.get('coordinator_uri', '?')}"
+            )
+
+            # Descargar imagen y extraer algorithm.py + fl_config.json
+            pull_ok = _pull_and_extract_algo_image(docker_image)
+            if not pull_ok:
+                log.error(f"[fl_algorithm_docker] Error descargando/extrayendo imagen {docker_image}")
+                return _multipart_response(resp_h, json.dumps({
+                    "status": "error", "reason": "docker_pull_failed",
+                    "docker_image": docker_image,
+                }))
+
+            # Configurar estado del worker (igual que fl_algorithm)
+            if payload_dict.get("from_coordinator"):
+                is_coordinator = False
+                sel_csv = payload_dict.get("selected_csv")
+                coord_ecc = payload_dict.get("coordinator_ecc")
+                coord_uri = payload_dict.get("coordinator_uri")
+                coord_transfer = payload_dict.get("coordinator_transfer_contract")
+                coord_artifact = payload_dict.get("coordinator_requested_artifact")
+                if coord_ecc:
+                    coordinator_ecc_url = coord_ecc
+                if coord_uri:
+                    coordinator_conn_uri = coord_uri
+                if coord_transfer:
+                    coordinator_transfer_contract = coord_transfer
+                if coord_artifact:
+                    coordinator_requested_artifact = coord_artifact
+                if sel_csv:
+                    full_path = os.path.join(INPUT_DIR, sel_csv)
+                    if os.path.exists(full_path):
+                        _my_selected_csv = full_path
+                        log.info(
+                            f"[fl_algorithm_docker] CSV seleccionado por coordinator: "
+                            f"{sel_csv} -> {full_path}"
+                        )
+                    else:
+                        log.warning(
+                            f"[fl_algorithm_docker] CSV '{sel_csv}' no encontrado en {INPUT_DIR}"
+                            f" -- se usara seleccion automatica"
+                        )
+                with _fl_lock:
+                    fl_state["status"] = "worker_ready"
+                    fl_state["current_round"] = 0
+                log.info(
+                    f"[OK] algorithm.py extraido de imagen Docker -- worker-{INSTANCE_ID} = WORKER\n"
+                    f"  Docker Image: {docker_image}"
+                )
+            else:
+                is_coordinator = True
+                log.info(f"algorithm.py extraido de imagen Docker -- worker-{INSTANCE_ID} = COORDINATOR")
+
+            cfg = _load_fl_config()
+            return _multipart_response(
+                resp_h,
+                json.dumps({
+                    "status"       : "docker_image_received",
+                    "coordinator"  : INSTANCE_ID,
+                    "docker_image" : docker_image,
+                    "delivery_mode": "docker_image",
+                    "fl_config"    : {
+                        "rounds"       : cfg["rounds"],
+                        "round_timeout": cfg["round_timeout"],
+                        "epochs"       : cfg["epochs"],
+                        "batch_size"   : cfg["batch_size"],
+                        "learning_rate": cfg["learning_rate"],
+                    },
+                    "next_step": "Waiting for global weights from coordinator",
+                }),
+            )
+
         # fl_algorithm -- guardar algorithm.py + fl_config.json
         if artifact_type == "fl_algorithm":
             content_b64 = payload_dict.get("content", "")
@@ -3473,7 +3901,6 @@ async def ids_data(request: Request):
                 log.warning("fl_config.json no recibido -- usando valores por defecto")
 
             if payload_dict.get("from_coordinator"):
-                global _my_selected_csv
                 is_coordinator = False
                 sel_csv = payload_dict.get("selected_csv")
                 coord_ecc = payload_dict.get("coordinator_ecc")
@@ -3646,6 +4073,16 @@ async def fl_fetch_algorithm(request: Request):
         is_coordinator = True
         success = True
         source_ecc_url = "local_filesystem"
+
+        # ── Docker Image: construir y pushear al registry privado ─────────
+        docker_image_tag = None
+        if FL_ALGO_VIA_DOCKER:
+            log.info("[/fl/fetch-algorithm] FL_ALGO_VIA_DOCKER=true → construyendo imagen Docker del algoritmo...")
+            docker_image_tag = _build_and_push_algo_image()
+            if docker_image_tag:
+                log.info(f"[/fl/fetch-algorithm] Imagen Docker lista: {docker_image_tag}")
+            else:
+                log.warning("[/fl/fetch-algorithm] No se pudo construir la imagen Docker — se usará distribución base64 como fallback")
     else:
         # -- MODO IDS: Fetch desde otro conector (Si fuera necesario) ---------
         log.info(
@@ -3658,25 +4095,29 @@ async def fl_fetch_algorithm(request: Request):
         success = await loop.run_in_executor(
             None, _fetch_algorithm_from_ecc, source_ecc_url, source_connector_uri
         )
+        docker_image_tag = None
 
     if success:
         cfg = _load_fl_config()
-        return JSONResponse(
-            status_code=200,
-            content={
-                "status"      : "everything_received",
-                "coordinator" : INSTANCE_ID,
-                "source_ecc"  : source_ecc_url,
-                "fl_config"   : {
-                    "rounds"       : cfg["rounds"],
-                    "round_timeout": cfg["round_timeout"],
-                    "epochs"       : cfg["epochs"],
-                    "batch_size"   : cfg["batch_size"],
-                    "learning_rate": cfg["learning_rate"],
-                },
-                "next_step": "POST /broker/discover -> POST /fl/negotiate -> POST /fl/start",
-            }
-        )
+        resp_content = {
+            "status"      : "everything_received",
+            "coordinator" : INSTANCE_ID,
+            "source_ecc"  : source_ecc_url,
+            "fl_config"   : {
+                "rounds"       : cfg["rounds"],
+                "round_timeout": cfg["round_timeout"],
+                "epochs"       : cfg["epochs"],
+                "batch_size"   : cfg["batch_size"],
+                "learning_rate": cfg["learning_rate"],
+            },
+            "next_step": "POST /broker/discover -> POST /fl/negotiate -> POST /fl/start",
+        }
+        if docker_image_tag:
+            resp_content["docker_image"] = docker_image_tag
+            resp_content["delivery_mode"] = "docker_image"
+        else:
+            resp_content["delivery_mode"] = "ids_base64"
+        return JSONResponse(status_code=200, content=resp_content)
     else:
         return JSONResponse(
             status_code=502,
@@ -4965,6 +5406,20 @@ def get_llm_status():
 def fl_status():
     with _fl_lock:
         return dict(fl_state)
+
+
+@app.get("/fl/docker-image-status")
+def fl_docker_image_status():
+    """
+    Devuelve informacion sobre la imagen Docker construida para distribuir
+    el algoritmo FL, si FL_ALGO_VIA_DOCKER esta activado.
+    """
+    return {
+        "enabled": FL_ALGO_VIA_DOCKER,
+        "registry": FL_DOCKER_REGISTRY,
+        "image_tag": _docker_algo_image_tag,
+        "status": "ready" if _docker_algo_image_tag else "not_built"
+    }
 
 
 @app.get("/fl/results")

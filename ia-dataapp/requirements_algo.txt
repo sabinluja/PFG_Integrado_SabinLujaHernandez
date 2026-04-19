@@ -1,0 +1,10 @@
+# =============================================================================
+# requirements_algo.txt — Dependencias del algoritmo FL
+# =============================================================================
+# Se incluyen en la imagen Docker del algoritmo (Dockerfile.algorithm).
+# Los workers que reciban esta imagen tendrán todas las dependencias
+# necesarias para ejecutar algorithm.py sin instalar nada más.
+# =============================================================================
+tensorflow==2.15.1
+numpy>=1.23,<2.0
+pandas>=2.0

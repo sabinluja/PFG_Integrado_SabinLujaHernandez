@@ -222,6 +222,8 @@ services:
       - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
       - CLEARING_HOUSE_CONNECTOR_URI=${CLEARING_HOUSE_CONNECTOR_URI}
       - CLEARING_HOUSE_ECC_URL=${CLEARING_HOUSE_ECC_URL}
+      - FL_DOCKER_REGISTRY=${FL_DOCKER_REGISTRY}
+      - FL_ALGO_VIA_DOCKER=${FL_ALGO_VIA_DOCKER}
     volumes:
       - ./ia-dataapp/data/worker1:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -229,10 +231,12 @@ services:
       - ./certs/dataapp/worker1:/cert/dataapp
       - ./DAPS/keys/worker1.cert:/cert/daps/worker.cert
       - ./DAPS/keys/worker1.key:/cert/daps/worker.key
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - ecc-worker1
       - clearinghouse
       - ecc-clearinghouse
+      - fl-registry
 
   # ===========================================================================
   # WORKER 2
@@ -332,6 +336,8 @@ services:
       - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
       - CLEARING_HOUSE_CONNECTOR_URI=${CLEARING_HOUSE_CONNECTOR_URI}
       - CLEARING_HOUSE_ECC_URL=${CLEARING_HOUSE_ECC_URL}
+      - FL_DOCKER_REGISTRY=${FL_DOCKER_REGISTRY}
+      - FL_ALGO_VIA_DOCKER=${FL_ALGO_VIA_DOCKER}
     volumes:
       - ./ia-dataapp/data/worker2:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -339,10 +345,12 @@ services:
       - ./certs/dataapp/worker2:/cert/dataapp
       - ./DAPS/keys/worker2.cert:/cert/daps/worker.cert
       - ./DAPS/keys/worker2.key:/cert/daps/worker.key
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - ecc-worker2
       - clearinghouse
       - ecc-clearinghouse
+      - fl-registry
 
   # ===========================================================================
   # WORKER 3
@@ -442,6 +450,8 @@ services:
       - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
       - CLEARING_HOUSE_CONNECTOR_URI=${CLEARING_HOUSE_CONNECTOR_URI}
       - CLEARING_HOUSE_ECC_URL=${CLEARING_HOUSE_ECC_URL}
+      - FL_DOCKER_REGISTRY=${FL_DOCKER_REGISTRY}
+      - FL_ALGO_VIA_DOCKER=${FL_ALGO_VIA_DOCKER}
     volumes:
       - ./ia-dataapp/data/worker3:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -449,10 +459,12 @@ services:
       - ./certs/dataapp/worker3:/cert/dataapp
       - ./DAPS/keys/worker3.cert:/cert/daps/worker.cert
       - ./DAPS/keys/worker3.key:/cert/daps/worker.key
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - ecc-worker3
       - clearinghouse
       - ecc-clearinghouse
+      - fl-registry
 
   # ===========================================================================
   # WORKER 4 — Sin acceso al modelo FL (solo intenta acceder, es rechazado)
@@ -559,6 +571,8 @@ services:
       - CLEARING_HOUSE_URL=${CLEARING_HOUSE_URL}
       - CLEARING_HOUSE_CONNECTOR_URI=${CLEARING_HOUSE_CONNECTOR_URI}
       - CLEARING_HOUSE_ECC_URL=${CLEARING_HOUSE_ECC_URL}
+      - FL_DOCKER_REGISTRY=${FL_DOCKER_REGISTRY}
+      - FL_ALGO_VIA_DOCKER=${FL_ALGO_VIA_DOCKER}
     volumes:
       - ./ia-dataapp/data/worker4:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -566,10 +580,39 @@ services:
       - ./certs/dataapp/worker4:/cert/dataapp
       - ./DAPS/keys/worker4.cert:/cert/daps/worker.cert
       - ./DAPS/keys/worker4.key:/cert/daps/worker.key
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - ecc-worker4
       - clearinghouse
       - ecc-clearinghouse
+      - fl-registry
+
+  # ===========================================================================
+  # FL DOCKER REGISTRY — Distribución de algoritmo FL via imagen Docker
+  #
+  # Registry privado en la red IDS. El coordinator construye una imagen Docker
+  # con algorithm.py + fl_config.json + dependencias (TensorFlow, pandas...)
+  # y la pushea aquí. Los workers la descargan (docker pull) tras recibir
+  # la referencia via ids:ArtifactRequestMessage.
+  #
+  # Puerto host 5050 → 5000 (HTTP — uso interno Docker, no expuesto a Internet)
+  # ===========================================================================
+  fl-registry:
+    image: registry:2
+    container_name: fl-registry
+    networks:
+      - idsa
+    ports:
+      - "5050:5000"
+    volumes:
+      - fl_registry_data:/var/lib/registry
+    restart: always
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "--spider", "http://localhost:5000/v2/" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   # ===========================================================================
   # LLM — Ollama Local
@@ -723,3 +766,4 @@ volumes:
   broker_fuseki_data: {}
   ollama_data: {}
   mongo_ch_data: {}
+  fl_registry_data: {}
