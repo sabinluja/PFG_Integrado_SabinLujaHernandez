@@ -709,7 +709,7 @@ services:
       - MULTIPART_EDGE=form
       - MULTIPART_ECC=${MULTIPART_ECC}
       - CONNECTOR_ID=${CLEARING_HOUSE_CONNECTOR_URI}
-      - IDSCP2=false
+      - IDSCP2=${IDSCP2}
       - WS_EDGE=false
       - WS_ECC=${WS_ECC}
       - BROKER_URL=${BROKER_URL}

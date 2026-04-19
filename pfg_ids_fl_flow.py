@@ -21,7 +21,7 @@ Arquitectura Híbrida:
   FASE 6   Auditoría Final y Soberanía de Datos
            Test de acceso: solo los nodos participantes pueden ver el modelo.
 
-Se incluye soporte de Cancelación Global (/system/reset) pulsando Ctrl+C.
+Se incluye soporte de Cancelación Global (/system/reset) pulsando P.
 
 Uso:
   python pfg_ids_fl_flow.py

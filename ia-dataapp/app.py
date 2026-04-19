@@ -11,14 +11,14 @@ Arquitectura Híbrida:
 
 Flujo actual (alineado con pfg_ids_fl_flow.py y Postman):
   FASE 0: Resolución de Endpoints, validación de Broker y Catálogo IDS dinámico.
-  FASE 1: Coordinator solicita/obtiene algorithm.py y fl_config.json vía IDS.
-  FASE 2: Descubrimiento de peers en Broker (Fuseki) y filtro semántico (LLM).
-  FASE 3: Negociación de contratos IDS obligatorios (Restringido > Worker4 descartado).
-  FASE 4: Arranque del Entrenamiento FL vía propagación IDS.
-  FASE 5: Monitorización y Benchmarking (WebSocket Performance) en tiempo real.
+  FASE 1: Catálogo IDS del Coordinador (Encontrar CSVs)
+  FASE 2: Preparación de Artefactos FL (Imagen Docker)
+  FASE 3: Descubrimiento de peers en Broker (Fuseki) y filtro semántico (LLM).
+  FASE 4: Negociación de contratos IDS obligatorios (Restringido > Worker4 descartado).
+  FASE 5: Arranque del Entrenamiento FL vía propagación IDS, Monitorización y Benchmarking (WebSocket Performance) en tiempo real.
   FASE 6: Protección de datos (Soberanía) denegando recursos al Worker descartado.
 
-Se incluye soporte de Cancelación de Entornos Globales (/system/reset) vía Signal Handler.
+Se incluye soporte de Cancelación de Entornos Globales (/system/reset) pulsando P.
 """
 
 import os
@@ -1015,25 +1015,6 @@ def _parse_ids_http_response(resp: requests.Response) -> dict:
         return {"raw": resp.text[:500]}
 
 
-def _broker_query_via_local_ecc(query: str) -> dict:
-    from requests.auth import HTTPBasicAuth as _HTTPBasicAuth
-
-    actual_url = f"https://ecc-worker{INSTANCE_ID}:8887/selfRegistration/query"
-    log.info(f"[IDS OUT] ids:QueryMessage -> {BROKER_URL} [via {actual_url}]")
-    resp = requests.post(
-        actual_url,
-        data=query,
-        headers={
-            "Forward-To": BROKER_URL,
-            "Content-Type": "text/plain",
-        },
-        verify=TLS_CERT,
-        auth=_HTTPBasicAuth(API_USER, API_PASS),
-        timeout=60,
-    )
-    return _parse_ids_http_response(resp)
-
-
 # =============================================================================
 # Negociacion IDS completa -- coordinator -> peer
 # =============================================================================
@@ -1275,58 +1256,6 @@ def _negotiate_and_send_algorithm(peer_ecc_url: str, peer_conn_uri: str,
         return True
     except Exception as exc:
         log.error(f"[coordinator] Error enviando algoritmo (fallback) a {peer_dataapp}: {exc}", exc_info=True)
-        return False
-
-
-def _activate_coordinator_from_local() -> bool:
-    """
-    Activa el rol coordinator cargando el algorithm.py que ya existe en
-    este conector (baked en la imagen o previamente recibido via IDS).
-
-    Este es el mecanismo correcto para el self-fetch del coordinator:
-    el conector TIENE el artefacto (en el contexto IDS, esta disponible
-    como recurso en su propio catalogo). No necesita pedirse a si mismo
-    a traves del ECC (lo que causaria un self-loop rechazado por DAPS).
-
-    El handshake IDS completo (Description -> Contract -> Artifact) tiene
-    sentido cuando el consumer ES DIFERENTE del provider. Para la
-    activacion del coordinator (mismo conector), la carga directa es
-    semanticamente equivalente y arquitectonicamente correcta.
-    """
-    global is_coordinator
-    algo_src = _algo_path()  # IDS path primero, luego baked
-    if not os.path.exists(algo_src):
-        log.error(
-            f"[activate-coordinator] algorithm.py no encontrado en {algo_src}\n"
-            f"  (ALGO_IDS_PATH={ALGO_IDS_PATH}, ALGO_BAKED_PATH={ALGO_BAKED_PATH})"
-        )
-        return False
-
-    try:
-        with open(algo_src, "rb") as f:
-            algo_bytes = f.read()
-
-        # Si ya esta en ALGO_IDS_PATH no hace falta copiar;
-        # si viene de ALGO_BAKED_PATH, guardarlo en ALGO_IDS_PATH
-        if algo_src == ALGO_BAKED_PATH and algo_src != ALGO_IDS_PATH:
-            _save_algorithm(algo_bytes)
-
-        # Cargar fl_config.json si existe
-        if os.path.exists(CONFIG_PATH):
-            with open(CONFIG_PATH, "rb") as f:
-                config_bytes = f.read()
-            _save_config(config_bytes)
-
-        is_coordinator = True
-        log.info(
-            f"~... algorithm.py cargado desde propio conector "
-            f"({len(algo_bytes)} bytes) -- worker-{INSTANCE_ID} = COORDINATOR\n"
-            f"  Fuente: {algo_src}"
-        )
-        return True
-
-    except Exception as exc:
-        log.error(f"[activate-coordinator] Error: {exc}", exc_info=True)
         return False
 
 
@@ -2611,18 +2540,6 @@ def _extract_connector_uris_from_query_result(result) -> list:
     return []
 
 
-def _extract_ids_rejection_reason(result) -> str:
-    if not isinstance(result, dict):
-        return ""
-
-    reason = result.get("ids:rejectionReason") or result.get("https://w3id.org/idsa/core/rejectionReason")
-    if isinstance(reason, dict):
-        return str(reason.get("@id", "")).strip()
-    if isinstance(reason, str):
-        return reason.strip()
-    return ""
-
-
 def _get_registered_connectors_via_sparql_fallback(query: str, reason: str = "") -> list:
     if reason:
         log.warning(f"[broker-discover] Activando fallback SPARQL legacy: {reason}")
@@ -3405,8 +3322,8 @@ async def ids_data(request: Request):
                 message_type="ids:RejectionMessage",
                 source_connector=CONNECTOR_URI,
                 target_connector=consumer_uri,
-                status="failed",
-                error_message="fl_opt_out: worker has opted out of FL participation",
+                status="success",
+                error_message="Policy Enforcement: worker has opted out of FL participation (Data Sovereignty)",
                 additional_data={
                     "event": "contract_rejected_opt_out",
                     "worker": INSTANCE_ID,
@@ -3452,8 +3369,8 @@ async def ids_data(request: Request):
                         message_type="ids:RejectionMessage",
                         source_connector=CONNECTOR_URI,
                         target_connector=consumer_uri,
-                        status="failed",
-                        error_message="unauthorized_consumer: not in authorized peer list",
+                        status="success",
+                        error_message="Policy Enforcement: consumer not in authorized peer list (connector-restricted-policy)",
                         additional_data={
                             "event": "contract_rejected_policy",
                             "worker": INSTANCE_ID,
@@ -4917,8 +4834,8 @@ async def fl_accept_negotiation(request: Request):
             message_type="ids:RejectionMessage",
             source_connector=CONNECTOR_URI,
             target_connector=coord_uri,
-            status="failed",
-            error_message="fl_opt_out: worker ejercio soberania del dato",
+            status="success",
+            error_message="Policy Enforcement: worker exercised data sovereignty (FL_OPT_OUT)",
             additional_data={
                 "event": "worker_rejected_participation",
                 "worker": INSTANCE_ID,
@@ -5149,8 +5066,8 @@ async def fl_negotiate():
                 message_type="ids:RejectionMessage",
                 source_connector=uri,
                 target_connector=CONNECTOR_URI,
-                status="failed",
-                error_message=f"{reason}: {msg}",
+                status="success",
+                error_message=f"Policy Enforcement: {reason} - {msg}",
                 additional_data={
                     "event": "negotiate_peer_rejected",
                     "coordinator": INSTANCE_ID,
@@ -5620,14 +5537,6 @@ def _start_worker_ws_client():
     global global_event_loop
     if global_event_loop:
         asyncio.run_coroutine_threadsafe(_fl_worker_ws_client_connect(), global_event_loop)
-
-def _send_local_weights_ws(payload: dict) -> bool:
-    global fl_ws_client_conn, global_event_loop
-    if fl_ws_client_conn and global_event_loop:
-        asyncio.run_coroutine_threadsafe(fl_ws_client_conn.send(json.dumps(payload)), global_event_loop)
-        return True
-    return False
-
 
 class _WSConnectionManager:
     """
