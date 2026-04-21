@@ -699,18 +699,118 @@ def _get_self_description() -> dict:
     return resp.json()
 
 
-def _first_contract_artifact(desc: dict) -> tuple[str | None, str | None]:
+def _first_contract_artifact(
+    desc: dict,
+    selected_csv: str | None = None,
+) -> tuple[str | None, str | None]:
     """
-    Devuelve (contract_offer_id, artifact_id) del primer recurso ofrecido.
-    Se usa para completar mensajes ArtifactRequest que el ECC valida estrictamente.
+    Devuelve (contract_offer_id, artifact_id).
+
+    Si se proporciona `selected_csv`, intenta localizar el recurso ofrecido
+    cuyo artifact/filename/metadata correspondan a ese CSV concreto.
+    Si no encuentra coincidencia exacta, hace fallback al primer recurso valido.
     """
+    def _as_list(value):
+        if isinstance(value, list):
+            return value
+        if value in (None, ""):
+            return []
+        return [value]
+
+    def _text_values(entries) -> list[str]:
+        values = []
+        for entry in _as_list(entries):
+            if isinstance(entry, dict):
+                val = str(entry.get("@value", "")).strip()
+            else:
+                val = str(entry).strip()
+            if val:
+                values.append(val)
+        return values
+
+    def _resource_tokens(resource: dict) -> set[str]:
+        tokens = set()
+        for text in _text_values(resource.get("ids:title", [])):
+            tokens.add(text.lower())
+        for rep in _as_list(resource.get("ids:representation", [])):
+            if not isinstance(rep, dict):
+                continue
+            rep_id = str(rep.get("@id", "")).strip()
+            if rep_id:
+                tokens.add(rep_id.lower())
+            for text in _text_values(rep.get("ids:title", [])):
+                tokens.add(text.lower())
+            for kw in _ids_keyword_values(rep):
+                tokens.add(kw.lower())
+            for instance in _as_list(rep.get("ids:instance", [])):
+                if not isinstance(instance, dict):
+                    continue
+                for candidate in (
+                    instance.get("ids:fileName", ""),
+                    instance.get("@id", ""),
+                ):
+                    value = str(candidate).strip()
+                    if value:
+                        tokens.add(value.lower())
+        return tokens
+
+    def _artifact_from_resource(resource: dict, target_csv: str | None = None) -> tuple[str | None, str | None]:
+        contract = (_as_list(resource.get("ids:contractOffer", [])) or [{}])[0]
+        contract_id = contract.get("@id") if isinstance(contract, dict) else None
+        first_artifact_id = None
+        target = target_csv.lower().strip() if target_csv else None
+
+        for rep in _as_list(resource.get("ids:representation", [])):
+            if not isinstance(rep, dict):
+                continue
+            for instance in _as_list(rep.get("ids:instance", [])):
+                if not isinstance(instance, dict):
+                    continue
+                artifact_id = instance.get("@id")
+                file_name = str(instance.get("ids:fileName", "")).strip()
+                if artifact_id and not first_artifact_id:
+                    first_artifact_id = artifact_id
+                if target:
+                    haystack = " ".join(
+                        part for part in (
+                            file_name,
+                            str(artifact_id or ""),
+                            str(rep.get("@id", "")).strip(),
+                        )
+                        if part
+                    ).lower()
+                    if target in haystack:
+                        return contract_id, artifact_id
+
+        return contract_id, first_artifact_id
+
     try:
-        catalogs = desc.get("ids:resourceCatalog", [{}])
-        resource = (catalogs[0].get("ids:offeredResource", [{}]) or [{}])[0]
-        contract = (resource.get("ids:contractOffer", [{}]) or [{}])[0]
-        repres = (resource.get("ids:representation", [{}]) or [{}])[0]
-        instance = (repres.get("ids:instance", [{}]) or [{}])[0]
-        return contract.get("@id"), instance.get("@id")
+        resources = []
+        for catalog in _as_list(desc.get("ids:resourceCatalog", [])):
+            if not isinstance(catalog, dict):
+                continue
+            for resource in _as_list(catalog.get("ids:offeredResource", [])):
+                if isinstance(resource, dict):
+                    resources.append(resource)
+
+        if not resources:
+            return None, None
+
+        if selected_csv:
+            target = selected_csv.lower().strip()
+            for resource in resources:
+                tokens = _resource_tokens(resource)
+                if any(target == token or target in token for token in tokens):
+                    contract_id, artifact_id = _artifact_from_resource(resource, selected_csv)
+                    if artifact_id:
+                        return contract_id, artifact_id
+
+        for resource in resources:
+            contract_id, artifact_id = _artifact_from_resource(resource)
+            if artifact_id:
+                return contract_id, artifact_id
+
+        return None, None
     except Exception:
         return None, None
 
@@ -722,7 +822,11 @@ def _local_contract_artifact() -> tuple[str | None, str | None]:
         return None, None
 
 
-def _peer_contract_artifact(peer_ecc_url: str, peer_conn_uri: str) -> tuple[str | None, str | None]:
+def _peer_contract_artifact(
+    peer_ecc_url: str,
+    peer_conn_uri: str,
+    selected_csv: str | None = None,
+) -> tuple[str | None, str | None]:
     try:
         target = _ecc_forward_url(peer_ecc_url) if FL_IDS_ECC_ONLY else peer_ecc_url
         desc = _ids_send(
@@ -731,7 +835,7 @@ def _peer_contract_artifact(peer_ecc_url: str, peer_conn_uri: str) -> tuple[str 
             "ids:DescriptionRequestMessage",
             use_local_ecc=FL_IDS_ECC_ONLY,
         )
-        return _first_contract_artifact(desc)
+        return _first_contract_artifact(desc, selected_csv=selected_csv)
     except Exception as exc:
         log.warning(f"[ids] No se pudo resolver artifact del peer {peer_conn_uri}: {exc}")
         return None, None
@@ -2431,8 +2535,11 @@ def _ids_keyword_values(rep: dict) -> list:
 
 def _extract_csv_candidates_from_description(desc: dict) -> list:
     """
-    Extrae [{filename, columns, count}] de la MetadataRepresentation publicada
-    en el catalogo IDS del peer.
+    Extrae candidatos CSV a partir del catalogo IDS del peer.
+
+    Toma como fuente principal la MetadataRepresentation (columnas), pero
+    tambien intenta resolver la Training Representation del mismo recurso para
+    obtener el nombre "real" del dataset (`ids:fileName`) y su artifact IDS.
     """
     import re as _re
 
@@ -2441,7 +2548,44 @@ def _extract_csv_candidates_from_description(desc: dict) -> list:
 
     for cat in desc.get("ids:resourceCatalog", []) or []:
         for res in cat.get("ids:offeredResource", []) or []:
-            for rep in res.get("ids:representation", []) or []:
+            reps = res.get("ids:representation", []) or []
+            training_filename = None
+            training_artifact_id = None
+
+            for rep in reps:
+                if not isinstance(rep, dict):
+                    continue
+                title_values = []
+                for title in rep.get("ids:title", []) or []:
+                    if isinstance(title, dict):
+                        val = str(title.get("@value", "")).strip()
+                    else:
+                        val = str(title).strip()
+                    if val:
+                        title_values.append(val)
+                title_text = " ".join(title_values).lower()
+                rep_uri = rep.get("@id", "")
+
+                is_training_rep = (
+                    "training artifact" in title_text
+                    or "exec_" in rep_uri
+                )
+                if not is_training_rep:
+                    continue
+
+                for instance in rep.get("ids:instance", []) or []:
+                    if not isinstance(instance, dict):
+                        continue
+                    candidate_fname = str(instance.get("ids:fileName", "")).strip()
+                    candidate_artifact = str(instance.get("@id", "")).strip()
+                    if candidate_fname and not training_filename:
+                        training_filename = candidate_fname
+                    if candidate_artifact and not training_artifact_id:
+                        training_artifact_id = candidate_artifact
+
+            for rep in reps:
+                if not isinstance(rep, dict):
+                    continue
                 rep_uri = rep.get("@id", "")
                 if "meta_" not in rep_uri:
                     continue
@@ -2469,17 +2613,30 @@ def _extract_csv_candidates_from_description(desc: dict) -> list:
                             if not columns:
                                 columns = [c.strip() for c in m_c.group(1).split(",") if c.strip()]
 
+                if not filename:
+                    filename = training_filename
+
                 if not filename or not columns:
                     continue
 
                 normalized = tuple(col.lower().strip() for col in columns if col.strip())
-                dedupe_key = (filename, normalized)
+                dedupe_key = (filename, training_filename or "", normalized)
                 if dedupe_key in seen:
                     continue
                 seen.add(dedupe_key)
 
                 candidates.append({
                     "filename": filename,
+                    "training_filename": training_filename,
+                    "canonical_filename": (
+                        training_filename
+                        if training_filename and training_filename.lower().strip() == filename.lower().strip()
+                        else filename
+                    ),
+                    "training_filename_matches": bool(
+                        training_filename and training_filename.lower().strip() == filename.lower().strip()
+                    ),
+                    "artifact_id": training_artifact_id,
                     "columns": list(normalized),
                     "count": len(normalized),
                 })
@@ -2721,6 +2878,10 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
             is_best = ratio > best_ratio
             all_evaluated.append({
                 "filename"         : fname,
+                "training_filename": csv_info.get("training_filename"),
+                "canonical_filename": csv_info.get("canonical_filename", fname),
+                "artifact_id"      : csv_info.get("artifact_id"),
+                "training_filename_matches": csv_info.get("training_filename_matches", False),
                 "ratio"            : ratio,
                 "common_cols_count": len(common),
                 "total_cols"       : len(my_set),
@@ -2736,6 +2897,48 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
                 best_ratio    = ratio
                 best_cols     = cols
                 best_filename = fname
+
+        _training_confirmation_logged: set[str] = set()
+
+        def _canonicalize_selected_filename(
+            current_name: str | None,
+            *,
+            emit_log: bool = True,
+        ) -> str | None:
+            if not current_name:
+                return current_name
+            candidate = next((c for c in all_csvs if c.get("filename") == current_name), None)
+            if not candidate:
+                return current_name
+
+            training_name = candidate.get("training_filename")
+            canonical_name = candidate.get("canonical_filename", current_name)
+            matches = candidate.get("training_filename_matches", False)
+
+            if training_name and matches:
+                if emit_log and canonical_name not in _training_confirmation_logged:
+                    if canonical_name != current_name:
+                        log.info(
+                            f"[broker-discover] La Training Representation confirma el nombre del dataset: "
+                            f"{current_name!r} -> {canonical_name!r}"
+                        )
+                    else:
+                        log.info(
+                            f"[broker-discover] La Training Representation confirma el CSV seleccionado: "
+                            f"{canonical_name!r}"
+                        )
+                    _training_confirmation_logged.add(canonical_name)
+                return canonical_name
+
+            if training_name and not matches:
+                if emit_log and current_name not in _training_confirmation_logged:
+                    log.warning(
+                        f"[broker-discover] MetadataRepresentation y Training Representation no coinciden "
+                        f"para {current_name!r}: metadata={current_name!r}  training={training_name!r}. "
+                        "Se mantiene el nombre derivado de metadata para no alterar la seleccion."
+                    )
+                    _training_confirmation_logged.add(current_name)
+            return current_name
 
         llm_candidates = [
             {"filename": c.get("filename", ""),
@@ -2812,6 +3015,18 @@ def _get_peer_best_csv(ecc_url: str, connector_uri: str, my_set: set) -> tuple:
                 f"[llm-recommend] LLM no disponible -- "
                 f"FALLBACK a seleccion matematica: {best_filename!r} ({best_ratio:.0%})"
             )
+
+        best_filename = _canonicalize_selected_filename(best_filename)
+        if llm_rec_with_math and llm_rec_with_math.get("filename"):
+            llm_rec_with_math["filename"] = _canonicalize_selected_filename(
+                llm_rec_with_math["filename"],
+                emit_log=False,
+            )
+            if llm_rec_with_math.get("math_filename"):
+                llm_rec_with_math["math_filename"] = _canonicalize_selected_filename(
+                    llm_rec_with_math["math_filename"],
+                    emit_log=False,
+                )
 
         return best_cols, real_uri, best_filename, best_ratio, llm_rec_with_math, all_evaluated
 
@@ -3359,7 +3574,7 @@ async def ids_data(request: Request):
                     for v in _constraint.get("ids:rightOperand", [])
                 ]
                 if _allowed_uris and consumer_uri not in _allowed_uris:
-                    log.warning(
+                    log.info(
                         f"[ContractRequest] ACCESO DENEGADO -- {consumer_uri!r} "
                         f"no esta en la lista de peers autorizados del modelo FL.\n"
                         f"  Autorizados: {_allowed_uris}"
@@ -4403,12 +4618,8 @@ def _publish_local_csvs() -> dict:
                 "ids:keyword": [
                     {"@value": f"size_mb:{_size_mb}",        "@type": _xsd_str},
                     {"@value": f"filename:{fname}",          "@type": _xsd_str},
-                    {"@value": f"rows:{_n_rows}",            "@type": _xsd_str},
                     {"@value": f"columns_count:{_n_cols}",   "@type": _xsd_str},
                     {"@value": f"column_names:{cols_str}",   "@type": _xsd_str},
-                ] + [
-                    {"@value": f"column:{col}", "@type": _xsd_str}
-                    for col in c["columns"]
                 ],
                 "ids:mediaType": {"@id": "https://w3id.org/idsa/code/JSON"}
             }
@@ -4977,7 +5188,10 @@ async def fl_negotiate():
             "ids:DescriptionRequestMessage",
             use_local_ecc=FL_IDS_ECC_ONLY,
         )
-        peer_contract_offer, peer_requested_artifact = _first_contract_artifact(peer_desc)
+        peer_contract_offer, peer_requested_artifact = _first_contract_artifact(
+            peer_desc,
+            selected_csv=sel_csv,
+        )
         if not peer_requested_artifact:
             rejected.append({
                 "connector_uri": uri,
@@ -4986,6 +5200,12 @@ async def fl_negotiate():
                 "message"      : "No se pudo derivar el artifact IDS del peer.",
             })
             continue
+        log.info(
+            f"[/fl/negotiate] Artifact/contract resueltos para worker-{peer_worker_id}\n"
+            f"  selected_csv      : {sel_csv or '(auto)'}\n"
+            f"  requested_artifact: {peer_requested_artifact}\n"
+            f"  contract_offer    : {peer_contract_offer or '(autogen/fallback)'}"
+        )
 
         # Payload del ContractRequest FL
         _contract_payload = {

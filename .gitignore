@@ -23,6 +23,7 @@ certs/truststoreEcc.jks
 ia-dataapp/data/worker*/algorithm.py
 ia-dataapp/data/worker*/fl_config.json
 ia-dataapp/data/worker*/output/
+ia-dataapp/data/worker*/_docker_build/
 
 # ── Bases de Datos locales y Caches (Broker / DAPS / Linter) ────────────────────────────
 *.db
