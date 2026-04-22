@@ -509,7 +509,6 @@ async def _startup_identity_log():
     if ALLOW_IDS_BYPASS:
         log.warning(f"  BROKER_SPARQL   : {BROKER_SPARQL_URL} (fallback legacy habilitado)")
     log.info(f"  PEER_ECC_URLS   : {PEER_ECC_URLS or '(vacio -- se rellenara via broker)'}")
-    log.info(f"  PEER_CONN_URIS  : {PEER_CONNECTOR_URIS or '(vacio -- se rellenara via broker)'}")
     if FL_OPT_OUT:
         log.warning(
             f"  FL_OPT_OUT      : True -- "
@@ -600,8 +599,11 @@ def _now_iso() -> str:
 
 def _ids_context() -> dict:
     return {
-        "ids" : "https://w3id.org/idsa/core/",
-        "idsc": "https://w3id.org/idsa/code/",
+        "ids"   : "https://w3id.org/idsa/core/",
+        "idsc"  : "https://w3id.org/idsa/code/",
+        "csvw"  : "http://www.w3.org/ns/csvw#",
+        "dcat"  : "http://www.w3.org/ns/dcat#",
+        "schema": "https://schema.org/",
     }
 
 
@@ -897,6 +899,42 @@ def _base_response_header(mensaje: dict, msg_type: str,
     }
 
 
+def _local_ecc_incoming_url() -> str:
+    return f"https://{ECC_HOSTNAME}:8887/incoming-data-app/multipartMessageBodyFormData"
+
+
+def _normalize_ecc_url(ecc_url: str) -> str:
+    if not ecc_url:
+        return ecc_url
+    normalized = ecc_url.strip()
+    if normalized.startswith("wss://"):
+        normalized = "https://" + normalized[len("wss://"):]
+    normalized = normalized.replace(":8086/data", ":8889/data")
+    return normalized
+
+
+def _looks_like_ecc_data_endpoint(url: str) -> bool:
+    if not url:
+        return False
+    normalized = _normalize_ecc_url(url)
+    return "ecc-" in normalized and normalized.endswith("/data")
+
+
+def _should_route_via_local_connector(
+    multipart_mode: str | None = None,
+    forward_to_url: str | None = None,
+    forward_to_internal: str | None = None,
+) -> bool:
+    mode = (multipart_mode or "").strip().lower()
+    forward_to = (forward_to_url or "").strip().lower()
+    forward_internal = (forward_to_internal or "").strip().lower()
+    return (
+        mode == "wss"
+        or forward_to.startswith("wss://")
+        or forward_internal.startswith("wss://")
+    )
+
+
 # =============================================================================
 # POST /proxy
 # =============================================================================
@@ -906,6 +944,8 @@ async def proxy(request: Request):
     body = await request.json()
 
     forward_to        = body.get("Forward-To", "")
+    forward_to_internal = body.get("Forward-To-Internal", "")
+    multipart_mode    = body.get("multipart", "")
     message_type_raw  = body.get("messageType", "")
     payload_in        = body.get("payload", None)
     req_artifact      = body.get("requestedArtifact")
@@ -931,9 +971,26 @@ async def proxy(request: Request):
     message_type = message_type_raw if message_type_raw.startswith("ids:") \
                    else f"ids:{message_type_raw}"
 
-    dest_conn_uri = explicit_connector_uri or _infer_connector_uri(forward_to)
+    use_local_connector = _should_route_via_local_connector(
+        multipart_mode=multipart_mode,
+        forward_to_url=forward_to,
+        forward_to_internal=forward_to_internal,
+    )
 
-    log.info(f"[/proxy] {message_type} -> {forward_to}")
+    effective_forward_to = forward_to
+    if use_local_connector and _looks_like_ecc_data_endpoint(forward_to):
+        effective_forward_to = _ecc_forward_url(forward_to)
+
+    dest_conn_uri = explicit_connector_uri or _infer_connector_uri(effective_forward_to)
+
+    log.info(
+        f"[/proxy] {message_type} -> {effective_forward_to}"
+        + (
+            f" via local connector {_local_ecc_incoming_url()} "
+              f"(multipart={multipart_mode or 'auto'}, Forward-To-Internal={forward_to_internal or '(default bridge)'})"
+            if use_local_connector else ""
+        )
+    )
 
     try:
         corr_msg = body.get("correlationMessage") or transfer_contract or None
@@ -947,7 +1004,7 @@ async def proxy(request: Request):
             log.info(f"[/proxy] fl_algorithm detectado -- content+config -> ids:contentVersion (config={'present' if config_b64 else 'absent'})")
 
         result = _ids_send(
-            forward_to_url       = forward_to,
+            forward_to_url       = effective_forward_to,
             forward_to_connector = dest_conn_uri,
             message_type         = message_type,
             requested_artifact   = req_artifact,
@@ -957,19 +1014,26 @@ async def proxy(request: Request):
             correlation_message  = corr_msg,
             header_content       = None,
             extra_header         = fl_extra,
+            use_local_ecc        = use_local_connector,
         )
         return JSONResponse(content=result)
     except Exception as exc:
         log.error(f"[/proxy] Error: {exc}", exc_info=True)
         return JSONResponse(
             status_code=502,
-            content={"error": str(exc), "forward_to": forward_to}
+            content={
+                "error": str(exc),
+                "forward_to": effective_forward_to,
+                "use_local_connector": use_local_connector,
+            }
         )
 
 
 def _infer_connector_uri(ecc_url: str) -> str:
+    normalized_target = _normalize_ecc_url(ecc_url or "")
     for url, uri in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS):
-        if url in ecc_url or ecc_url in url:
+        normalized_known = _normalize_ecc_url(url)
+        if normalized_known in normalized_target or normalized_target in normalized_known:
             return uri
             
     # Inferencia dinamica usando el catalogo del Broker en lugar de regex estatica
@@ -980,9 +1044,9 @@ def _infer_connector_uri(ecc_url: str) -> str:
             ep = c.get("endpoint", "")
             if ep:
                 hostname = urlparse(ep).hostname
-                if hostname and hostname in ecc_url:
+                if hostname and hostname in normalized_target:
                     return c["connector_uri"]
-            if c["connector_uri"] == ecc_url:
+            if c["connector_uri"] == normalized_target:
                 return c["connector_uri"]
     except Exception as e:
         log.warning(f"Error infiriendo URI dinamicamente dinamicamente: {e}")
@@ -1055,7 +1119,7 @@ def _ids_send(
 
     actual_url = forward_to_url
     if use_local_ecc:
-        actual_url = f"https://ecc-worker{INSTANCE_ID}:8887/incoming-data-app/multipartMessageBodyFormData"
+        actual_url = _local_ecc_incoming_url()
         str_header = json.dumps(header_dict)
 
     fields = {"header": ("header", str_header, "application/json")}
@@ -1142,6 +1206,7 @@ def _ecc_forward_url(peer_ecc_url: str) -> str:
     """
     if not peer_ecc_url:
         return peer_ecc_url
+    peer_ecc_url = _normalize_ecc_url(peer_ecc_url)
     if not WS_ECC_ENABLED:
         return peer_ecc_url
     return (
@@ -2533,6 +2598,125 @@ def _ids_keyword_values(rep: dict) -> list:
     return values
 
 
+def _jsonld_first(data: dict, *keys, default=None):
+    for key in keys:
+        if key in data:
+            return data[key]
+    return default
+
+
+def _csvw_column_names(rep: dict) -> list[str]:
+    tables = _jsonld_first(rep, "tables", default=[]) or []
+    if isinstance(tables, list):
+        for table in tables:
+            if not isinstance(table, dict):
+                continue
+            table_schema = _jsonld_first(
+                table,
+                "tableSchema",
+                "csvw:tableSchema",
+                "http://www.w3.org/ns/csvw#tableSchema",
+                "http://www.w3.org/ns/csvw/tableSchema",
+                default={},
+            )
+            if not isinstance(table_schema, dict):
+                continue
+            columns = _jsonld_first(
+                table_schema,
+                "columns",
+                "csvw:column",
+                "http://www.w3.org/ns/csvw#column",
+                "http://www.w3.org/ns/csvw/column",
+                default=[],
+            ) or []
+            names = []
+            for col in columns:
+                if isinstance(col, str):
+                    col = col.strip()
+                    if col:
+                        names.append(col)
+                    continue
+                if not isinstance(col, dict):
+                    continue
+                col_name = _jsonld_first(
+                    col,
+                    "name",
+                    "csvw:name",
+                    "http://www.w3.org/ns/csvw#name",
+                    "http://www.w3.org/ns/csvw/name",
+                    default="",
+                )
+                if isinstance(col_name, dict):
+                    col_name = col_name.get("@value", "")
+                col_name = str(col_name).strip()
+                if col_name:
+                    names.append(col_name)
+            if names:
+                return names
+
+    schema = _jsonld_first(
+        rep,
+        "csvw:tableSchema",
+        "http://www.w3.org/ns/csvw#tableSchema",
+        "http://www.w3.org/ns/csvw/tableSchema",
+        default={},
+    )
+    if not isinstance(schema, dict):
+        return []
+
+    columns = _jsonld_first(
+        schema,
+        "csvw:column",
+        "http://www.w3.org/ns/csvw#column",
+        "http://www.w3.org/ns/csvw/column",
+        default=[],
+    ) or []
+
+    names = []
+    for col in columns:
+        if isinstance(col, str):
+            col = col.strip()
+            if col:
+                names.append(col)
+            continue
+        if not isinstance(col, dict):
+            continue
+        col_name = _jsonld_first(
+            col,
+            "csvw:name",
+            "http://www.w3.org/ns/csvw#name",
+            "http://www.w3.org/ns/csvw/name",
+            default="",
+        )
+        if isinstance(col_name, dict):
+            col_name = col_name.get("@value", "")
+        col_name = str(col_name).strip()
+        if col_name:
+            names.append(col_name)
+    return names
+
+
+def _schema_variable_measured_names(rep: dict) -> list[str]:
+    values = _jsonld_first(
+        rep,
+        "schema:variableMeasured",
+        "https://schema.org/variableMeasured",
+        "http://schema.org/variableMeasured",
+        default=[],
+    ) or []
+    if not isinstance(values, list):
+        values = [values]
+
+    names = []
+    for item in values:
+        if isinstance(item, dict):
+            item = item.get("@value", item.get("name", ""))
+        item = str(item).strip()
+        if item:
+            names.append(item)
+    return names
+
+
 def _extract_csv_candidates_from_description(desc: dict) -> list:
     """
     Extrae candidatos CSV a partir del catalogo IDS del peer.
@@ -2591,7 +2775,7 @@ def _extract_csv_candidates_from_description(desc: dict) -> list:
                     continue
 
                 filename = None
-                columns = []
+                columns = _csvw_column_names(rep) or _schema_variable_measured_names(rep)
                 for val in _ids_keyword_values(rep):
                     if val.startswith("filename:"):
                         filename = val.split(":", 1)[1].strip()
@@ -2606,8 +2790,8 @@ def _extract_csv_candidates_from_description(desc: dict) -> list:
                     desc_texts = rep.get("ids:description", [])
                     if desc_texts:
                         full_desc = desc_texts[0].get("@value", "")
-                        m_n = _re.search(r"[-:]? Nombre de Fichero:\s*(.+?)\n", full_desc)
-                        m_c = _re.search(r"[-:]? Nombres de Columnas:\s*(.+)", full_desc)
+                        m_n = _re.search(r"(?im)(?:^|\n)\s*(?:Nombre de Fichero|Fichero|Filename)\s*:\s*(.+?)\s*(?:\n|$)", full_desc)
+                        m_c = _re.search(r"(?im)(?:^|\n)\s*(?:Nombres de Columnas|Columnas|Column names)\s*:\s*(.+?)\s*(?:\n|$)", full_desc)
                         if m_n and m_c:
                             filename = filename or m_n.group(1).strip()
                             if not columns:
@@ -4589,15 +4773,20 @@ def _publish_local_csvs() -> dict:
             
             # ── Propiedades semanticas del IDS Information Model ──
             _xsd_str = "http://www.w3.org/2001/XMLSchema#string"
-            _n_rows  = c.get("rows", 0)
-            _size_mb = c.get("size_mb", 0)
-            _n_cols  = len(c["columns"])
-            _csv_byte_size = os.path.getsize(c["path"]) if os.path.exists(c["path"]) else 0
-            cols_str = ", ".join(c["columns"])
+            csvw_context = [
+                "http://www.w3.org/ns/csvw",
+                {
+                    "ids": "https://w3id.org/idsa/core/",
+                    "idsc": "https://w3id.org/idsa/code/",
+                    "csvw": "http://www.w3.org/ns/csvw#",
+                    "schema": "https://schema.org/",
+                }
+            ]
+            csvw_column_names = list(c["columns"])
 
             # ── 1. Resource IDS ──
             res_body = {
-                "@context": {"ids": "https://w3id.org/idsa/core/", "idsc": "https://w3id.org/idsa/code/"},
+                "@context": csvw_context,
                 "@id": resource_id,
                 "@type": "ids:TextResource",
                 "ids:title": [{"@value": f"Dataset: {fname}", "@type": _xsd_str}],
@@ -4605,30 +4794,66 @@ def _publish_local_csvs() -> dict:
                 "ids:version": "1.0.0",
                 "ids:contentType": {"@id": "https://w3id.org/idsa/code/SCHEMA_DEFINITION"},
             }
-            requests.post(f"{ecc_base}/api/offeredResource/", headers={"catalog": catalog_id, "Content-Type": "application/json"}, json=res_body, verify=TLS_CERT, auth=basic_api, timeout=10)
+            res_resp = requests.post(
+                f"{ecc_base}/api/offeredResource/",
+                headers={"catalog": catalog_id, "Content-Type": "application/json"},
+                json=res_body,
+                verify=TLS_CERT,
+                auth=basic_api,
+                timeout=10,
+            )
+            res_resp.raise_for_status()
 
-            # ── 2. Representacion 1: Metadata (descripcion + 1 keyword por dato) ──
+            # ── 2. Representacion 1: Metadata ──
             metadata_repr_id = f"https://w3id.org/idsa/autogen/representation/meta_{uuid.uuid4()}"
+            schema_id = f"{metadata_repr_id}/schema"
+            n_cols = len(csvw_column_names)
+            csv_size_mb = c.get("size_mb", 0)
             meta_body = {
-                "@context": {"ids": "https://w3id.org/idsa/core/", "idsc": "https://w3id.org/idsa/code/"},
+                "@context": csvw_context,
                 "@id": metadata_repr_id,
                 "@type": "ids:TextRepresentation",
                 "ids:title": [{"@value": f"Semantic Metadata -- {fname}", "@type": _xsd_str}],
-                "ids:description": [{"@value": "Semantic metadata describing the schema of the dataset.", "@type": _xsd_str}],
-                "ids:keyword": [
-                    {"@value": f"size_mb:{_size_mb}",        "@type": _xsd_str},
-                    {"@value": f"filename:{fname}",          "@type": _xsd_str},
-                    {"@value": f"columns_count:{_n_cols}",   "@type": _xsd_str},
-                    {"@value": f"column_names:{cols_str}",   "@type": _xsd_str},
+                "ids:description": [{
+                    "@value": "Semantic metadata describing the dataset schema and size.",
+                    "@type": _xsd_str
+                }],
+                "csvw:tableSchema": {
+                    "@id": schema_id,
+                    "@type": "csvw:Schema",
+                    "schema:numberOfItems": {
+                        "@value": str(n_cols),
+                        "@type": "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+                    },
+                    "schema:contentSize": {
+                        "@value": f"{csv_size_mb} MB",
+                        "@type": _xsd_str
+                    }
+                },
+                "schema:variableMeasured": [
+                    {"@value": col, "@type": _xsd_str}
+                    for col in csvw_column_names
                 ],
                 "ids:mediaType": {"@id": "https://w3id.org/idsa/code/JSON"}
             }
-            requests.post(f"{ecc_base}/api/representation/", headers={"resource": resource_id, "Content-Type": "application/json"}, json=meta_body, verify=TLS_CERT, auth=basic_api, timeout=10)
+            meta_resp = requests.post(
+                f"{ecc_base}/api/representation/",
+                headers={"resource": resource_id, "Content-Type": "application/json"},
+                json=meta_body,
+                verify=TLS_CERT,
+                auth=basic_api,
+                timeout=10,
+            )
+            if not meta_resp.ok:
+                raise RuntimeError(
+                    f"Metadata representation rechazada por ECC "
+                    f"({meta_resp.status_code}): {meta_resp.text[:500]}"
+                )
 
             # ── 3. Representacion 2: Training (dataset para entrenamiento FL) ──
             exec_repr_id = f"https://w3id.org/idsa/autogen/representation/exec_{uuid.uuid4()}"
             exec_body = {
-                "@context": {"ids": "https://w3id.org/idsa/core/", "idsc": "https://w3id.org/idsa/code/"},
+                "@context": csvw_context,
                 "@id": exec_repr_id,
                 "@type": "ids:TextRepresentation",
                 "ids:title": [{"@value": f"Training Artifact -- {fname}", "@type": _xsd_str}],
@@ -4640,7 +4865,15 @@ def _publish_local_csvs() -> dict:
                     "ids:creationDate": {"@value": ts, "@type": "http://www.w3.org/2001/XMLSchema#dateTimeStamp"},
                 }]
             }
-            requests.post(f"{ecc_base}/api/representation/", headers={"resource": resource_id, "Content-Type": "application/json"}, json=exec_body, verify=TLS_CERT, auth=basic_api, timeout=10)
+            exec_resp = requests.post(
+                f"{ecc_base}/api/representation/",
+                headers={"resource": resource_id, "Content-Type": "application/json"},
+                json=exec_body,
+                verify=TLS_CERT,
+                auth=basic_api,
+                timeout=10,
+            )
+            exec_resp.raise_for_status()
             
             # 4. Contract Offer (USE with Constraints)
             contract_id = f"https://w3id.org/idsa/autogen/contractOffer/dataset_{uuid.uuid4()}"
@@ -4671,7 +4904,15 @@ def _publish_local_csvs() -> dict:
                     "ids:target": {"@id": artifact_id}
                 }]
             }
-            requests.post(f"{ecc_base}/api/contractOffer/", headers={"resource": resource_id, "Content-Type": "application/json"}, json=c_body, verify=TLS_CERT, auth=basic_api, timeout=10)
+            contract_resp = requests.post(
+                f"{ecc_base}/api/contractOffer/",
+                headers={"resource": resource_id, "Content-Type": "application/json"},
+                json=c_body,
+                verify=TLS_CERT,
+                auth=basic_api,
+                timeout=10,
+            )
+            contract_resp.raise_for_status()
             
             published.append({"filename": fname, "resource_id": resource_id})
             log.info(f"[publish-datasets] Publicado {fname}: {resource_id}")
