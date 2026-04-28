@@ -1139,7 +1139,7 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
                             ok(f" FL completado -- {n_rounds} rondas")
                             if best_round != "?":
                                 field("Mejor ronda",   best_round)
-                            for k in ("accuracy", "auc", "loss", "precision", "recall"):
+                            for k in ("accuracy", "auc", "loss", "precision", "recall", "f1_macro", "mcc"):
                                 v = best_m.get(k)
                                 if v is not None:
                                     field(f"  {k}", f"{v:.4f}")
@@ -1294,6 +1294,165 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
             warn(" FL termino con status=failed"); break
 
         time.sleep(poll_interval)
+
+# =============================================================================
+# RESULTADOS DEL ENTRENAMIENTO FL
+# =============================================================================
+
+def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
+    """
+    Muestra un resumen completo de resultados tras finalizar el entrenamiento FL.
+    Consulta /fl/status y /fl/results para obtener metricas globales,
+    per-class F1, confusion matrix y evolucion por ronda.
+    """
+    print()
+    _sep("=", color=BOLD + GREEN)
+    print(f"{BOLD}{GREEN}  RESULTADOS DEL ENTRENAMIENTO FEDERADO{RESET}")
+    _sep("=", color=BOLD + GREEN)
+
+    # --- Obtener datos del coordinator ---
+    fl_data = {}
+    fl_results = []
+    try:
+        r = SESSION.get(f"{coordinator_url}/fl/status", timeout=req_timeout, verify=TLS_CERT)
+        if r.ok:
+            fl_data = r.json()
+    except Exception as e:
+        warn(f"No se pudo obtener /fl/status: {e}")
+
+    try:
+        r = SESSION.get(f"{coordinator_url}/fl/results", timeout=req_timeout, verify=TLS_CERT)
+        if r.ok:
+            fl_results = r.json()
+    except Exception:
+        pass
+
+    history = fl_data.get("history", fl_results if isinstance(fl_results, list) else [])
+    if not history:
+        warn("No hay historial de rondas disponible")
+        return
+
+    # --- Evolucion por ronda ---
+    step("Evolucion por Ronda")
+    header = f"  {'Ronda':>6}  {'Workers':>8}  {'Muestras':>10}  {'Accuracy':>10}  {'AUC':>8}  {'F1-macro':>9}  {'MCC':>8}  {'Loss':>8}  {'Tiempo':>8}"
+    print(f"  {CYAN}{header}{RESET}")
+    print(f"  {CYAN}{'-' * len(header)}{RESET}")
+
+    for entry in history:
+        rnd     = entry.get("round", "?")
+        workers = entry.get("workers_ok", "?")
+        samples = entry.get("total_samples", 0)
+        gm      = entry.get("global_metrics", {})
+        elapsed = entry.get("elapsed_seconds", 0)
+
+        def _v(k, fmt=".4f"):
+            v = gm.get(k)
+            if v is None: return "--"
+            return f"{v:{fmt}}"
+
+        print(f"  {rnd:>6}  {workers:>8}  {samples:>10,}  {_v('accuracy'):>10}  "
+              f"{_v('auc'):>8}  {_v('f1_macro'):>9}  {_v('mcc'):>8}  "
+              f"{_v('loss'):>8}  {elapsed:>7.1f}s")
+    print()
+
+    # --- Mejor modelo global ---
+    last = history[-1] if history else {}
+    best_gm = last.get("global_metrics", {})
+
+    step("Metricas Globales del Mejor Modelo")
+    metrics_order = [
+        ("accuracy",    "Accuracy"),
+        ("auc",         "AUC (macro)"),
+        ("precision",   "Precision (macro)"),
+        ("recall",      "Recall (macro)"),
+        ("f1_macro",    "F1-Score (macro)"),
+        ("f1_weighted", "F1-Score (weighted)"),
+        ("mcc",         "MCC (Matthews)"),
+        ("loss",        "Loss"),
+    ]
+    for key, label in metrics_order:
+        v = best_gm.get(key)
+        if v is not None:
+            # Colorear segun calidad
+            if key in ("accuracy", "auc", "f1_macro", "mcc") and isinstance(v, (int, float)):
+                c = GREEN if v >= 0.9 else (YELLOW if v >= 0.7 else RED)
+            elif key == "loss" and isinstance(v, (int, float)):
+                c = GREEN if v < 0.3 else (YELLOW if v < 0.5 else RED)
+            else:
+                c = WHITE
+            field(label, f"{c}{v:.6f}{RESET}")
+
+    # Modo de clasificacion
+    mode = best_gm.get("classification_mode", "")
+    n_classes = best_gm.get("num_classes", "")
+    if mode:
+        field("Modo", f"{mode} ({n_classes} clases)" if n_classes else mode)
+    print()
+
+    # --- Distribucion de datos ---
+    step("Distribucion de Datos entre Workers")
+    total_samples = sum(e.get("total_samples", 0) for e in history)
+    if total_samples > 0 and history:
+        last_entry = history[-1]
+        n_workers = last_entry.get("workers_ok", "?")
+        field("Workers participantes", n_workers)
+        field("Total muestras (ultima ronda)", f"{last_entry.get('total_samples', 0):,}")
+        field("Rondas completadas", len(history))
+    print()
+
+    # --- Distribucion de clases (UNSW-NB15) ---
+    try:
+        r_model = SESSION.get(f"{coordinator_url}/fl/model", timeout=req_timeout, verify=TLS_CERT)
+        if r_model.ok:
+            model_data = r_model.json()
+            class_names = model_data.get("class_names", [])
+            per_class = model_data.get("per_class_report", {})
+
+            if class_names:
+                step("Distribución de Clases (UNSW-NB15)")
+                n_classes = len(class_names)
+                field("Modo de clasificación", f"Multiclase ({n_classes} clases)" if n_classes > 2 else "Binario")
+                print()
+                print(f"    {'Clase':<20} {'F1-Score':>10}  {'Rendimiento':>32}")
+                print(f"    {'-'*20} {'-'*10}  {'-'*32}")
+                sorted_classes = sorted(
+                    [(c, per_class.get(c, 0.0)) for c in class_names],
+                    key=lambda x: x[1], reverse=True
+                )
+                for cls_name, f1_val in sorted_classes:
+                    if not isinstance(f1_val, (int, float)):
+                        f1_val = 0.0
+                    bar_len = int(f1_val * 30)
+                    bar = "█" * bar_len + "░" * (30 - bar_len)
+                    c = GREEN if f1_val >= 0.8 else (YELLOW if f1_val >= 0.5 else RED)
+                    print(f"    {cls_name:<20} {c}{f1_val:>10.4f}{RESET}  {c}{bar}{RESET}")
+                print()
+    except Exception:
+        pass
+
+    # --- Confusion Matrix ---
+    try:
+        if r_model and r_model.ok:
+            cm = model_data.get("confusion_matrix", [])
+            class_names_cm = model_data.get("class_names", [
+                "Normal", "Analysis", "Backdoor", "DoS", "Exploits",
+                "Fuzzers", "Generic", "Recon", "Shell", "Worms"
+            ])
+            if cm and len(cm) > 2:
+                step("Confusion Matrix (filas=real, cols=predicho)")
+                n = min(len(cm), len(class_names_cm))
+                # Abreviar nombres para que quepa
+                short = [c[:7] for c in class_names_cm[:n]]
+                header_line = f"{'':>12}  " + "  ".join(f"{s:>7}" for s in short)
+                print(f"    {CYAN}{header_line}{RESET}")
+                for i in range(n):
+                    row = cm[i] if i < len(cm) else []
+                    row_vals = "  ".join(f"{row[j]:>7}" for j in range(min(len(row), n)))
+                    print(f"    {class_names_cm[i]:>12}  {row_vals}")
+                print()
+    except Exception:
+        pass
+
 
 # =============================================================================
 # FASE 6 -- Test de Acceso al Modelo Global (Soberania de Datos)
@@ -1713,6 +1872,7 @@ def main():
             else:
                 fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout)
                 fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout)
+                _mostrar_resultados_fl(coordinator_url, cid, req_timeout)
                 fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
 
     except KeyboardInterrupt:

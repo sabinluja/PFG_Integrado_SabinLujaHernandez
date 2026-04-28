@@ -1,9 +1,10 @@
 {
   "rounds": 5,
-  "round_timeout": 180,
+  "round_timeout": 300,
   "min_workers": 1,
-  "epochs": 3,
-  "batch_size": 32,
+  "epochs": 10,
+  "batch_size": 64,
   "learning_rate": 0.001,
-  "test_split": 0.2
+  "test_split": 0.2,
+  "early_stopping_patience": 3
 }

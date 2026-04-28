@@ -1833,11 +1833,19 @@ def _b64_to_weights(b64: str) -> list:
 
 
 def _fedavg(results: list) -> list:
+    """FedAvg con norm clipping -- McMahan et al. (2017)."""
+    CLIP_NORM = 10.0
     total = sum(r["n_samples"] for r in results)
     agg   = None
     for r in results:
         w     = _b64_to_weights(r["weights_b64"])
         scale = r["n_samples"] / total
+        for j, layer in enumerate(w):
+            norm = np.linalg.norm(layer)
+            if norm > CLIP_NORM:
+                w[j] = layer * (CLIP_NORM / norm)
+                log.warning(f"[FedAvg] Capa {j}: norm {norm:.2f} > {CLIP_NORM} -- clipped")
+        log.info(f"[FedAvg] n_samples={r['n_samples']} peso={scale:.3f} acc={r['metrics'].get('accuracy', '?')}")
         if agg is None:
             agg = [layer * scale for layer in w]
         else:
@@ -3464,8 +3472,14 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                     daemon=True,
                 ).start()
 
+        _coord_local_extra = {}
         try:
             local = _train_local(global_weights_b64, round_num)
+            _coord_local_extra = {
+                "per_class_report": local.get("per_class_report", {}),
+                "confusion_matrix": local.get("confusion_matrix", []),
+                "class_names": local.get("class_names", []),
+            }
             with _round_lock:
                 _round_weights[INSTANCE_ID] = {
                     "weights_b64": local["weights_b64"],
@@ -3508,7 +3522,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         total_samples      = sum(r["n_samples"] for r in results)
 
         global_metrics = {}
-        for key in ("loss", "accuracy", "auc", "precision", "recall"):
+        for key in ("loss", "accuracy", "auc", "precision", "recall", "f1_macro", "f1_weighted", "mcc"):
             try:
                 global_metrics[key] = round(
                     sum(r["metrics"][key] * r["n_samples"] / total_samples
@@ -3564,7 +3578,15 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
             best_round = round_num
 
             with open(model_path, "w") as f:
-                json.dump({"round": best_round, "weights_b64": best_weights_b64, "metrics": best_metrics}, f)
+                _save_data = {"round": best_round, "weights_b64": best_weights_b64, "metrics": best_metrics}
+                if _coord_local_extra.get("per_class_report"):
+                    _save_data["per_class_report"] = _coord_local_extra["per_class_report"]
+                if _coord_local_extra.get("confusion_matrix"):
+                    _save_data["confusion_matrix"] = _coord_local_extra["confusion_matrix"]
+                if _coord_local_extra.get("class_names"):
+                    _save_data["class_names"] = _coord_local_extra["class_names"]
+                    _save_data["num_classes"] = len(_coord_local_extra["class_names"])
+                json.dump(_save_data, f)
             log.info(f"\u2728 Nueva mejor ronda encontrada ({best_round}) con acc={best_accuracy} \u2014 guardada en disco")
 
         log.info(
@@ -5830,6 +5852,10 @@ def fl_model():
         "round"            : data.get("round"),
         "metrics"          : data.get("metrics"),
         "weights_available": data.get("weights_b64") is not None,
+        "per_class_report" : data.get("per_class_report", {}),
+        "confusion_matrix" : data.get("confusion_matrix", []),
+        "num_classes"      : data.get("num_classes", 0),
+        "class_names"      : data.get("class_names", []),
     }
 
 
