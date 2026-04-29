@@ -374,13 +374,17 @@ def _report_to_ch(
 
 def _load_fl_config() -> dict:
     defaults = {
-        "rounds"       : 5,
+        "rounds"       : 25,
         "round_timeout": 180,
         "min_workers"  : 2,
-        "epochs"       : 3,
-        "batch_size"   : 32,
+        "epochs"       : 5,
+        "batch_size"   : 128,
         "learning_rate": 0.001,
         "test_split"   : 0.2,
+        "early_stopping_patience": 2,
+        "focal_gamma"  : 1.25,
+        "label_smoothing": 0.02,
+        "fedprox_mu"   : 0.005,
         "force_http_fallback": False, # Nuevo: fuerza pasar por IDS para benchmarking
     }
     if os.path.exists(CONFIG_PATH):
@@ -1184,6 +1188,22 @@ def _parse_ids_http_response(resp: requests.Response) -> dict:
         return {"raw": resp.text[:500]}
 
 
+def _require_ids_ack(response_payload: dict | None, expected_status: str, context: str):
+    """
+    Valida que el extremo remoto haya confirmado explicitamente la operacion.
+    Con WSS/ECC el POST al conector puede acabar en 200 aunque el artefacto no
+    haya sido procesado por la DataApp destino; por eso exigimos un ACK funcional.
+    """
+    payload = response_payload or {}
+    status = payload.get("status")
+    if status != expected_status:
+        raise RuntimeError(
+            f"{context}: ACK remoto invalido "
+            f"(esperado={expected_status!r}, recibido={status!r}, payload={payload})"
+        )
+    return payload
+
+
 # =============================================================================
 # Negociacion IDS completa -- coordinator -> peer
 # =============================================================================
@@ -1902,7 +1922,7 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
     peer_dataapp = _dataapp_url_from_ecc(peer_ecc_url)
     if not peer_dataapp:
         log.error(f"No se pudo derivar DataApp URL de {peer_ecc_url}")
-        return
+        return False
 
     payload_size = len(weights_b64) if weights_b64 else 0
     local_transfer_contract, local_requested_artifact = _local_contract_artifact()
@@ -1934,7 +1954,7 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                     "channel": "websocket",
                 },
             )
-            return
+            return True
         else:
             log.info(
                 f"  [WS] Túnel no activo para worker-{_peer_wid} en ronda {round_num} "
@@ -1966,7 +1986,7 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
             t_start = time.time()
             for _attempt in range(1, _SEND_MAX_RETRIES + 1):
                 try:
-                    _ids_send(
+                    ack_payload = _ids_send(
                         forward_to_url       = forward_target,
                         forward_to_connector = peer_conn_uri,
                         message_type         = "ids:ArtifactRequestMessage",
@@ -1976,6 +1996,11 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                         extra_header         = {"ids:contentVersion": f"fl_global_weights::{round_num}::gzip::payload::{payload_b64}"},
                         use_local_ecc        = FL_IDS_ECC_ONLY or FL_WEIGHTS_VIA_ECC,
                         timeout              = 120,
+                    )
+                    _require_ids_ack(
+                        ack_payload,
+                        "training_started",
+                        f"[fl_global_weights] peer={peer_conn_uri} round={round_num} intento={_attempt}",
                     )
                     _send_ok = True
                     break
@@ -2007,6 +2032,7 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                     "channel": "ids_ecc",
                 },
             )
+            return True
         else:
             resp = requests.post(
                 f"{peer_dataapp}/fl/receive-global-weights",
@@ -2036,10 +2062,12 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                     "channel": "http_direct",
                 },
             )
+            return True
     except Exception as exc:
         with _ws_perf_lock:
             _ws_perf_stats["ids_ecc_failures" if (FL_WEIGHTS_VIA_ECC or FL_IDS_ECC_ONLY) else "http_failures"] += 1
         log.error(f"Error enviando pesos globales a {peer_dataapp}: {exc}")
+        return False
 
 
 def _send_local_weights(weights_b64: str, n_samples: int,
@@ -2102,7 +2130,7 @@ def _send_local_weights(weights_b64: str, n_samples: int,
     t_start = time.time()
     for _attempt in range(1, _SEND_MAX_RETRIES + 1):
         try:
-            _ids_send(
+            ack_payload = _ids_send(
                 forward_to_url       = forward_target,
                 forward_to_connector = coordinator_conn_uri,
                 message_type         = "ids:ArtifactRequestMessage",
@@ -2112,6 +2140,11 @@ def _send_local_weights(weights_b64: str, n_samples: int,
                 extra_header         = {"ids:contentVersion": content_version},
                 use_local_ecc        = FL_IDS_ECC_ONLY or FL_WEIGHTS_VIA_ECC,
                 timeout              = 120,
+            )
+            _require_ids_ack(
+                ack_payload,
+                "weights_received",
+                f"[fl_weights] worker={INSTANCE_ID} round={round_num} intento={_attempt}",
             )
             elapsed_ms = (time.time() - t_start) * 1000
             if _attempt > 1:
@@ -3456,9 +3489,11 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         _round_weights.clear()
         t0 = time.time()
 
+        active_peer_targets = list(zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS))
         if algo_bytes:
             log.info(f"[ronda {round_num}] Distribuyendo algorithm.py + fl_config.json a peers...")
             _peer_csvs = PEER_SELECTED_CSVS if PEER_SELECTED_CSVS else [None] * len(PEER_ECC_URLS)
+            active_peer_targets = []
             if FL_IDS_ECC_ONLY:
                 for p, u, csv in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS, _peer_csvs):
                     try:
@@ -3467,9 +3502,11 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                             next((w.get("transfer_contract") for w in _accepted_workers if w["connector_uri"] == u), None),
                             next((w.get("requested_artifact") for w in _accepted_workers if w["connector_uri"] == u), None),
                         )
-                        log.info(f"  [ronda {round_num}] -> {p}: {'[OK]' if ok else 'OK'}")
+                        log.info(f"  [ronda {round_num}] -> {p}: {'[OK]' if ok else '[FAIL]'}")
+                        if ok:
+                            active_peer_targets.append((p, u))
                     except Exception as exc:
-                        log.error(f"  [ronda {round_num}] -> {p}: OK {exc}")
+                        log.error(f"  [ronda {round_num}] -> {p}: [FAIL] {exc}")
                     time.sleep(0.25)
             else:
                 with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(PEER_ECC_URLS), 1)) as ex:
@@ -3485,42 +3522,38 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                         peer = futures[fut]
                         try:
                             ok = fut.result()
-                            log.info(f"  [ronda {round_num}] -> {peer}: {'[OK]' if ok else 'OK'}")
+                            log.info(f"  [ronda {round_num}] -> {peer}: {'[OK]' if ok else '[FAIL]'}")
+                            if ok:
+                                peer_idx = PEER_ECC_URLS.index(peer)
+                                active_peer_targets.append((peer, PEER_CONNECTOR_URIS[peer_idx]))
                         except Exception as exc:
-                            log.error(f"  [ronda {round_num}] -> {peer}: OK {exc}")
+                            log.error(f"  [ronda {round_num}] -> {peer}: [FAIL] {exc}")
+
+        if not active_peer_targets:
+            log.warning(f"[ronda {round_num}] Ningun peer quedo activo tras distribuir algoritmo/config.")
 
         if algo_bytes:
             time.sleep(3)
 
         # -- Enviar pesos globales usando la politica de transporte configurada --
-        if FL_IDS_ECC_ONLY:
-            for peer_url, peer_uri in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS):
-                try:
-                    _send_global_weights(
-                        peer_url,
-                        peer_uri,
-                        global_weights_b64,
-                        round_num,
-                        next((w.get("transfer_contract") for w in _accepted_workers if w["connector_uri"] == peer_uri), None),
-                        next((w.get("requested_artifact") for w in _accepted_workers if w["connector_uri"] == peer_uri), None),
-                    )
-                except Exception as exc:
-                    log.error(f"Error enviando pesos globales a {peer_url}: {exc}")
-                time.sleep(0.25)
-        else:
-            for peer_url, peer_uri in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS):
-                threading.Thread(
-                    target=_send_global_weights,
-                    args=(
-                        peer_url,
-                        peer_uri,
-                        global_weights_b64,
-                        round_num,
-                        next((w.get("transfer_contract") for w in _accepted_workers if w["connector_uri"] == peer_uri), None),
-                        next((w.get("requested_artifact") for w in _accepted_workers if w["connector_uri"] == peer_uri), None),
-                    ),
-                    daemon=True,
-                ).start()
+        weight_targets = []
+        for peer_url, peer_uri in active_peer_targets:
+            try:
+                ok = _send_global_weights(
+                    peer_url,
+                    peer_uri,
+                    global_weights_b64,
+                    round_num,
+                    next((w.get("transfer_contract") for w in _accepted_workers if w["connector_uri"] == peer_uri), None),
+                    next((w.get("requested_artifact") for w in _accepted_workers if w["connector_uri"] == peer_uri), None),
+                )
+                if ok:
+                    weight_targets.append((peer_url, peer_uri))
+                else:
+                    log.warning(f"[ronda {round_num}] Peer descartado por fallo enviando pesos globales: {peer_uri}")
+            except Exception as exc:
+                log.error(f"Error enviando pesos globales a {peer_url}: {exc}")
+            time.sleep(0.25)
 
         _coord_local_extra = {}
         try:
@@ -3539,7 +3572,22 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         except Exception as exc:
             log.error(f"Error en entrenamiento local ronda {round_num}: {exc}")
 
-        expected = len(PEER_ECC_URLS) + 1
+        expected = len(weight_targets) + 1
+        required_responses = min(expected, max(1, int(min_workers)))
+        if expected < min_workers:
+            log.error(
+                f"Ronda {round_num}: peers activos insuficientes tras distribucion/envio "
+                f"({expected}/{min_workers} contando al coordinator)"
+            )
+            with _fl_lock:
+                fl_state["status"] = "failed"
+            _notify_ws_clients({
+                "event": "fl_failed",
+                "round": round_num,
+                "reason": "active_workers_not_reached",
+                "status": "failed"
+            })
+            return
         deadline = time.time() + round_timeout
         while time.time() < deadline:
             with _fl_lock:
@@ -3547,9 +3595,13 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                     log.warning(f"Ronda {round_num} abortada: el sistema fue reseteado (/reset).")
                     return
             with _round_lock:
-                if len(_round_weights) >= expected:
+                received = len(_round_weights)
+                if received >= required_responses:
                     break
-            log.info(f"Esperando pesos... {len(_round_weights)}/{expected}")
+            log.info(
+                f"Esperando pesos... {received}/{required_responses} "
+                f"(objetivo minimo, {expected} maximo contando al coordinator)"
+            )
             time.sleep(2)
 
         with _round_lock:
@@ -3566,6 +3618,11 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                 "status": "failed"
             })
             return
+        if len(results) < expected:
+            log.warning(
+                f"Ronda {round_num}: continuando con quorum minimo {len(results)}/{required_responses} "
+                f"(faltaron {expected - len(results)} respuesta(s) de peers)"
+            )
 
         global_weights_b64 = _weights_to_b64(_fedavg(results))
         elapsed            = round(time.time() - t0, 2)

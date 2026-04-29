@@ -1409,7 +1409,7 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
             per_class = model_data.get("per_class_report", {})
 
             if class_names:
-                step("Distribución de Clases (UNSW-NB15)")
+                step("Distribución de aciertos de cada clase (UNSW-NB15)")
                 n_classes = len(class_names)
                 field("Modo de clasificación", f"Multiclase ({n_classes} clases)" if n_classes > 2 else "Binario")
                 print()
