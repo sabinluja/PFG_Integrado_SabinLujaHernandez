@@ -1096,6 +1096,7 @@ def _ids_send(
     peer_algorithm      : bool = False,
     extra_header        : dict | None = None,
     use_local_ecc       : bool = False,
+    timeout             : int = 60,
 ) -> dict:
     extra = {}
     if requested_artifact:  extra["ids:requestedArtifact"]  = {"@id": requested_artifact}
@@ -1146,7 +1147,7 @@ def _ids_send(
         headers=_http_headers,
         verify=TLS_CERT,
         auth=_auth,
-        timeout=60,
+        timeout=timeout,
     )
     return _parse_ids_http_response(resp)
 
@@ -1952,20 +1953,39 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
         "coordinator_transfer_contract": local_transfer_contract,
         "coordinator_requested_artifact": local_requested_artifact,
     }
-    payload_b64 = base64.b64encode(json.dumps(payload_dict).encode()).decode()
+    import gzip as _gzip
+    payload_raw = json.dumps(payload_dict).encode("utf-8")
+    payload_compressed = _gzip.compress(payload_raw)
+    payload_b64 = base64.b64encode(payload_compressed).decode("utf-8")
     try:
         if FL_WEIGHTS_VIA_ECC or not ALLOW_IDS_BYPASS:
             forward_target = _ecc_forward_url(peer_ecc_url) if FL_IDS_ECC_ONLY else peer_ecc_url
-            _ids_send(
-                forward_to_url       = forward_target,
-                forward_to_connector = peer_conn_uri,
-                message_type         = "ids:ArtifactRequestMessage",
-                requested_artifact   = requested_artifact,
-                transfer_contract    = transfer_contract,
-                payload              = payload_dict,
-                extra_header         = {"ids:contentVersion": f"fl_global_weights::{round_num}::payload::{payload_b64}"},
-                use_local_ecc        = FL_IDS_ECC_ONLY or FL_WEIGHTS_VIA_ECC,
-            )
+            
+            _SEND_MAX_RETRIES = 3
+            _send_ok = False
+            t_start = time.time()
+            for _attempt in range(1, _SEND_MAX_RETRIES + 1):
+                try:
+                    _ids_send(
+                        forward_to_url       = forward_target,
+                        forward_to_connector = peer_conn_uri,
+                        message_type         = "ids:ArtifactRequestMessage",
+                        requested_artifact   = requested_artifact,
+                        transfer_contract    = transfer_contract,
+                        payload              = payload_dict,
+                        extra_header         = {"ids:contentVersion": f"fl_global_weights::{round_num}::gzip::payload::{payload_b64}"},
+                        use_local_ecc        = FL_IDS_ECC_ONLY or FL_WEIGHTS_VIA_ECC,
+                        timeout              = 120,
+                    )
+                    _send_ok = True
+                    break
+                except Exception as exc:
+                    _backoff = 3 * (2 ** (_attempt - 1))
+                    if _attempt < _SEND_MAX_RETRIES:
+                        log.warning(f"[fl_global_weights] Intento {_attempt}/{_SEND_MAX_RETRIES} fallo a {forward_target}: {exc} -- retry en {_backoff}s")
+                        time.sleep(_backoff)
+                    else:
+                        raise Exception(f"{_SEND_MAX_RETRIES} intentos agotados: {exc}")
             elapsed_ms = (time.time() - t_start) * 1000
             log.info(
                 f"  Pesos globales ronda {round_num} -> {forward_target} "
@@ -2043,7 +2063,10 @@ def _send_local_weights(weights_b64: str, n_samples: int,
         "n_samples"  : n_samples,
         "metrics"    : metrics,
     }
-    payload_b64 = base64.b64encode(json.dumps(_ws_payload).encode()).decode()
+    import gzip as _gzip
+    payload_raw = json.dumps(_ws_payload).encode("utf-8")
+    payload_compressed = _gzip.compress(payload_raw)
+    payload_b64 = base64.b64encode(payload_compressed).decode("utf-8")
 
     if not coordinator_requested_artifact and coordinator_conn_uri:
         _coord_contract, _coord_artifact = _peer_contract_artifact(
@@ -2072,69 +2095,96 @@ def _send_local_weights(weights_b64: str, n_samples: int,
         return
 
     forward_target = _ecc_forward_url(coordinator_ecc_url)  # wss://ecc-coord:8086/data
-    content_version = f"fl_weights::{INSTANCE_ID}::{round_num}::payload::{payload_b64}"
+    content_version = f"fl_weights::{INSTANCE_ID}::{round_num}::gzip::payload::{payload_b64}"
+    # ── Retry con backoff exponencial (ECC Java falla intermitentemente con payloads grandes) ──
+    _SEND_MAX_RETRIES = 3
+    _send_ok = False
     t_start = time.time()
-    try:
-        _ids_send(
-            forward_to_url       = forward_target,
-            forward_to_connector = coordinator_conn_uri,
-            message_type         = "ids:ArtifactRequestMessage",
-            requested_artifact   = coordinator_requested_artifact,
-            transfer_contract    = coordinator_transfer_contract,
-            payload              = _ws_payload,
-            extra_header         = {"ids:contentVersion": content_version},
-            use_local_ecc        = FL_IDS_ECC_ONLY or FL_WEIGHTS_VIA_ECC,
-        )
-        elapsed_ms = (time.time() - t_start) * 1000
-        log.info(
-            f"  Pesos locales ronda {round_num} -> {forward_target} "
-            f"[OK IDS via ECC]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
-        )
-        _record_ws_perf("ids_ecc", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}->coord")
-        _report_to_ch(
-            message_type="ids:ArtifactRequestMessage",
-            source_connector=CONNECTOR_URI,
-            target_connector=coordinator_conn_uri,
-            status="success",
-            response_time_ms=elapsed_ms,
-            additional_data={
-                "event"      : "local_weights_sent_ids_ecc",
-                "round"      : round_num,
-                "worker"     : INSTANCE_ID,
-                "n_samples"  : n_samples,
-                "payload_kb" : round(payload_size / 1024, 1),
-                "channel"    : "ids_ecc_wss",
-                "forward_target": forward_target,
-            },
-        )
-    except Exception as exc:
-        with _ws_perf_lock:
-            _ws_perf_stats["ids_ecc_failures"] += 1
-        log.error(
-            f"[fl_weights] Error enviando pesos locales via IDS ECC a {forward_target}: {exc}"
-            " -- Fallback: POST directo al coordinator DataApp"
-        )
-        # ── Fallback HTTP directo si IDS ECC falla ────────────────────────────
-        if not ALLOW_IDS_BYPASS:
-            log.error("[fl_weights] ALLOW_IDS_BYPASS=false -- no se hace fallback HTTP")
-            return
+    for _attempt in range(1, _SEND_MAX_RETRIES + 1):
         try:
-            t_start_fb = time.time()
-            resp = requests.post(
-                f"{coord_dataapp}/fl/receive-local-weights",
-                json=_ws_payload,
-                timeout=60,
-                verify=TLS_CERT,
+            _ids_send(
+                forward_to_url       = forward_target,
+                forward_to_connector = coordinator_conn_uri,
+                message_type         = "ids:ArtifactRequestMessage",
+                requested_artifact   = coordinator_requested_artifact,
+                transfer_contract    = coordinator_transfer_contract,
+                payload              = _ws_payload,
+                extra_header         = {"ids:contentVersion": content_version},
+                use_local_ecc        = FL_IDS_ECC_ONLY or FL_WEIGHTS_VIA_ECC,
+                timeout              = 120,
             )
-            resp.raise_for_status()
-            elapsed_fb = (time.time() - t_start_fb) * 1000
+            elapsed_ms = (time.time() - t_start) * 1000
+            if _attempt > 1:
+                log.info(
+                    f"  [fl_weights] Exito en intento {_attempt}/{_SEND_MAX_RETRIES}"
+                )
             log.info(
-                f"  Pesos locales ronda {round_num} -> coordinator {coord_dataapp} "
-                f"[OK fallback HTTP]  {payload_size/1024:.0f} KB en {elapsed_fb:.1f}ms"
+                f"  Pesos locales ronda {round_num} -> {forward_target} "
+                f"[OK IDS via ECC]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
             )
-            _record_ws_perf("http", elapsed_fb, payload_size, round_num, f"local-w{INSTANCE_ID}->coord(fb)")
-        except Exception as exc2:
-            log.error(f"[fl_weights] Fallback HTTP tambien fallo: {exc2}")
+            _record_ws_perf("ids_ecc", elapsed_ms, payload_size, round_num, f"local-w{INSTANCE_ID}->coord")
+            _report_to_ch(
+                message_type="ids:ArtifactRequestMessage",
+                source_connector=CONNECTOR_URI,
+                target_connector=coordinator_conn_uri,
+                status="success",
+                response_time_ms=elapsed_ms,
+                additional_data={
+                    "event"      : "local_weights_sent_ids_ecc",
+                    "round"      : round_num,
+                    "worker"     : INSTANCE_ID,
+                    "n_samples"  : n_samples,
+                    "payload_kb" : round(payload_size / 1024, 1),
+                    "channel"    : "ids_ecc_wss",
+                    "forward_target": forward_target,
+                    "attempt"    : _attempt,
+                },
+            )
+            _send_ok = True
+            break
+        except Exception as exc:
+            _backoff = 3 * (2 ** (_attempt - 1))  # 3s, 6s, 12s
+            if _attempt < _SEND_MAX_RETRIES:
+                log.warning(
+                    f"[fl_weights] Intento {_attempt}/{_SEND_MAX_RETRIES} fallo enviando "
+                    f"pesos ronda {round_num} a {forward_target}: {exc} "
+                    f"-- retry en {_backoff}s"
+                )
+                time.sleep(_backoff)
+            else:
+                with _ws_perf_lock:
+                    _ws_perf_stats["ids_ecc_failures"] += 1
+                log.error(
+                    f"[fl_weights] {_SEND_MAX_RETRIES} intentos agotados enviando pesos "
+                    f"ronda {round_num} a {forward_target}: {exc}"
+                    " -- Fallback: POST directo al coordinator DataApp"
+                )
+
+    if _send_ok:
+        return
+
+    # ── Fallback HTTP directo si todos los reintentos IDS ECC fallaron ─────
+    if not ALLOW_IDS_BYPASS:
+        log.error("[fl_weights] ALLOW_IDS_BYPASS=false -- no se hace fallback HTTP")
+        return
+
+    try:
+        t_start_fb = time.time()
+        resp = requests.post(
+            f"{coord_dataapp}/fl/receive-local-weights",
+            json=_ws_payload,
+            timeout=60,
+            verify=TLS_CERT,
+        )
+        resp.raise_for_status()
+        elapsed_fb = (time.time() - t_start_fb) * 1000
+        log.info(
+            f"  Pesos locales ronda {round_num} -> coordinator {coord_dataapp} "
+            f"[OK fallback HTTP]  {payload_size/1024:.0f} KB en {elapsed_fb:.1f}ms"
+        )
+        _record_ws_perf("http", elapsed_fb, payload_size, round_num, f"local-w{INSTANCE_ID}->coord(fb)")
+    except Exception as exc2:
+        log.error(f"[fl_weights] Fallback HTTP tambien fallo: {exc2}")
 
 
 def _publish_fl_model_as_ids_resource(
@@ -3902,11 +3952,20 @@ async def ids_data(request: Request):
                     if not payload_dict.get("type"):
                         _cv = content_version
                         # fl_weights::workerX::roundN::payload::<b64>
+                        # fl_weights::workerX::roundN::gzip::payload::<b64>
                         if "::payload::" in _cv:
                             try:
-                                _b64_payload = _cv.split("::payload::", 1)[1]
-                                payload_dict = json.loads(base64.b64decode(_b64_payload).decode())
-                                log.info(f"[ArtifactRequest] payload recuperado desde contentVersion b64: type={payload_dict.get('type','?')!r}")
+                                is_gzipped = "::gzip::payload::" in _cv
+                                _splitter = "::gzip::payload::" if is_gzipped else "::payload::"
+                                _b64_payload = _cv.split(_splitter, 1)[1]
+                                
+                                _raw_bytes = base64.b64decode(_b64_payload)
+                                if is_gzipped:
+                                    import gzip as _gzip
+                                    _raw_bytes = _gzip.decompress(_raw_bytes)
+                                    
+                                payload_dict = json.loads(_raw_bytes.decode("utf-8"))
+                                log.info(f"[ArtifactRequest] payload recuperado desde contentVersion b64 (gzip={is_gzipped}): type={payload_dict.get('type','?')!r}")
                             except Exception as _e:
                                 log.error(f"[ArtifactRequest] Error decodificando payload b64 de contentVersion: {_e}")
                     # Ultimo recurso: inferir solo el tipo desde el prefijo
