@@ -2,16 +2,17 @@
 algorithm.py -- FL Worker: Clasificacion Multiclase de Intrusiones de Red
 =========================================================================
 Dataset: UNSW-NB15 (Moustafa & Slay, 2015)
-         10 clases: Normal + 9 tipos de ataque
+         5 clases: top-4 mas frecuentes + cola agrupada
 Modelo:  DNN con BatchNorm, Dropout, Focal Loss y SMOTE
 Agregacion FL: FedAvg -- McMahan et al. (2017)
 
-Mejoras v2:
+Mejoras v3:
+  - Agrupacion a 5 clases para reducir la cola extrema del dataset
   - Focal Loss (Lin et al., 2017) para clases desbalanceadas
-  - SMOTE oversampling en clases minoritarias
-  - Label Smoothing (0.1)
-  - Cosine Decay LR schedule
-  - Red mas ancha (512->256->128->64->10)
+  - SMOTE sobre el conjunto de entrenamiento
+  - Label Smoothing suave
+  - Features numericas estandarizadas
+  - Refuerzo dirigido a Exploits, Fuzzers y GroupedAttacks
 
 Referencias:
   McMahan et al. (2017) - Communication-Efficient Learning - AISTATS 2017
@@ -20,7 +21,7 @@ Referencias:
   Moustafa & Slay (2015) - UNSW-NB15 - MilCIS 2015
 """
 
-import os, json, base64, logging, hashlib
+import os, json, base64, logging
 import numpy as np
 import pandas as pd
 
@@ -45,15 +46,40 @@ log = logging.getLogger(__name__)
 # ============================================================================
 LABEL_COL = "label"
 ATTACK_CAT_COL = "attack_cat"
+ATTACK_GROUP_COL = "attack_group"
 ATTACK_CATEGORIES = [
-    "Normal", "Analysis", "Backdoor", "DoS", "Exploits",
-    "Fuzzers", "Generic", "Reconnaissance", "Shellcode", "Worms"
+    "Benign",
+    "GenericAttack",
+    "Exploits",
+    "Fuzzers",
+    "GroupedAttacks",
 ]
+ATTACK_GROUP_MAP = {
+    "normal": "Benign",
+    "benign": "Benign",
+    "generic": "GenericAttack",
+    "genericattack": "GenericAttack",
+    "exploits": "Exploits",
+    "fuzzers": "Fuzzers",
+    # Clases antiguas del agrupado a 7 clases, soportadas para compatibilidad.
+    "dos": "GroupedAttacks",
+    "probe": "GroupedAttacks",
+    "malware": "GroupedAttacks",
+    "otherattack": "GroupedAttacks",
+    "groupedattacks": "GroupedAttacks",
+    # Taxonomia original de UNSW-NB15.
+    "analysis": "GroupedAttacks",
+    "reconnaissance": "GroupedAttacks",
+    "backdoor": "GroupedAttacks",
+    "shellcode": "GroupedAttacks",
+    "worms": "GroupedAttacks",
+}
 CAT_TO_IDX = {cat: idx for idx, cat in enumerate(ATTACK_CATEGORIES)}
 
 FEATURE_COLS = [
     "dur", "spkts", "dpkts", "sbytes", "dbytes",
     "rate", "sload", "dload", "sloss", "dloss",
+    "sttl", "dttl",
     "sinpkt", "dinpkt", "sjit", "djit",
     "swin", "stcpb", "dtcpb", "dwin",
     "tcprtt", "synack", "ackdat",
@@ -69,17 +95,43 @@ LOG_TRANSFORM_COLS = [
     "response_body_len", "sloss", "dloss",
     "sinpkt", "dinpkt", "sjit", "djit", "stcpb", "dtcpb"
 ]
-CATEGORICAL_HASH_COLS = {
-    "proto": 16,
-    "state": 8,
-    "service": 16,
-}
 CONFIG_PATH = "/home/nobody/data/fl_config.json"
 ULTRA_RARE_CLASS_COUNT = 8
 RARE_CLASS_COUNT = 40
 MINORITY_TARGET_RATIO = 0.2
 MINORITY_TARGET_FLOOR = 32
 MINORITY_TARGET_CAP = 400
+TAIL_CLASS_FRACTION = 0.4
+CLASS_TARGET_RATIOS = {
+    "Benign": 0.0,
+    "GenericAttack": 0.0,
+    "Exploits": 0.22,
+    "Fuzzers": 0.24,
+    "GroupedAttacks": 0.30,
+}
+CLASS_FOCUS_BOOST = {
+    "Exploits": 1.12,
+    "Fuzzers": 1.15,
+    "GroupedAttacks": 1.22,
+}
+CLASS_WEIGHT_FLOORS = {
+    "Benign": 0.85,
+    "GenericAttack": 0.95,
+    "Exploits": 1.15,
+    "Fuzzers": 1.30,
+    "GroupedAttacks": 1.40,
+}
+CLASS_WEIGHT_CEILINGS = {
+    "Benign": 0.95,
+    "GenericAttack": 1.05,
+    "Exploits": 1.30,
+    "Fuzzers": 1.45,
+    "GroupedAttacks": 1.55,
+}
+FOCUS_CLASSES = ("Exploits", "Fuzzers", "GroupedAttacks")
+ROS_ONLY_CLASSES = set()
+SMOTE_CLASSES = {"Exploits", "Fuzzers", "GroupedAttacks"}
+MIN_SMOTE_COUNT = 24
 
 
 # ============================================================================
@@ -172,17 +224,17 @@ class FedProxModel(keras.Model):
 # ============================================================================
 def load_config(config_path=CONFIG_PATH):
     defaults = {
-        "rounds": 25,
+        "rounds": 12,
         "round_timeout": 180,
-        "min_workers": 2,
-        "epochs": 5,
+        "min_workers": 3,
+        "epochs": 10,
         "batch_size": 128,
         "learning_rate": 0.001,
         "test_split": 0.2,
-        "early_stopping_patience": 2,
-        "focal_gamma": 1.25,
-        "label_smoothing": 0.02,
-        "fedprox_mu": 0.005,
+        "early_stopping_patience": 3,
+        "focal_gamma": 1.5,
+        "label_smoothing": 0.01,
+        "fedprox_mu": 0.001,
     }
     if config_path and os.path.exists(config_path):
         try:
@@ -214,8 +266,28 @@ def _minority_target_size(class_count, majority_count):
     return min(MINORITY_TARGET_CAP, target)
 
 
+def _target_size_for_class(class_name, class_count, majority_count):
+    ratio = float(CLASS_TARGET_RATIOS.get(class_name, MINORITY_TARGET_RATIO))
+    if ratio <= 0:
+        return int(class_count)
+
+    growth = 2.0
+    if class_name == "Exploits":
+        growth = 2.1
+    elif class_name == "Fuzzers":
+        growth = 2.25
+    elif class_name == "GroupedAttacks":
+        growth = 2.35
+    target = max(
+        MINORITY_TARGET_FLOOR,
+        int(np.ceil(majority_count * ratio)),
+        int(np.ceil(class_count * growth)),
+    )
+    return min(MINORITY_TARGET_CAP, target)
+
+
 def _apply_smote(X, y, num_classes):
-    """Oversampling hibrido para reforzar clases muy raras y minoritarias."""
+    """SMOTE clasico sobre las clases minoritarias; ROS queda solo como respaldo si una clase es demasiado pequena."""
     try:
         from imblearn.over_sampling import RandomOverSampler, SMOTE
         class_counts = np.bincount(y, minlength=num_classes)
@@ -225,11 +297,20 @@ def _apply_smote(X, y, num_classes):
         majority_count = int(present_counts.max())
 
         ros_strategy = {}
+        smote_strategy = {}
         for cls_idx, count in enumerate(class_counts):
             if count <= 0 or count >= majority_count:
                 continue
-            if count <= 5:
-                ros_strategy[cls_idx] = max(6, _minority_target_size(count, majority_count) // 2)
+            class_name = ATTACK_CATEGORIES[cls_idx]
+            target = _target_size_for_class(class_name, count, majority_count)
+            if target <= count:
+                continue
+            if class_name in ROS_ONLY_CLASSES or count < MIN_SMOTE_COUNT:
+                ros_strategy[cls_idx] = target
+            elif class_name in SMOTE_CLASSES:
+                smote_strategy[cls_idx] = target
+            else:
+                ros_strategy[cls_idx] = target
 
         X_res, y_res = X, y
         if ros_strategy:
@@ -241,61 +322,49 @@ def _apply_smote(X, y, num_classes):
             )
 
         class_counts = np.bincount(y_res, minlength=num_classes)
-        smote_strategy = {}
-        for cls_idx, count in enumerate(class_counts):
-            if count < 6:
-                continue
-            target = _minority_target_size(count, majority_count)
-            if count < target:
-                smote_strategy[cls_idx] = target
+        smote_strategy = {
+            cls_idx: target
+            for cls_idx, target in smote_strategy.items()
+            if class_counts[cls_idx] >= 6 and class_counts[cls_idx] < target
+        }
 
-        if not smote_strategy:
-            return X_res, y_res
-
-        min_smote_count = min(class_counts[c] for c in smote_strategy)
-        sm = SMOTE(
-            sampling_strategy=smote_strategy,
-            random_state=SEED,
-            k_neighbors=max(1, min(5, min_smote_count - 1))
-        )
-        X_bal, y_bal = sm.fit_resample(X_res, y_res)
-        log.info(
-            f"[algorithm] SMOTE: {len(X_res)} -> {len(X_bal)} muestras "
-            f"(clases oversampled: {list(smote_strategy.keys())})"
-        )
+        X_bal, y_bal = X_res, y_res
+        if smote_strategy:
+            min_smote_count = min(class_counts[c] for c in smote_strategy)
+            sm = SMOTE(
+                sampling_strategy=smote_strategy,
+                random_state=SEED,
+                k_neighbors=max(3, min(7, min_smote_count - 1)),
+            )
+            X_bal, y_bal = sm.fit_resample(X_bal, y_bal)
+            log.info(
+                f"[algorithm] SMOTE: {len(X_res)} -> {len(X_bal)} muestras "
+                f"(clases oversampled: {list(smote_strategy.keys())})"
+            )
         return X_bal, y_bal
     except Exception as e:
         log.warning(f"[algorithm] SMOTE no disponible, continuando sin oversample: {e}")
         return X, y
 
 
-def _stable_bucket(value, n_buckets):
-    token = str(value).strip().lower().encode("utf-8")
-    digest = hashlib.md5(token).hexdigest()
-    return int(digest, 16) % n_buckets
+def _group_attack_category(value):
+    raw = str(value).strip()
+    if not raw:
+        return "Benign"
+    return ATTACK_GROUP_MAP.get(raw.lower(), "Benign")
 
 
-def _build_hashed_categorical_features(df):
-    matrices = []
-    feature_names = []
-    present_cols = []
-    for col, n_buckets in CATEGORICAL_HASH_COLS.items():
-        if col not in df.columns:
-            continue
-        raw_values = df[col].fillna("unknown").astype(str).str.strip().str.lower()
-        if raw_values.empty:
-            continue
-        present_cols.append(col)
-        bucket_idx = raw_values.map(lambda v: _stable_bucket(v or "unknown", n_buckets)).to_numpy(dtype=np.int32)
-        one_hot = np.zeros((len(raw_values), n_buckets), dtype=np.float32)
-        one_hot[np.arange(len(raw_values)), bucket_idx] = 1.0
-        matrices.append(one_hot)
-        feature_names.extend([f"{col}_hash_{i}" for i in range(n_buckets)])
-    if present_cols:
-        log.info(f"[algorithm] Features categoricas hash activas: {present_cols}")
-    else:
-        log.info("[algorithm] CSV sin proto/state/service -- continuando solo con features numericas")
-    return matrices, feature_names
+def _select_tail_labels(y_values, present_labels):
+    if not present_labels:
+        return []
+    class_counts = {
+        int(label): int(np.sum(y_values == label))
+        for label in present_labels
+    }
+    ordered = sorted(present_labels, key=lambda label: (class_counts[int(label)], int(label)))
+    tail_k = max(1, int(np.ceil(len(ordered) * TAIL_CLASS_FRACTION)))
+    cutoff = class_counts[int(ordered[min(tail_k - 1, len(ordered) - 1)])]
+    return [int(label) for label in ordered if class_counts[int(label)] <= cutoff]
 
 
 def load_unsw_nb15(data_path, test_split=0.2):
@@ -303,13 +372,30 @@ def load_unsw_nb15(data_path, test_split=0.2):
     df = pd.read_csv(data_path, low_memory=False)
     df.columns = [c.lower().strip() for c in df.columns]
 
-    if ATTACK_CAT_COL in df.columns:
-        df[ATTACK_CAT_COL] = df[ATTACK_CAT_COL].fillna("Normal").str.strip()
-        df.loc[df[ATTACK_CAT_COL] == "", ATTACK_CAT_COL] = "Normal"
-        y_series = df[ATTACK_CAT_COL].map(CAT_TO_IDX).fillna(0).astype(int)
+    if ATTACK_GROUP_COL in df.columns:
+        df[ATTACK_GROUP_COL] = (
+            df[ATTACK_GROUP_COL]
+            .fillna("Normal")
+            .astype(str)
+            .str.strip()
+            .map(_group_attack_category)
+        )
+        y_series = df[ATTACK_GROUP_COL].map(CAT_TO_IDX).fillna(0).astype(int)
         num_classes = len(ATTACK_CATEGORIES)
         class_names = list(ATTACK_CATEGORIES)
-        log.info(f"[algorithm] Modo MULTICLASE detectado ({num_classes} clases)")
+        grouped_counts = df[ATTACK_GROUP_COL].value_counts().to_dict()
+        log.info(f"[algorithm] Modo MULTICLASE AGRUPADO detectado desde attack_group ({num_classes} clases)")
+        log.info(f"[algorithm] Grupos de ataque activos: {grouped_counts}")
+    elif ATTACK_CAT_COL in df.columns:
+        df[ATTACK_CAT_COL] = df[ATTACK_CAT_COL].fillna("Normal").astype(str).str.strip()
+        df.loc[df[ATTACK_CAT_COL] == "", ATTACK_CAT_COL] = "Normal"
+        grouped_attack = df[ATTACK_CAT_COL].map(_group_attack_category)
+        y_series = grouped_attack.map(CAT_TO_IDX).fillna(0).astype(int)
+        num_classes = len(ATTACK_CATEGORIES)
+        class_names = list(ATTACK_CATEGORIES)
+        grouped_counts = grouped_attack.value_counts().to_dict()
+        log.info(f"[algorithm] Modo MULTICLASE AGRUPADO detectado ({num_classes} clases)")
+        log.info(f"[algorithm] Grupos de ataque activos: {grouped_counts}")
     else:
         if LABEL_COL not in df.columns:
             num_cols = df.select_dtypes(include="number").columns.tolist()
@@ -332,15 +418,15 @@ def load_unsw_nb15(data_path, test_split=0.2):
         if p99 > 0:
             X_df[col] = X_df[col].clip(upper=p99)
 
+    ignored_cat_cols = [col for col in ("proto", "service", "state") if col in df.columns]
+    if ignored_cat_cols:
+        log.info(
+            f"[algorithm] Columnas categoricas presentes pero excluidas del modelo: {ignored_cat_cols}"
+        )
+
     scaler = StandardScaler()
-    X_num = np.nan_to_num(scaler.fit_transform(X_df.values).astype(np.float32))
-    cat_matrices, cat_feature_names = _build_hashed_categorical_features(df)
-    if cat_matrices:
-        X = np.hstack([X_num] + cat_matrices).astype(np.float32)
-        feature_cols = available + cat_feature_names
-    else:
-        X = X_num
-        feature_cols = list(available)
+    X = np.nan_to_num(scaler.fit_transform(X_df.values).astype(np.float32))
+    feature_cols = list(available)
     y = y_series.values.astype(np.int32)
 
     try:
@@ -366,7 +452,8 @@ def load_unsw_nb15(data_path, test_split=0.2):
 def compute_training_class_weights(train_class_counts, class_names):
     """
     Pesos de clase basados en la distribucion original del train
-    antes del oversampling, con boost extra para clases muy raras.
+    antes del oversampling. Se priorizan solo las clases realmente
+    conflictivas para no sobre-optimizar Benign o GenericAttack.
     """
     counts = np.asarray(train_class_counts, dtype=np.float32)
     total = float(counts.sum())
@@ -375,21 +462,23 @@ def compute_training_class_weights(train_class_counts, class_names):
         return None, None
 
     num_present = float(np.sum(present_mask))
-    balanced = np.ones_like(counts, dtype=np.float32)
-    balanced[present_mask] = total / (num_present * counts[present_mask])
-
-    beta = 0.999
-    effective = np.ones_like(counts, dtype=np.float32)
-    effective[present_mask] = (1.0 - beta) / (1.0 - np.power(beta, counts[present_mask]))
-
     combined = np.ones_like(counts, dtype=np.float32)
-    combined[present_mask] = np.sqrt(balanced[present_mask] * effective[present_mask])
+    combined[present_mask] = total / (num_present * counts[present_mask])
 
-    rarity_boost = np.ones_like(counts, dtype=np.float32)
-    rarity_boost[(counts > 0) & (counts <= ULTRA_RARE_CLASS_COUNT)] = 1.8
-    rarity_boost[(counts > ULTRA_RARE_CLASS_COUNT) & (counts <= RARE_CLASS_COUNT)] = 1.35
-    combined *= rarity_boost
-    combined[present_mask] = np.clip(combined[present_mask], 0.5, 8.0)
+    focus_boost = np.ones_like(counts, dtype=np.float32)
+    for idx, class_name in enumerate(class_names):
+        focus_boost[idx] = float(CLASS_FOCUS_BOOST.get(class_name, 1.0))
+    combined *= focus_boost
+
+    if np.any(present_mask):
+        combined[present_mask] = combined[present_mask] / np.mean(combined[present_mask])
+
+    for idx, class_name in enumerate(class_names):
+        if not present_mask[idx]:
+            continue
+        floor = float(CLASS_WEIGHT_FLOORS.get(class_name, 0.9))
+        ceiling = float(CLASS_WEIGHT_CEILINGS.get(class_name, 1.6))
+        combined[idx] = float(np.clip(combined[idx], floor, ceiling))
 
     cw_list = [float(v) for v in combined]
     cw_dict = {i: cw_list[i] for i in range(len(cw_list))}
@@ -403,9 +492,9 @@ def compute_training_class_weights(train_class_counts, class_names):
 # ============================================================================
 # Modelo v2: red mas ancha con Focal Loss
 # ============================================================================
-def build_model(input_dim, num_classes, learning_rate=0.0015,
+def build_model(input_dim, num_classes, learning_rate=0.001,
                 class_weights=None, total_steps=100,
-                focal_gamma=1.5, label_smoothing=0.05,
+                focal_gamma=1.5, label_smoothing=0.01,
                 prox_mu=0.0):
     """
     DNN v2: 512->256->128->64->num_classes
@@ -416,17 +505,17 @@ def build_model(input_dim, num_classes, learning_rate=0.0015,
     x = keras.layers.Dense(512, activation="relu", name="dense_1",
                            kernel_regularizer=keras.regularizers.l2(1e-4))(inputs)
     x = keras.layers.BatchNormalization(name="bn_1")(x)
-    x = keras.layers.Dropout(0.4, name="dropout_1")(x)
+    x = keras.layers.Dropout(0.32, name="dropout_1")(x)
 
     x = keras.layers.Dense(256, activation="relu", name="dense_2",
                            kernel_regularizer=keras.regularizers.l2(1e-4))(x)
     x = keras.layers.BatchNormalization(name="bn_2")(x)
-    x = keras.layers.Dropout(0.3, name="dropout_2")(x)
+    x = keras.layers.Dropout(0.24, name="dropout_2")(x)
 
     x = keras.layers.Dense(128, activation="relu", name="dense_3",
                            kernel_regularizer=keras.regularizers.l2(1e-4))(x)
     x = keras.layers.BatchNormalization(name="bn_3")(x)
-    x = keras.layers.Dropout(0.2, name="dropout_3")(x)
+    x = keras.layers.Dropout(0.16, name="dropout_3")(x)
 
     x = keras.layers.Dense(64, activation="relu", name="dense_4")(x)
 
@@ -436,17 +525,11 @@ def build_model(input_dim, num_classes, learning_rate=0.0015,
 
     model = FedProxModel(
         inputs=inputs, outputs=outputs,
-        name="fl_ids_multiclass_dnn_v3",
+        name="fl_ids_multiclass_dnn_v4",
         prox_mu=prox_mu
     )
 
     # Cosine Decay LR
-    lr_schedule = keras.optimizers.schedules.CosineDecay(
-        initial_learning_rate=learning_rate,
-        decay_steps=total_steps,
-        alpha=1e-5
-    )
-
     # Focal Loss con class weights
     loss_fn = SparseFocalLoss(
         gamma=focal_gamma,
@@ -456,7 +539,7 @@ def build_model(input_dim, num_classes, learning_rate=0.0015,
     )
 
     model.compile(
-        optimizer=keras.optimizers.Adam(learning_rate=lr_schedule),
+        optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
         loss=loss_fn,
         metrics=["accuracy"]
     )
@@ -497,6 +580,12 @@ def compute_full_metrics(model, X_val, y_val, class_names):
         target_names=class_names, output_dict=True, zero_division=0)
     per_class_f1 = {c: round(report[c]["f1-score"], 4)
                     for c in class_names if c in report}
+    focus_values = [
+        float(report[class_name]["f1-score"])
+        for class_name in FOCUS_CLASSES
+        if class_name in report
+    ]
+    focus_f1 = float(np.mean(focus_values)) if focus_values else 0.0
 
     # Feature importance (L1 norm primera capa)
     feat_imp = {}
@@ -518,6 +607,7 @@ def compute_full_metrics(model, X_val, y_val, class_names):
         "loss": round(loss_val, 6), "accuracy": round(acc_val, 6),
         "auc": round(auc_val, 6), "precision": round(prec, 6),
         "recall": round(rec, 6), "f1_macro": round(f1_m, 6),
+        "focus_f1": round(focus_f1, 6),
         "f1_weighted": round(f1_w, 6), "mcc": round(mcc, 6),
         "num_classes": len(class_names),
         "classification_mode": "multiclass" if len(class_names) > 2 else "binary",
@@ -526,7 +616,7 @@ def compute_full_metrics(model, X_val, y_val, class_names):
 
 
 class ValidationMacroF1Callback(keras.callbacks.Callback):
-    """Calcula macro-F1 por epoca para seleccionar mejor las clases minoritarias."""
+    """Calcula macro-F1 por epoca y mantiene visible el rendimiento de la cola."""
     def __init__(self, X_val, y_val, class_names):
         super().__init__()
         self.X_val = X_val
@@ -540,7 +630,7 @@ class ValidationMacroF1Callback(keras.callbacks.Callback):
         val_f1_macro = float(f1_score(self.y_val, y_pred, average="macro", zero_division=0))
 
         present_labels = sorted(set(int(v) for v in self.y_val.tolist()))
-        minority_labels = [i for i in present_labels if np.sum(self.y_val == i) <= RARE_CLASS_COUNT]
+        minority_labels = _select_tail_labels(self.y_val, present_labels)
         minority_f1 = 0.0
         if minority_labels:
             report = classification_report(
@@ -558,12 +648,30 @@ class ValidationMacroF1Callback(keras.callbacks.Callback):
             ]
             if values:
                 minority_f1 = float(np.mean(values))
-
+        tail_names = [self.class_names[i] for i in minority_labels]
+        focus_report = classification_report(
+            self.y_val,
+            y_pred,
+            labels=present_labels,
+            target_names=[self.class_names[i] for i in present_labels],
+            output_dict=True,
+            zero_division=0,
+        )
+        focus_values = [
+            float(focus_report[class_name]["f1-score"])
+            for class_name in FOCUS_CLASSES
+            if class_name in focus_report
+        ]
+        focus_f1 = float(np.mean(focus_values)) if focus_values else 0.0
         logs["val_f1_macro"] = val_f1_macro
         logs["val_minority_f1"] = minority_f1
+        logs["val_focus_f1"] = focus_f1
         log.info(
             f"[algorithm] epoch {epoch + 1}: "
-            f"val_f1_macro={val_f1_macro:.4f} val_minority_f1={minority_f1:.4f}"
+            f"val_f1_macro={val_f1_macro:.4f} "
+            f"val_minority_f1={minority_f1:.4f} "
+            f"val_focus_f1={focus_f1:.4f} "
+            f"tail_classes={tail_names}"
         )
 
 
@@ -589,10 +697,8 @@ def run(data_path, global_weights_b64=None, config_path=CONFIG_PATH):
 
     cw_list, _ = compute_training_class_weights(train_class_counts, class_names)
 
-    total_steps = (len(X_train) // batch_size + 1) * epochs
     model = build_model(input_dim, num_classes, learning_rate,
                         class_weights=cw_list,
-                        total_steps=total_steps,
                         focal_gamma=focal_gamma,
                         label_smoothing=label_smoothing,
                         prox_mu=fedprox_mu)

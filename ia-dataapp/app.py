@@ -374,17 +374,17 @@ def _report_to_ch(
 
 def _load_fl_config() -> dict:
     defaults = {
-        "rounds"       : 25,
-        "round_timeout": 180,
-        "min_workers"  : 2,
-        "epochs"       : 5,
+        "rounds"       : 12,
+        "round_timeout": 360,
+        "min_workers"  : 3,
+        "epochs"       : 10,
         "batch_size"   : 128,
         "learning_rate": 0.001,
         "test_split"   : 0.2,
-        "early_stopping_patience": 2,
-        "focal_gamma"  : 1.25,
-        "label_smoothing": 0.02,
-        "fedprox_mu"   : 0.005,
+        "early_stopping_patience": 3,
+        "focal_gamma"  : 1.5,
+        "label_smoothing": 0.01,
+        "fedprox_mu"   : 0.001,
         "force_http_fallback": False, # Nuevo: fuerza pasar por IDS para benchmarking
     }
     if os.path.exists(CONFIG_PATH):
@@ -1566,7 +1566,21 @@ def _fetch_algorithm_from_ecc(source_ecc_url: str, source_connector_uri: str) ->
 # =============================================================================
 
 def _algo_path() -> str:
-    return ALGO_IDS_PATH if os.path.exists(ALGO_IDS_PATH) else ALGO_BAKED_PATH
+    ids_exists = os.path.exists(ALGO_IDS_PATH)
+    baked_exists = os.path.exists(ALGO_BAKED_PATH)
+
+    if ids_exists and baked_exists:
+        try:
+            ids_mtime = os.path.getmtime(ALGO_IDS_PATH)
+            baked_mtime = os.path.getmtime(ALGO_BAKED_PATH)
+            if ids_mtime > baked_mtime:
+                return ALGO_IDS_PATH
+            return ALGO_BAKED_PATH
+        except Exception:
+            return ALGO_IDS_PATH
+    if ids_exists:
+        return ALGO_IDS_PATH
+    return ALGO_BAKED_PATH
 
 
 def _save_algorithm(data: bytes):
@@ -1855,7 +1869,7 @@ def _b64_to_weights(b64: str) -> list:
 
 def _fedavg(results: list) -> list:
     """FedAvg con norm clipping -- McMahan et al. (2017)."""
-    CLIP_NORM = 10.0
+    CLIP_NORM = 15.0
     total = sum(r["n_samples"] for r in results)
     agg   = None
     for r in results:
@@ -1890,6 +1904,10 @@ def _save_local_metrics(result: dict, round_num: int):
             "metrics"     : result.get("metrics"),
             "input_dim"   : result.get("input_dim"),
             "feature_cols": result.get("feature_cols"),
+            "class_names" : result.get("class_names", []),
+            "num_classes" : result.get("num_classes"),
+            "per_class_report": result.get("per_class_report", {}),
+            "confusion_matrix": result.get("confusion_matrix", []),
         })
         with open(metrics_path, "w") as f:
             json.dump(history, f, indent=2)
@@ -3444,6 +3462,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
     })
 
     global_weights_b64 = None
+    best_f1_macro      = -1.0
     best_accuracy      = -1.0
     best_weights_b64   = None
     best_metrics       = None
@@ -3629,7 +3648,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         total_samples      = sum(r["n_samples"] for r in results)
 
         global_metrics = {}
-        for key in ("loss", "accuracy", "auc", "precision", "recall", "f1_macro", "f1_weighted", "mcc"):
+        for key in ("loss", "accuracy", "auc", "precision", "recall", "f1_macro", "focus_f1", "f1_weighted", "mcc"):
             try:
                 global_metrics[key] = round(
                     sum(r["metrics"][key] * r["n_samples"] / total_samples
@@ -3637,6 +3656,12 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                 )
             except KeyError:
                 pass
+        if results:
+            ref_metrics = results[0].get("metrics", {})
+            if ref_metrics.get("classification_mode"):
+                global_metrics["classification_mode"] = ref_metrics["classification_mode"]
+            if ref_metrics.get("num_classes") is not None:
+                global_metrics["num_classes"] = ref_metrics["num_classes"]
 
         with _fl_lock:
             fl_state["history"].append({
@@ -3678,7 +3703,9 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         })
 
         acc = global_metrics.get("accuracy", 0)
-        if acc > best_accuracy:
+        f1_macro = global_metrics.get("f1_macro", 0)
+        if (f1_macro > best_f1_macro) or (f1_macro == best_f1_macro and acc > best_accuracy):
+            best_f1_macro = f1_macro
             best_accuracy = acc
             best_weights_b64 = global_weights_b64
             best_metrics = global_metrics
@@ -3694,7 +3721,11 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                     _save_data["class_names"] = _coord_local_extra["class_names"]
                     _save_data["num_classes"] = len(_coord_local_extra["class_names"])
                 json.dump(_save_data, f)
-            log.info(f"\u2728 Nueva mejor ronda encontrada ({best_round}) con acc={best_accuracy} \u2014 guardada en disco")
+            log.info(
+                f"\u2728 Nueva mejor ronda encontrada ({best_round}) con "
+                f"f1_macro={best_f1_macro} focus_f1={best_metrics.get('focus_f1', 0)} "
+                f"acc={best_accuracy} \u2014 guardada en disco"
+            )
 
         log.info(
             f"Ronda {round_num} OK en {elapsed}s  "

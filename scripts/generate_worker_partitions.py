@@ -1,15 +1,17 @@
 """
 generate_worker_partitions.py
-Genera particiones estratificadas del UNSW-NB15 training set para 3 workers de FL.
-Incluye attack_cat para clasificacion multiclase.
+Recalcula attack_group para UNSW-NB15 con un esquema de 5 clases y genera
+particiones heterogeneas para 3 workers de FL.
 
-Reparto HETEROGENEO (realista):
-  Worker-1: 50% (organizacion grande, e.g. hospital central)
-  Worker-2: 30% (organizacion mediana)
-  Worker-3: 20% (organizacion pequena, e.g. clinica rural)
+Nuevo esquema multiclase:
+  - Benign
+  - GenericAttack
+  - Exploits
+  - Fuzzers
+  - GroupedAttacks  (DoS + Reconnaissance + Analysis + Backdoor + Shellcode + Worms)
 
-Cada worker ve los MISMOS tipos de ataque pero en distinta cantidad.
-Esto simula un escenario real de Federated Learning con data heterogeneity.
+Ademas de las features numericas, se conservan proto/state/service y sttl/dttl
+para que el algoritmo pueda explotar mas senales del dataset.
 """
 import pandas as pd
 import numpy as np
@@ -20,11 +22,14 @@ np.random.seed(SEED)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
-RAW_CSV = os.path.join(PROJECT_DIR, "ia-dataapp", "data", "raw", "UNSW_NB15_training-set.csv")
+RAW_DIR = os.path.join(PROJECT_DIR, "ia-dataapp", "data", "raw")
+RAW_TRAIN_CSV = os.path.join(RAW_DIR, "UNSW_NB15_training-set.csv")
+RAW_TEST_CSV = os.path.join(RAW_DIR, "UNSW_NB15_testing-set.csv")
 
 FEATURE_COLS = [
     "dur", "spkts", "dpkts", "sbytes", "dbytes",
     "rate", "sload", "dload", "sloss", "dloss",
+    "sttl", "dttl",
     "sinpkt", "dinpkt", "sjit", "djit",
     "swin", "stcpb", "dtcpb", "dwin",
     "tcprtt", "synack", "ackdat",
@@ -35,37 +40,86 @@ FEATURE_COLS = [
     "ct_flw_http_mthd", "ct_src_ltm", "ct_srv_dst",
     "is_sm_ips_ports"
 ]
-
-KEEP_COLS = FEATURE_COLS + ["attack_cat", "label"]
-
-ATTACK_CATEGORIES = [
-    "Normal", "Analysis", "Backdoor", "DoS", "Exploits",
-    "Fuzzers", "Generic", "Reconnaissance", "Shellcode", "Worms"
+CATEGORICAL_COLS = ["proto", "service", "state"]
+KEEP_COLS = FEATURE_COLS + CATEGORICAL_COLS + ["attack_cat", "label", "attack_group"]
+RAW_ATTACK_CATEGORIES = [
+    "Normal", "Generic", "Exploits", "Fuzzers", "DoS",
+    "Reconnaissance", "Analysis", "Backdoor", "Shellcode", "Worms"
 ]
+ATTACK_GROUPS = [
+    "Benign", "GenericAttack", "Exploits", "Fuzzers", "GroupedAttacks"
+]
+ATTACK_GROUP_MAP = {
+    "normal": "Benign",
+    "benign": "Benign",
+    "generic": "GenericAttack",
+    "genericattack": "GenericAttack",
+    "exploits": "Exploits",
+    "fuzzers": "Fuzzers",
+    "dos": "GroupedAttacks",
+    "reconnaissance": "GroupedAttacks",
+    "analysis": "GroupedAttacks",
+    "backdoor": "GroupedAttacks",
+    "shellcode": "GroupedAttacks",
+    "worms": "GroupedAttacks",
+    # Compatibilidad por si el CSV ya venia agrupado.
+    "probe": "GroupedAttacks",
+    "malware": "GroupedAttacks",
+    "otherattack": "GroupedAttacks",
+    "groupedattacks": "GroupedAttacks",
+}
 
 # Reparto heterogeneo
 WORKER_FRACTIONS = {1: 0.50, 2: 0.30, 3: 0.20}
 WORKER_LABELS = {1: "Grande (50%)", 2: "Mediano (30%)", 3: "Pequeno (20%)"}
 
 
-def main():
-    print(f"Leyendo {RAW_CSV}...")
-    df = pd.read_csv(RAW_CSV, low_memory=False)
+def _group_attack(value):
+    raw = str(value).strip()
+    if not raw:
+        return "Benign"
+    return ATTACK_GROUP_MAP.get(raw.lower(), "Benign")
+
+
+def _prepare_unsw_dataframe(csv_path):
+    df = pd.read_csv(csv_path, low_memory=False)
     df.columns = [c.lower().strip() for c in df.columns]
-    print(f"  Total: {len(df)} filas, {len(df.columns)} columnas")
-
     if "attack_cat" not in df.columns:
-        raise ValueError("El CSV raw no contiene 'attack_cat'.")
-
+        raise ValueError(f"El CSV {csv_path} no contiene 'attack_cat'.")
     df["attack_cat"] = df["attack_cat"].fillna("Normal").astype(str).str.strip()
     df.loc[df["attack_cat"] == "", "attack_cat"] = "Normal"
+    df["attack_group"] = df["attack_cat"].map(_group_attack)
+    return df
 
-    print("\nDistribucion de clases en el dataset completo:")
-    class_counts = df["attack_cat"].value_counts().reindex(ATTACK_CATEGORIES, fill_value=0)
-    for cat in ATTACK_CATEGORIES:
-        count = class_counts[cat]
-        pct = count / len(df) * 100
-        print(f"  {cat:<20} {count:>7} ({pct:5.1f}%)")
+
+def _print_distribution(df, label_col, labels, title):
+    print(f"\n{title}:")
+    counts = df[label_col].value_counts().reindex(labels, fill_value=0)
+    total = max(len(df), 1)
+    for label in labels:
+        count = int(counts[label])
+        pct = count / total * 100
+        print(f"  {label:<20} {count:>7} ({pct:5.1f}%)")
+
+
+def _rewrite_raw_csv(csv_path):
+    df = _prepare_unsw_dataframe(csv_path)
+    df.to_csv(csv_path, index=False)
+    print(f"\nActualizado attack_group en {csv_path}")
+    _print_distribution(df, "attack_group", ATTACK_GROUPS, "Distribucion agrupada (5 clases)")
+    return df
+
+
+def main():
+    print(f"Leyendo y normalizando {RAW_TRAIN_CSV}...")
+    df = _rewrite_raw_csv(RAW_TRAIN_CSV)
+    print(f"  Total train: {len(df)} filas, {len(df.columns)} columnas")
+
+    if os.path.exists(RAW_TEST_CSV):
+        _rewrite_raw_csv(RAW_TEST_CSV)
+
+    _print_distribution(df, "attack_cat", RAW_ATTACK_CATEGORIES, "Distribucion de clases original")
+    _print_distribution(df, "attack_group", ATTACK_GROUPS, "Distribucion agrupada para el entrenamiento")
 
     available = [c for c in KEEP_COLS if c in df.columns]
     missing = [c for c in KEEP_COLS if c not in df.columns]
@@ -99,15 +153,19 @@ def main():
         worker_dfs[wid].to_csv(out_path, index=False)
 
         print(f"\n  Worker-{wid}: {len(worker_dfs[wid])} filas -> {out_path}")
-        w_counts = worker_dfs[wid]["attack_cat"].value_counts().reindex(ATTACK_CATEGORIES, fill_value=0)
-        for cat in ATTACK_CATEGORIES:
-            count = w_counts[cat]
-            pct = count / len(worker_dfs[wid]) * 100
-            print(f"    {cat:<20} {count:>6} ({pct:5.1f}%)")
+        _print_distribution(
+            worker_dfs[wid],
+            "attack_group",
+            ATTACK_GROUPS,
+            f"Distribucion agrupada worker-{wid}"
+        )
 
     print("\nParticiones generadas correctamente.")
     print(f"  Columnas: {list(worker_dfs[1].columns)}")
-    print(f"  Features numericas: {len([c for c in worker_dfs[1].columns if c not in ['attack_cat', 'label']])}")
+    print(
+        "  Features de entrada: "
+        f"{len([c for c in worker_dfs[1].columns if c not in ['attack_cat', 'label', 'attack_group']])}"
+    )
 
 
 if __name__ == "__main__":

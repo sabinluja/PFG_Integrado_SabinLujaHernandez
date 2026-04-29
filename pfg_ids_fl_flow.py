@@ -182,6 +182,17 @@ def section(title):
     print(f"\n    {BOLD}{WHITE}-- {title} --{RESET}")
 
 
+def _cm_short_label(name):
+    mapping = {
+        "Benign": "BEN",
+        "GenericAttack": "GEN",
+        "Exploits": "EXP",
+        "Fuzzers": "FUZ",
+        "GroupedAttacks": "GRP",
+    }
+    return mapping.get(name, str(name)[:3].upper())
+
+
 # =============================================================================
 # Cliente HTTP
 # =============================================================================
@@ -1332,6 +1343,15 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
         warn("No hay historial de rondas disponible")
         return
 
+    model_data = {}
+    r_model = None
+    try:
+        r_model = SESSION.get(f"{coordinator_url}/fl/model", timeout=req_timeout, verify=TLS_CERT)
+        if r_model.ok:
+            model_data = r_model.json()
+    except Exception:
+        r_model = None
+
     # --- Evolucion por ronda ---
     step("Evolucion por Ronda")
     header = f"  {'Ronda':>6}  {'Workers':>8}  {'Muestras':>10}  {'Accuracy':>10}  {'AUC':>8}  {'F1-macro':>9}  {'MCC':>8}  {'Loss':>8}  {'Tiempo':>8}"
@@ -1357,7 +1377,7 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
 
     # --- Mejor modelo global ---
     last = history[-1] if history else {}
-    best_gm = last.get("global_metrics", {})
+    best_gm = model_data.get("metrics") or last.get("global_metrics", {})
 
     step("Metricas Globales del Mejor Modelo")
     metrics_order = [
@@ -1366,6 +1386,7 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
         ("precision",   "Precision (macro)"),
         ("recall",      "Recall (macro)"),
         ("f1_macro",    "F1-Score (macro)"),
+        ("focus_f1",    "Focus F1 (EXP/FUZ/GRP)"),
         ("f1_weighted", "F1-Score (weighted)"),
         ("mcc",         "MCC (Matthews)"),
         ("loss",        "Loss"),
@@ -1384,7 +1405,9 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
 
     # Modo de clasificacion
     mode = best_gm.get("classification_mode", "")
-    n_classes = best_gm.get("num_classes", "")
+    n_classes = best_gm.get("num_classes", "") or model_data.get("num_classes", "")
+    if not mode and n_classes:
+        mode = "multiclass" if int(n_classes) > 2 else "binary"
     if mode:
         field("Modo", f"{mode} ({n_classes} clases)" if n_classes else mode)
     print()
@@ -1402,31 +1425,28 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
 
     # --- Distribucion de clases (UNSW-NB15) ---
     try:
-        r_model = SESSION.get(f"{coordinator_url}/fl/model", timeout=req_timeout, verify=TLS_CERT)
-        if r_model.ok:
-            model_data = r_model.json()
-            class_names = model_data.get("class_names", [])
-            per_class = model_data.get("per_class_report", {})
+        class_names = model_data.get("class_names", [])
+        per_class = model_data.get("per_class_report", {})
 
-            if class_names:
-                step("Distribución de aciertos de cada clase (UNSW-NB15)")
-                n_classes = len(class_names)
-                field("Modo de clasificación", f"Multiclase ({n_classes} clases)" if n_classes > 2 else "Binario")
-                print()
-                print(f"    {'Clase':<20} {'F1-Score':>10}  {'Rendimiento':>32}")
-                print(f"    {'-'*20} {'-'*10}  {'-'*32}")
-                sorted_classes = sorted(
-                    [(c, per_class.get(c, 0.0)) for c in class_names],
-                    key=lambda x: x[1], reverse=True
-                )
-                for cls_name, f1_val in sorted_classes:
-                    if not isinstance(f1_val, (int, float)):
-                        f1_val = 0.0
-                    bar_len = int(f1_val * 30)
-                    bar = "█" * bar_len + "░" * (30 - bar_len)
-                    c = GREEN if f1_val >= 0.8 else (YELLOW if f1_val >= 0.5 else RED)
-                    print(f"    {cls_name:<20} {c}{f1_val:>10.4f}{RESET}  {c}{bar}{RESET}")
-                print()
+        if class_names:
+            step("Distribucion de aciertos de cada clase (UNSW-NB15)")
+            n_classes = len(class_names)
+            field("Modo de clasificacion", f"Multiclase ({n_classes} clases)" if n_classes > 2 else "Binario")
+            print()
+            print(f"    {'Clase':<20} {'F1-Score':>10}  {'Rendimiento':>32}")
+            print(f"    {'-'*20} {'-'*10}  {'-'*32}")
+            sorted_classes = sorted(
+                [(c, per_class.get(c, 0.0)) for c in class_names],
+                key=lambda x: x[1], reverse=True
+            )
+            for cls_name, f1_val in sorted_classes:
+                if not isinstance(f1_val, (int, float)):
+                    f1_val = 0.0
+                bar_len = int(f1_val * 30)
+                bar = "█" * bar_len + "░" * (30 - bar_len)
+                c = GREEN if f1_val >= 0.8 else (YELLOW if f1_val >= 0.5 else RED)
+                print(f"    {cls_name:<20} {c}{f1_val:>10.4f}{RESET}  {c}{bar}{RESET}")
+            print()
     except Exception:
         pass
 
@@ -1435,20 +1455,20 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
         if r_model and r_model.ok:
             cm = model_data.get("confusion_matrix", [])
             class_names_cm = model_data.get("class_names", [
-                "Normal", "Analysis", "Backdoor", "DoS", "Exploits",
-                "Fuzzers", "Generic", "Recon", "Shell", "Worms"
+                "Benign", "GenericAttack", "Exploits", "Fuzzers", "GroupedAttacks"
             ])
             if cm and len(cm) > 2:
                 step("Confusion Matrix (filas=real, cols=predicho)")
                 n = min(len(cm), len(class_names_cm))
-                # Abreviar nombres para que quepa
-                short = [c[:7] for c in class_names_cm[:n]]
-                header_line = f"{'':>12}  " + "  ".join(f"{s:>7}" for s in short)
+                row_width = max(14, max(len(name) for name in class_names_cm[:n]))
+                short = [_cm_short_label(c) for c in class_names_cm[:n]]
+                header_line = f"{'':>{row_width}}  " + "  ".join(f"{s:>7}" for s in short)
                 print(f"    {CYAN}{header_line}{RESET}")
                 for i in range(n):
                     row = cm[i] if i < len(cm) else []
-                    row_vals = "  ".join(f"{row[j]:>7}" for j in range(min(len(row), n)))
-                    print(f"    {class_names_cm[i]:>12}  {row_vals}")
+                    padded_row = [row[j] if j < len(row) else 0 for j in range(n)]
+                    row_vals = "  ".join(f"{val:>7}" for val in padded_row)
+                    print(f"    {class_names_cm[i]:>{row_width}}  {row_vals}")
                 print()
     except Exception:
         pass

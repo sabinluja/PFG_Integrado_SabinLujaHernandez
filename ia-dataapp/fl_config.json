@@ -1,13 +1,13 @@
 {
-  "rounds": 10,
+  "rounds": 15,
   "round_timeout": 360,
-  "min_workers": 1,
+  "min_workers": 3,
   "epochs": 15,
   "batch_size": 128,
   "learning_rate": 0.001,
   "test_split": 0.2,
   "early_stopping_patience": 3,
   "focal_gamma": 1.5,
-  "label_smoothing": 0.05,
-  "fedprox_mu": 0.0
+  "label_smoothing": 0.01,
+  "fedprox_mu": 0.001
 }
