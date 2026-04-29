@@ -9,5 +9,10 @@
   "early_stopping_patience": 3,
   "focal_gamma": 1.5,
   "label_smoothing": 0.01,
-  "fedprox_mu": 0.001
+  "fedprox_mu": 0.001,
+  "feature_selection_enabled": true,
+  "feature_selection_keep_ratio": 0.75,
+  "feature_selection_min_features": 24,
+  "feature_selection_max_features": 32,
+  "feature_selection_variance_threshold": 1e-8
 }

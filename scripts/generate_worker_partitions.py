@@ -1,14 +1,14 @@
 """
 generate_worker_partitions.py
-Recalcula attack_group para UNSW-NB15 con un esquema de 5 clases y genera
+Recalcula attack_group para UNSW-NB15 con un esquema semantico de 5 clases y genera
 particiones heterogeneas para 3 workers de FL.
 
 Nuevo esquema multiclase:
   - Benign
   - GenericAttack
-  - Exploits
-  - Fuzzers
-  - GroupedAttacks  (DoS + Reconnaissance + Analysis + Backdoor + Shellcode + Worms)
+  - ExploitAccess   (Exploits + Analysis + Backdoor + Shellcode + Worms)
+  - Disruption      (Fuzzers + DoS)
+  - ReconAttack     (Reconnaissance)
 
 Ademas de las features numericas, se conservan proto/state/service y sttl/dttl
 para que el algoritmo pueda explotar mas senales del dataset.
@@ -47,26 +47,30 @@ RAW_ATTACK_CATEGORIES = [
     "Reconnaissance", "Analysis", "Backdoor", "Shellcode", "Worms"
 ]
 ATTACK_GROUPS = [
-    "Benign", "GenericAttack", "Exploits", "Fuzzers", "GroupedAttacks"
+    "Benign", "GenericAttack", "ExploitAccess", "Disruption", "ReconAttack"
 ]
 ATTACK_GROUP_MAP = {
     "normal": "Benign",
     "benign": "Benign",
     "generic": "GenericAttack",
     "genericattack": "GenericAttack",
-    "exploits": "Exploits",
-    "fuzzers": "Fuzzers",
-    "dos": "GroupedAttacks",
-    "reconnaissance": "GroupedAttacks",
-    "analysis": "GroupedAttacks",
-    "backdoor": "GroupedAttacks",
-    "shellcode": "GroupedAttacks",
-    "worms": "GroupedAttacks",
+    "exploitaccess": "ExploitAccess",
+    "exploits": "ExploitAccess",
+    "analysis": "ExploitAccess",
+    "backdoor": "ExploitAccess",
+    "shellcode": "ExploitAccess",
+    "worms": "ExploitAccess",
+    "fuzzers": "Disruption",
+    "fuzzdos": "Disruption",
+    "disruption": "Disruption",
+    "dos": "Disruption",
+    "reconnaissance": "ReconAttack",
+    "reconattack": "ReconAttack",
     # Compatibilidad por si el CSV ya venia agrupado.
-    "probe": "GroupedAttacks",
-    "malware": "GroupedAttacks",
-    "otherattack": "GroupedAttacks",
-    "groupedattacks": "GroupedAttacks",
+    "probe": "ReconAttack",
+    "malware": "ReconAttack",
+    "otherattack": "ReconAttack",
+    "groupedattacks": "ReconAttack",
 }
 
 # Reparto heterogeneo

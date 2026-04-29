@@ -2,17 +2,18 @@
 algorithm.py -- FL Worker: Clasificacion Multiclase de Intrusiones de Red
 =========================================================================
 Dataset: UNSW-NB15 (Moustafa & Slay, 2015)
-         5 clases: top-4 mas frecuentes + cola agrupada
+         5 clases: agrupacion semantica para reducir confusiones entre ataques
 Modelo:  DNN con BatchNorm, Dropout, Focal Loss y SMOTE
 Agregacion FL: FedAvg -- McMahan et al. (2017)
 
 Mejoras v3:
-  - Agrupacion a 5 clases para reducir la cola extrema del dataset
+  - Agrupacion a 5 clases con semantica mas coherente
   - Focal Loss (Lin et al., 2017) para clases desbalanceadas
   - SMOTE sobre el conjunto de entrenamiento
   - Label Smoothing suave
   - Features numericas estandarizadas
-  - Refuerzo dirigido a Exploits, Fuzzers y GroupedAttacks
+  - Feature selection supervisada sobre el train local
+  - Refuerzo dirigido a ExploitAccess, Disruption y ReconAttack
 
 Referencias:
   McMahan et al. (2017) - Communication-Efficient Learning - AISTATS 2017
@@ -34,6 +35,7 @@ tf.random.set_seed(SEED)
 from tensorflow import keras
 
 from sklearn.preprocessing import StandardScaler
+from sklearn.feature_selection import SelectKBest, VarianceThreshold, mutual_info_classif
 from sklearn.metrics import (
     f1_score, matthews_corrcoef, confusion_matrix,
     classification_report, precision_score, recall_score
@@ -50,29 +52,32 @@ ATTACK_GROUP_COL = "attack_group"
 ATTACK_CATEGORIES = [
     "Benign",
     "GenericAttack",
-    "Exploits",
-    "Fuzzers",
-    "GroupedAttacks",
+    "ExploitAccess",
+    "Disruption",
+    "ReconAttack",
 ]
 ATTACK_GROUP_MAP = {
     "normal": "Benign",
     "benign": "Benign",
     "generic": "GenericAttack",
     "genericattack": "GenericAttack",
-    "exploits": "Exploits",
-    "fuzzers": "Fuzzers",
-    # Clases antiguas del agrupado a 7 clases, soportadas para compatibilidad.
-    "dos": "GroupedAttacks",
-    "probe": "GroupedAttacks",
-    "malware": "GroupedAttacks",
-    "otherattack": "GroupedAttacks",
-    "groupedattacks": "GroupedAttacks",
-    # Taxonomia original de UNSW-NB15.
-    "analysis": "GroupedAttacks",
-    "reconnaissance": "GroupedAttacks",
-    "backdoor": "GroupedAttacks",
-    "shellcode": "GroupedAttacks",
-    "worms": "GroupedAttacks",
+    "exploitaccess": "ExploitAccess",
+    "exploits": "ExploitAccess",
+    "analysis": "ExploitAccess",
+    "backdoor": "ExploitAccess",
+    "shellcode": "ExploitAccess",
+    "worms": "ExploitAccess",
+    "fuzzers": "Disruption",
+    "fuzzdos": "Disruption",
+    "disruption": "Disruption",
+    "dos": "Disruption",
+    "reconnaissance": "ReconAttack",
+    "reconattack": "ReconAttack",
+    # Compatibilidad con agrupados heredados.
+    "probe": "ReconAttack",
+    "malware": "ReconAttack",
+    "otherattack": "ReconAttack",
+    "groupedattacks": "ReconAttack",
 }
 CAT_TO_IDX = {cat: idx for idx, cat in enumerate(ATTACK_CATEGORIES)}
 
@@ -96,41 +101,43 @@ LOG_TRANSFORM_COLS = [
     "sinpkt", "dinpkt", "sjit", "djit", "stcpb", "dtcpb"
 ]
 CONFIG_PATH = "/home/nobody/data/fl_config.json"
-ULTRA_RARE_CLASS_COUNT = 8
-RARE_CLASS_COUNT = 40
 MINORITY_TARGET_RATIO = 0.2
 MINORITY_TARGET_FLOOR = 32
-MINORITY_TARGET_CAP = 400
 TAIL_CLASS_FRACTION = 0.4
 CLASS_TARGET_RATIOS = {
     "Benign": 0.0,
     "GenericAttack": 0.0,
-    "Exploits": 0.22,
-    "Fuzzers": 0.24,
-    "GroupedAttacks": 0.30,
+    "ExploitAccess": 0.22,
+    "Disruption": 0.24,
+    "ReconAttack": 0.20,
+}
+CLASS_TARGET_GROWTH_RATIOS = {
+    "ExploitAccess": 0.20,
+    "Disruption": 0.30,
+    "ReconAttack": 0.45,
 }
 CLASS_FOCUS_BOOST = {
-    "Exploits": 1.12,
-    "Fuzzers": 1.15,
-    "GroupedAttacks": 1.22,
+    "ExploitAccess": 1.10,
+    "Disruption": 1.16,
+    "ReconAttack": 1.24,
 }
 CLASS_WEIGHT_FLOORS = {
     "Benign": 0.85,
     "GenericAttack": 0.95,
-    "Exploits": 1.15,
-    "Fuzzers": 1.30,
-    "GroupedAttacks": 1.40,
+    "ExploitAccess": 1.10,
+    "Disruption": 1.25,
+    "ReconAttack": 1.35,
 }
 CLASS_WEIGHT_CEILINGS = {
     "Benign": 0.95,
     "GenericAttack": 1.05,
-    "Exploits": 1.30,
-    "Fuzzers": 1.45,
-    "GroupedAttacks": 1.55,
+    "ExploitAccess": 1.28,
+    "Disruption": 1.42,
+    "ReconAttack": 1.55,
 }
-FOCUS_CLASSES = ("Exploits", "Fuzzers", "GroupedAttacks")
+FOCUS_CLASSES = ("ExploitAccess", "Disruption", "ReconAttack")
 ROS_ONLY_CLASSES = set()
-SMOTE_CLASSES = {"Exploits", "Fuzzers", "GroupedAttacks"}
+SMOTE_CLASSES = {"ExploitAccess", "Disruption", "ReconAttack"}
 MIN_SMOTE_COUNT = 24
 
 
@@ -235,6 +242,11 @@ def load_config(config_path=CONFIG_PATH):
         "focal_gamma": 1.5,
         "label_smoothing": 0.01,
         "fedprox_mu": 0.001,
+        "feature_selection_enabled": True,
+        "feature_selection_keep_ratio": 0.75,
+        "feature_selection_min_features": 24,
+        "feature_selection_max_features": 32,
+        "feature_selection_variance_threshold": 1e-8,
     }
     if config_path and os.path.exists(config_path):
         try:
@@ -257,33 +269,22 @@ def b64_to_weights(b64_str):
 # ============================================================================
 # Dataset loading + SMOTE
 # ============================================================================
-def _minority_target_size(class_count, majority_count):
-    target = max(
-        MINORITY_TARGET_FLOOR,
-        int(np.ceil(majority_count * MINORITY_TARGET_RATIO)),
-        int(class_count * 3),
-    )
-    return min(MINORITY_TARGET_CAP, target)
-
-
 def _target_size_for_class(class_name, class_count, majority_count):
     ratio = float(CLASS_TARGET_RATIOS.get(class_name, MINORITY_TARGET_RATIO))
     if ratio <= 0:
         return int(class_count)
 
-    growth = 2.0
-    if class_name == "Exploits":
-        growth = 2.1
-    elif class_name == "Fuzzers":
-        growth = 2.25
-    elif class_name == "GroupedAttacks":
-        growth = 2.35
+    growth_ratio = float(CLASS_TARGET_GROWTH_RATIOS.get(class_name, 0.15))
     target = max(
         MINORITY_TARGET_FLOOR,
         int(np.ceil(majority_count * ratio)),
-        int(np.ceil(class_count * growth)),
+        int(np.ceil(class_count * (1.0 + growth_ratio))),
     )
-    return min(MINORITY_TARGET_CAP, target)
+    return int(target)
+
+
+def _mutual_info_scores(X, y):
+    return mutual_info_classif(X, y, random_state=SEED)
 
 
 def _apply_smote(X, y, num_classes):
@@ -298,11 +299,16 @@ def _apply_smote(X, y, num_classes):
 
         ros_strategy = {}
         smote_strategy = {}
+        target_debug = {}
         for cls_idx, count in enumerate(class_counts):
             if count <= 0 or count >= majority_count:
                 continue
             class_name = ATTACK_CATEGORIES[cls_idx]
             target = _target_size_for_class(class_name, count, majority_count)
+            target_debug[class_name] = {
+                "current": int(count),
+                "target": int(target),
+            }
             if target <= count:
                 continue
             if class_name in ROS_ONLY_CLASSES or count < MIN_SMOTE_COUNT:
@@ -311,6 +317,9 @@ def _apply_smote(X, y, num_classes):
                 smote_strategy[cls_idx] = target
             else:
                 ros_strategy[cls_idx] = target
+
+        if target_debug:
+            log.info(f"[algorithm] Oversampling targets: {target_debug}")
 
         X_res, y_res = X, y
         if ros_strategy:
@@ -329,6 +338,8 @@ def _apply_smote(X, y, num_classes):
         }
 
         X_bal, y_bal = X_res, y_res
+        if not ros_strategy and not smote_strategy:
+            log.info("[algorithm] Oversampling no aplicado: ninguna clase minoritaria necesita refuerzo")
         if smote_strategy:
             min_smote_count = min(class_counts[c] for c in smote_strategy)
             sm = SMOTE(
@@ -345,6 +356,67 @@ def _apply_smote(X, y, num_classes):
     except Exception as e:
         log.warning(f"[algorithm] SMOTE no disponible, continuando sin oversample: {e}")
         return X, y
+
+
+def _select_features(X_train, y_train, X_val, feature_cols, cfg):
+    if not cfg.get("feature_selection_enabled", True):
+        log.info("[algorithm] Feature selection desactivada por configuracion")
+        return X_train, X_val, feature_cols
+
+    if len(feature_cols) <= 1:
+        return X_train, X_val, feature_cols
+
+    try:
+        variance_threshold = float(cfg.get("feature_selection_variance_threshold", 1e-8))
+        vt = VarianceThreshold(threshold=variance_threshold)
+        X_train_vt = vt.fit_transform(X_train)
+        X_val_vt = vt.transform(X_val)
+        vt_indices = vt.get_support(indices=True)
+        vt_feature_cols = [feature_cols[idx] for idx in vt_indices]
+        removed_low_variance = [feature_cols[idx] for idx in range(len(feature_cols)) if idx not in set(vt_indices)]
+        if removed_low_variance:
+            log.info(f"[algorithm] Features eliminadas por baja varianza: {removed_low_variance}")
+
+        candidate_count = len(vt_feature_cols)
+        if candidate_count <= 1:
+            return X_train_vt, X_val_vt, vt_feature_cols
+
+        keep_ratio = float(cfg.get("feature_selection_keep_ratio", 0.75))
+        min_features = int(cfg.get("feature_selection_min_features", 24))
+        max_features = int(cfg.get("feature_selection_max_features", 32))
+        target_k = max(min_features, int(np.ceil(candidate_count * keep_ratio)))
+        if max_features > 0:
+            target_k = min(target_k, max_features)
+        target_k = max(1, min(candidate_count, target_k))
+
+        if target_k >= candidate_count:
+            log.info(
+                f"[algorithm] Feature selection: conservando {candidate_count}/{candidate_count} "
+                "features tras el filtro de varianza"
+            )
+            return X_train_vt, X_val_vt, vt_feature_cols
+
+        selector = SelectKBest(score_func=_mutual_info_scores, k=target_k)
+        X_train_sel = selector.fit_transform(X_train_vt, y_train)
+        X_val_sel = selector.transform(X_val_vt)
+        selected_indices = selector.get_support(indices=True)
+        selected_feature_cols = [vt_feature_cols[idx] for idx in selected_indices]
+        scores = selector.scores_ if selector.scores_ is not None else np.zeros(candidate_count, dtype=np.float32)
+        top_scores = sorted(
+            [(vt_feature_cols[idx], float(scores[idx])) for idx in selected_indices],
+            key=lambda item: item[1],
+            reverse=True,
+        )
+        log.info(
+            f"[algorithm] Feature selection: {len(feature_cols)} -> {len(selected_feature_cols)} "
+            f"features (mutual_info, keep_ratio={keep_ratio})"
+        )
+        log.info(f"[algorithm] Features seleccionadas: {selected_feature_cols}")
+        log.info(f"[algorithm] Top mutual_info: {[(name, round(score, 4)) for name, score in top_scores[:10]]}")
+        return X_train_sel, X_val_sel, selected_feature_cols
+    except Exception as e:
+        log.warning(f"[algorithm] Feature selection no disponible, continuando sin seleccion: {e}")
+        return X_train, X_val, feature_cols
 
 
 def _group_attack_category(value):
@@ -367,15 +439,27 @@ def _select_tail_labels(y_values, present_labels):
     return [int(label) for label in ordered if class_counts[int(label)] <= cutoff]
 
 
-def load_unsw_nb15(data_path, test_split=0.2):
+def load_unsw_nb15(data_path, test_split=0.2, cfg=None):
     """Carga y preprocesa particion local UNSW-NB15."""
+    cfg = cfg or {}
     df = pd.read_csv(data_path, low_memory=False)
     df.columns = [c.lower().strip() for c in df.columns]
 
-    if ATTACK_GROUP_COL in df.columns:
+    if ATTACK_CAT_COL in df.columns:
+        df[ATTACK_CAT_COL] = df[ATTACK_CAT_COL].fillna("Normal").astype(str).str.strip()
+        df.loc[df[ATTACK_CAT_COL] == "", ATTACK_CAT_COL] = "Normal"
+        grouped_attack = df[ATTACK_CAT_COL].map(_group_attack_category)
+        df[ATTACK_GROUP_COL] = grouped_attack
+        y_series = grouped_attack.map(CAT_TO_IDX).fillna(0).astype(int)
+        num_classes = len(ATTACK_CATEGORIES)
+        class_names = list(ATTACK_CATEGORIES)
+        grouped_counts = grouped_attack.value_counts().to_dict()
+        log.info(f"[algorithm] Modo MULTICLASE AGRUPADO detectado desde attack_cat ({num_classes} clases)")
+        log.info(f"[algorithm] Grupos de ataque activos: {grouped_counts}")
+    elif ATTACK_GROUP_COL in df.columns:
         df[ATTACK_GROUP_COL] = (
             df[ATTACK_GROUP_COL]
-            .fillna("Normal")
+            .fillna("Benign")
             .astype(str)
             .str.strip()
             .map(_group_attack_category)
@@ -385,16 +469,6 @@ def load_unsw_nb15(data_path, test_split=0.2):
         class_names = list(ATTACK_CATEGORIES)
         grouped_counts = df[ATTACK_GROUP_COL].value_counts().to_dict()
         log.info(f"[algorithm] Modo MULTICLASE AGRUPADO detectado desde attack_group ({num_classes} clases)")
-        log.info(f"[algorithm] Grupos de ataque activos: {grouped_counts}")
-    elif ATTACK_CAT_COL in df.columns:
-        df[ATTACK_CAT_COL] = df[ATTACK_CAT_COL].fillna("Normal").astype(str).str.strip()
-        df.loc[df[ATTACK_CAT_COL] == "", ATTACK_CAT_COL] = "Normal"
-        grouped_attack = df[ATTACK_CAT_COL].map(_group_attack_category)
-        y_series = grouped_attack.map(CAT_TO_IDX).fillna(0).astype(int)
-        num_classes = len(ATTACK_CATEGORIES)
-        class_names = list(ATTACK_CATEGORIES)
-        grouped_counts = grouped_attack.value_counts().to_dict()
-        log.info(f"[algorithm] Modo MULTICLASE AGRUPADO detectado ({num_classes} clases)")
         log.info(f"[algorithm] Grupos de ataque activos: {grouped_counts}")
     else:
         if LABEL_COL not in df.columns:
@@ -439,13 +513,15 @@ def load_unsw_nb15(data_path, test_split=0.2):
         idx = np.random.permutation(len(X))
         val_idx, train_idx = idx[:n_val], idx[n_val:]
 
-    X_train, y_train = X[train_idx], y[train_idx]
+    X_train, X_val = X[train_idx], X[val_idx]
+    y_train, y_val = y[train_idx], y[val_idx]
     train_class_counts = np.bincount(y_train, minlength=num_classes).astype(np.int32)
+    X_train, X_val, feature_cols = _select_features(X_train, y_train, X_val, feature_cols, cfg)
 
     # SMOTE en train solamente
     X_train, y_train = _apply_smote(X_train, y_train, num_classes)
 
-    return (X_train, y_train, X[val_idx], y[val_idx],
+    return (X_train, y_train, X_val, y_val,
             feature_cols, num_classes, class_names, train_class_counts)
 
 
@@ -690,7 +766,7 @@ def run(data_path, global_weights_b64=None, config_path=CONFIG_PATH):
     fedprox_mu = float(cfg.get("fedprox_mu", 0.005))
 
     X_train, y_train, X_val, y_val, feature_cols, num_classes, class_names, train_class_counts = \
-        load_unsw_nb15(data_path, test_split)
+        load_unsw_nb15(data_path, test_split, cfg)
     input_dim = X_train.shape[1]
     log.info(f"[algorithm] Dataset: {len(X_train)} train, {len(X_val)} val, "
              f"{input_dim} features, {num_classes} clases")

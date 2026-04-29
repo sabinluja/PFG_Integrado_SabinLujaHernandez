@@ -385,6 +385,11 @@ def _load_fl_config() -> dict:
         "focal_gamma"  : 1.5,
         "label_smoothing": 0.01,
         "fedprox_mu"   : 0.001,
+        "feature_selection_enabled": True,
+        "feature_selection_keep_ratio": 0.75,
+        "feature_selection_min_features": 24,
+        "feature_selection_max_features": 32,
+        "feature_selection_variance_threshold": 1e-8,
         "force_http_fallback": False, # Nuevo: fuerza pasar por IDS para benchmarking
     }
     if os.path.exists(CONFIG_PATH):
@@ -3463,6 +3468,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
 
     global_weights_b64 = None
     best_f1_macro      = -1.0
+    best_focus_f1      = -1.0
     best_accuracy      = -1.0
     best_weights_b64   = None
     best_metrics       = None
@@ -3704,8 +3710,10 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
 
         acc = global_metrics.get("accuracy", 0)
         f1_macro = global_metrics.get("f1_macro", 0)
-        if (f1_macro > best_f1_macro) or (f1_macro == best_f1_macro and acc > best_accuracy):
+        focus_f1 = global_metrics.get("focus_f1", 0)
+        if (f1_macro, focus_f1, acc) > (best_f1_macro, best_focus_f1, best_accuracy):
             best_f1_macro = f1_macro
+            best_focus_f1 = focus_f1
             best_accuracy = acc
             best_weights_b64 = global_weights_b64
             best_metrics = global_metrics
@@ -3723,7 +3731,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                 json.dump(_save_data, f)
             log.info(
                 f"\u2728 Nueva mejor ronda encontrada ({best_round}) con "
-                f"f1_macro={best_f1_macro} focus_f1={best_metrics.get('focus_f1', 0)} "
+                f"f1_macro={best_f1_macro} focus_f1={best_focus_f1} "
                 f"acc={best_accuracy} \u2014 guardada en disco"
             )
 
