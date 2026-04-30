@@ -374,22 +374,25 @@ def _report_to_ch(
 
 def _load_fl_config() -> dict:
     defaults = {
-        "rounds"       : 12,
+        "rounds"       : 18,
         "round_timeout": 360,
         "min_workers"  : 3,
-        "epochs"       : 10,
+        "epochs"       : 18,
         "batch_size"   : 128,
         "learning_rate": 0.001,
         "test_split"   : 0.2,
         "early_stopping_patience": 3,
         "focal_gamma"  : 1.5,
-        "label_smoothing": 0.01,
+        "label_smoothing": 0.005,
         "fedprox_mu"   : 0.001,
+        "categorical_encoding_enabled": True,
+        "feature_selection_strategy": "shared_runtime_coordinator",
         "feature_selection_enabled": True,
         "feature_selection_keep_ratio": 0.75,
-        "feature_selection_min_features": 24,
-        "feature_selection_max_features": 32,
+        "feature_selection_min_features": 30,
+        "feature_selection_max_features": 30,
         "feature_selection_variance_threshold": 1e-8,
+        "selected_numeric_features": [],
         "force_http_fallback": False, # Nuevo: fuerza pasar por IDS para benchmarking
     }
     if os.path.exists(CONFIG_PATH):
@@ -1601,6 +1604,104 @@ def _save_config(data: bytes):
         f.write(data)
     cfg = json.loads(data.decode())
     log.info(f"fl_config.json guardado: {cfg}")
+
+
+def _resolve_coordinator_reference_csv() -> str | None:
+    """
+     Devuelve el CSV real de referencia del coordinator para esta corrida.
+    Usa exclusivamente COORDINATOR_CSV_REFERENCE del .env para que la seleccion
+    compartida nazca siempre del mismo dataset definido por despliegue.
+    """
+    forced_csv = os.getenv("COORDINATOR_CSV_REFERENCE", "").strip()
+    if not forced_csv:
+        log.warning(
+            "[feature-selection] COORDINATOR_CSV_REFERENCE no definido en el .env; "
+            "no se puede calcular la seleccion compartida en tiempo de ejecucion"
+        )
+        return None
+
+    forced_name = os.path.basename(forced_csv)
+    candidates = [
+        os.path.join(INPUT_DIR, forced_csv),
+        os.path.join(INPUT_DIR, forced_name),
+        forced_csv,
+    ]
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate):
+            log.info(f"[feature-selection] COORDINATOR_CSV_REFERENCE aplicado: {candidate}")
+            return candidate
+
+    log.warning(
+        f"[feature-selection] COORDINATOR_CSV_REFERENCE='{forced_csv}' no encontrado "
+        f"en {INPUT_DIR} ni como ruta absoluta"
+    )
+    return None
+
+
+def _compute_and_persist_shared_numeric_features(cfg: dict) -> dict:
+    """
+    Calcula una seleccion global unica de variables numericas desde el CSV local
+    de referencia del coordinator y la persiste en fl_config.json para que todos
+    los workers usen exactamente la misma mascara.
+    """
+    updated_cfg = dict(cfg)
+    updated_cfg.setdefault("selected_numeric_features", [])
+    updated_cfg["feature_selection_strategy"] = "shared_runtime_coordinator"
+
+    if not updated_cfg.get("feature_selection_enabled", True):
+        log.info("[feature-selection] Desactivada por configuracion; se mantiene fallback compartido")
+        _save_config(json.dumps(updated_cfg, indent=2).encode("utf-8"))
+        return updated_cfg
+
+    reference_csv = _resolve_coordinator_reference_csv()
+    if not reference_csv:
+        log.warning(
+            "[feature-selection] No se encontro un CSV local de referencia del coordinator; "
+            "se mantiene la seleccion fija de respaldo"
+        )
+        _save_config(json.dumps(updated_cfg, indent=2).encode("utf-8"))
+        return updated_cfg
+
+    try:
+        algo = _load_algorithm()
+        selector = getattr(algo, "select_global_numeric_features", None)
+        if selector is None:
+            log.warning(
+                "[feature-selection] algorithm.py no expone select_global_numeric_features(); "
+                "se mantiene la seleccion fija de respaldo"
+            )
+            _save_config(json.dumps(updated_cfg, indent=2).encode("utf-8"))
+            return updated_cfg
+
+        log.info(
+            "[feature-selection] Calculando mascara numerica compartida desde "
+            f"COORDINATOR_CSV_REFERENCE ({os.path.basename(reference_csv)})"
+        )
+        selected_features = selector(reference_csv, updated_cfg) or []
+        selected_features = [str(col).strip() for col in selected_features if str(col).strip()]
+        if not selected_features:
+            log.warning(
+                "[feature-selection] La seleccion global no devolvio variables; "
+                "se mantiene la seleccion fija de respaldo"
+            )
+            _save_config(json.dumps(updated_cfg, indent=2).encode("utf-8"))
+            return updated_cfg
+
+        updated_cfg["selected_numeric_features"] = selected_features
+        _save_config(json.dumps(updated_cfg, indent=2).encode("utf-8"))
+        log.info(
+            "[feature-selection] Mascara compartida lista: "
+            f"{len(selected_features)} numericas guardadas en fl_config.json "
+            "y preparadas para todos los workers"
+        )
+    except Exception as exc:
+        log.warning(
+            "[feature-selection] Error calculando seleccion global compartida; "
+            f"se mantiene la seleccion fija de respaldo: {exc}"
+        )
+        _save_config(json.dumps(updated_cfg, indent=2).encode("utf-8"))
+
+    return updated_cfg
 
 
 # =============================================================================
@@ -4649,6 +4750,20 @@ async def fl_start(request: Request):
         )
 
     cfg           = _load_fl_config()
+    cfg           = _compute_and_persist_shared_numeric_features(cfg)
+    if FL_ALGO_VIA_DOCKER:
+        log.info(
+            "[/fl/start] FL_ALGO_VIA_DOCKER=true -> reconstruyendo imagen con "
+            "fl_config.json ya actualizado"
+        )
+        docker_image_tag = _build_and_push_algo_image()
+        if docker_image_tag:
+            log.info(f"[/fl/start] Imagen Docker actualizada para esta corrida: {docker_image_tag}")
+        else:
+            log.warning(
+                "[/fl/start] No se pudo reconstruir la imagen Docker actualizada; "
+                "se usara la ultima referencia disponible o fallback base64"
+            )
     rounds        = int(cfg["rounds"])
     round_timeout = int(cfg["round_timeout"])
     min_workers   = int(cfg["min_workers"])
@@ -4660,7 +4775,7 @@ async def fl_start(request: Request):
         with open(CONFIG_PATH, "rb") as f:
             config_bytes = f.read()
     else:
-        config_bytes = json.dumps(cfg).encode()
+        config_bytes = json.dumps(cfg, indent=2).encode()
 
     with _negotiate_lock:
         peers_to_use = list(_accepted_workers)
@@ -4718,6 +4833,12 @@ async def fl_start(request: Request):
                 "rounds"       : rounds,
                 "round_timeout": round_timeout,
                 "min_workers"  : min_workers,
+            },
+            "feature_selection": {
+                "enabled": bool(cfg.get("feature_selection_enabled", True)),
+                "strategy": cfg.get("feature_selection_strategy", "unknown"),
+                "source": os.getenv("COORDINATOR_CSV_REFERENCE", ""),
+                "selected_count": len(cfg.get("selected_numeric_features", []) or []),
             },
         }
     )

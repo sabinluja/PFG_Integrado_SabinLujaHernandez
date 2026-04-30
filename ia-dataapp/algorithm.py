@@ -3,16 +3,17 @@ algorithm.py -- FL Worker: Clasificacion Multiclase de Intrusiones de Red
 =========================================================================
 Dataset: UNSW-NB15 (Moustafa & Slay, 2015)
          5 clases: agrupacion semantica para reducir confusiones entre ataques
-Modelo:  DNN con BatchNorm, Dropout, Focal Loss y SMOTE
+Modelo:  DNN con BatchNorm, Dropout, Focal Loss y oversampling hibrido
 Agregacion FL: FedAvg -- McMahan et al. (2017)
 
-Mejoras v3:
+Mejoras v4:
   - Agrupacion a 5 clases con semantica mas coherente
   - Focal Loss (Lin et al., 2017) para clases desbalanceadas
-  - SMOTE sobre el conjunto de entrenamiento
-  - Label Smoothing suave
+  - Oversampling hibrido por clase (SMOTE + RandomOverSampler)
+  - Label Smoothing mas conservador
   - Features numericas estandarizadas
-  - Feature selection supervisada sobre el train local
+  - Proto/service/state reintroducidas via one-hot limitado
+  - Feature selection supervisada sobre el bloque numerico
   - Refuerzo dirigido a ExploitAccess, Disruption y ReconAttack
 
 Referencias:
@@ -95,6 +96,22 @@ FEATURE_COLS = [
     "ct_flw_http_mthd", "ct_src_ltm", "ct_srv_dst",
     "is_sm_ips_ports"
 ]
+# Fallback estable si no se pudo calcular una mascara automatica compartida.
+SELECTED_NUMERIC_FEATURES = [
+    "dur", "spkts", "dpkts", "sbytes", "dbytes",
+    "sload", "dload", "sloss", "dloss", "sttl",
+    "dttl", "sinpkt", "dinpkt", "sjit", "djit",
+    "swin", "tcprtt", "smean", "dmean", "response_body_len",
+    "ct_state_ttl", "ct_src_dport_ltm", "ct_dst_sport_ltm", "ct_dst_src_ltm",
+    "is_ftp_login", "ct_flw_http_mthd", "ct_src_ltm", "ct_srv_dst",
+    "is_sm_ips_ports", "ct_srv_src",
+]
+CATEGORICAL_COLS = ["proto", "service", "state"]
+CATEGORICAL_VOCABS = {
+    "proto": ["tcp", "udp", "unas", "arp", "ospf", "sctp", "any", "gre", "rsvp", "ipv6", "sep", "sun-nd"],
+    "service": ["-", "dns", "http", "smtp", "ftp", "ftp-data", "pop3", "ssh", "ssl", "snmp", "dhcp", "radius"],
+    "state": ["fin", "int", "con", "req", "acc", "rst", "clo"],
+}
 LOG_TRANSFORM_COLS = [
     "sbytes", "dbytes", "sload", "dload", "rate",
     "response_body_len", "sloss", "dloss",
@@ -107,37 +124,37 @@ TAIL_CLASS_FRACTION = 0.4
 CLASS_TARGET_RATIOS = {
     "Benign": 0.0,
     "GenericAttack": 0.0,
-    "ExploitAccess": 0.22,
-    "Disruption": 0.24,
-    "ReconAttack": 0.20,
+    "ExploitAccess": 0.20,
+    "Disruption": 0.28,
+    "ReconAttack": 0.18,
 }
 CLASS_TARGET_GROWTH_RATIOS = {
-    "ExploitAccess": 0.20,
-    "Disruption": 0.30,
-    "ReconAttack": 0.45,
+    "ExploitAccess": 0.16,
+    "Disruption": 0.38,
+    "ReconAttack": 0.32,
 }
 CLASS_FOCUS_BOOST = {
-    "ExploitAccess": 1.10,
-    "Disruption": 1.16,
-    "ReconAttack": 1.24,
+    "ExploitAccess": 1.08,
+    "Disruption": 1.22,
+    "ReconAttack": 1.26,
 }
 CLASS_WEIGHT_FLOORS = {
     "Benign": 0.85,
     "GenericAttack": 0.95,
-    "ExploitAccess": 1.10,
-    "Disruption": 1.25,
-    "ReconAttack": 1.35,
+    "ExploitAccess": 1.05,
+    "Disruption": 1.30,
+    "ReconAttack": 1.38,
 }
 CLASS_WEIGHT_CEILINGS = {
     "Benign": 0.95,
     "GenericAttack": 1.05,
-    "ExploitAccess": 1.28,
-    "Disruption": 1.42,
-    "ReconAttack": 1.55,
+    "ExploitAccess": 1.24,
+    "Disruption": 1.48,
+    "ReconAttack": 1.58,
 }
 FOCUS_CLASSES = ("ExploitAccess", "Disruption", "ReconAttack")
-ROS_ONLY_CLASSES = set()
-SMOTE_CLASSES = {"ExploitAccess", "Disruption", "ReconAttack"}
+ROS_ONLY_CLASSES = {"Disruption", "ReconAttack"}
+SMOTE_CLASSES = {"ExploitAccess"}
 MIN_SMOTE_COUNT = 24
 
 
@@ -231,21 +248,24 @@ class FedProxModel(keras.Model):
 # ============================================================================
 def load_config(config_path=CONFIG_PATH):
     defaults = {
-        "rounds": 12,
+        "rounds": 18,
         "round_timeout": 180,
         "min_workers": 3,
-        "epochs": 10,
+        "epochs": 18,
         "batch_size": 128,
         "learning_rate": 0.001,
         "test_split": 0.2,
         "early_stopping_patience": 3,
         "focal_gamma": 1.5,
-        "label_smoothing": 0.01,
+        "label_smoothing": 0.005,
         "fedprox_mu": 0.001,
+        "categorical_encoding_enabled": True,
+        "selected_numeric_features": [],
+        "feature_selection_strategy": "global_fixed_shared",
         "feature_selection_enabled": True,
         "feature_selection_keep_ratio": 0.75,
-        "feature_selection_min_features": 24,
-        "feature_selection_max_features": 32,
+        "feature_selection_min_features": 30,
+        "feature_selection_max_features": 30,
         "feature_selection_variance_threshold": 1e-8,
     }
     if config_path and os.path.exists(config_path):
@@ -287,8 +307,56 @@ def _mutual_info_scores(X, y):
     return mutual_info_classif(X, y, random_state=SEED)
 
 
+def _sanitize_feature_value(value):
+    value = str(value).strip().lower()
+    value = "".join(ch if ch.isalnum() else "_" for ch in value)
+    value = "_".join(part for part in value.split("_") if part)
+    return value or "other"
+
+
+def _encode_categorical_columns(train_df, val_df, categorical_cols, cfg):
+    if not cfg.get("categorical_encoding_enabled", True):
+        return (
+            np.empty((len(train_df), 0), dtype=np.float32),
+            np.empty((len(val_df), 0), dtype=np.float32),
+            [],
+        )
+
+    train_blocks, val_blocks, feature_names = [], [], []
+    kept_logs = {}
+    for col in categorical_cols:
+        if col not in CATEGORICAL_VOCABS:
+            continue
+        kept_values = list(CATEGORICAL_VOCABS[col])
+        categories = kept_values + ["__other__"]
+
+        train_series = train_df[col].fillna("__other__").astype(str).str.strip().str.lower().replace("", "__other__")
+        val_series = val_df[col].fillna("__other__").astype(str).str.strip().str.lower().replace("", "__other__")
+        train_mapped = train_series.where(train_series.isin(kept_values), "__other__")
+        val_mapped = val_series.where(val_series.isin(kept_values), "__other__")
+
+        train_cat = pd.Categorical(train_mapped, categories=categories)
+        val_cat = pd.Categorical(val_mapped, categories=categories)
+        train_dummies = pd.get_dummies(train_cat, prefix=col, prefix_sep="__", dtype=np.float32)
+        val_dummies = pd.get_dummies(val_cat, prefix=col, prefix_sep="__", dtype=np.float32)
+
+        train_blocks.append(train_dummies.to_numpy(dtype=np.float32))
+        val_blocks.append(val_dummies.to_numpy(dtype=np.float32))
+        feature_names.extend([f"{col}__{_sanitize_feature_value(category)}" for category in categories])
+        kept_logs[col] = kept_values
+
+    if kept_logs:
+        log.info(f"[algorithm] Categoricas activas (one-hot limitado + other): {kept_logs}")
+
+    return (
+        np.concatenate(train_blocks, axis=1) if train_blocks else np.empty((len(train_df), 0), dtype=np.float32),
+        np.concatenate(val_blocks, axis=1) if val_blocks else np.empty((len(val_df), 0), dtype=np.float32),
+        feature_names,
+    )
+
+
 def _apply_smote(X, y, num_classes):
-    """SMOTE clasico sobre las clases minoritarias; ROS queda solo como respaldo si una clase es demasiado pequena."""
+    """Oversampling hibrido: SMOTE para clases coherentes y ROS para clases mas heterogeneas."""
     try:
         from imblearn.over_sampling import RandomOverSampler, SMOTE
         class_counts = np.bincount(y, minlength=num_classes)
@@ -308,6 +376,7 @@ def _apply_smote(X, y, num_classes):
             target_debug[class_name] = {
                 "current": int(count),
                 "target": int(target),
+                "method": "smote" if class_name in SMOTE_CLASSES else "ros",
             }
             if target <= count:
                 continue
@@ -382,8 +451,8 @@ def _select_features(X_train, y_train, X_val, feature_cols, cfg):
             return X_train_vt, X_val_vt, vt_feature_cols
 
         keep_ratio = float(cfg.get("feature_selection_keep_ratio", 0.75))
-        min_features = int(cfg.get("feature_selection_min_features", 24))
-        max_features = int(cfg.get("feature_selection_max_features", 32))
+        min_features = int(cfg.get("feature_selection_min_features", 30))
+        max_features = int(cfg.get("feature_selection_max_features", 30))
         target_k = max(min_features, int(np.ceil(candidate_count * keep_ratio)))
         if max_features > 0:
             target_k = min(target_k, max_features)
@@ -417,6 +486,72 @@ def _select_features(X_train, y_train, X_val, feature_cols, cfg):
     except Exception as e:
         log.warning(f"[algorithm] Feature selection no disponible, continuando sin seleccion: {e}")
         return X_train, X_val, feature_cols
+
+
+def select_global_numeric_features(reference_csv_path, cfg=None):
+    """
+    Calcula una mascara global de variables numericas desde el training-set comun.
+    Esta seleccion se hace una vez en el coordinator y luego se reparte a todos.
+    """
+    cfg = cfg or {}
+    test_split = float(cfg.get("test_split", 0.2))
+
+    df = pd.read_csv(reference_csv_path, low_memory=False)
+    df.columns = [c.lower().strip() for c in df.columns]
+
+    if ATTACK_CAT_COL in df.columns:
+        df[ATTACK_CAT_COL] = df[ATTACK_CAT_COL].fillna("Normal").astype(str).str.strip()
+        df.loc[df[ATTACK_CAT_COL] == "", ATTACK_CAT_COL] = "Normal"
+        grouped_attack = df[ATTACK_CAT_COL].map(_group_attack_category)
+        y_series = grouped_attack.map(CAT_TO_IDX).fillna(0).astype(int)
+    elif ATTACK_GROUP_COL in df.columns:
+        grouped_attack = (
+            df[ATTACK_GROUP_COL]
+            .fillna("Benign")
+            .astype(str)
+            .str.strip()
+            .map(_group_attack_category)
+        )
+        y_series = grouped_attack.map(CAT_TO_IDX).fillna(0).astype(int)
+    else:
+        if LABEL_COL not in df.columns:
+            raise ValueError("No se puede calcular feature selection global sin etiquetas")
+        y_series = pd.Series((df[LABEL_COL].values > 0).astype(int))
+
+    available = [c for c in FEATURE_COLS if c in df.columns]
+    X_df = df[available].fillna(0).replace([np.inf, -np.inf], 0)
+    for col in [c for c in LOG_TRANSFORM_COLS if c in X_df.columns]:
+        X_df[col] = np.log1p(X_df[col].clip(lower=0))
+    for col in X_df.columns:
+        p99 = X_df[col].quantile(0.99)
+        if p99 > 0:
+            X_df[col] = X_df[col].clip(upper=p99)
+
+    scaler = StandardScaler()
+    X = np.nan_to_num(scaler.fit_transform(X_df.values).astype(np.float32))
+    y = y_series.values.astype(np.int32)
+
+    try:
+        from sklearn.model_selection import train_test_split
+        train_idx, val_idx = train_test_split(
+            np.arange(len(X)), test_size=test_split,
+            stratify=y, random_state=SEED)
+    except Exception:
+        n_val = max(1, int(len(X) * test_split))
+        idx = np.random.permutation(len(X))
+        val_idx, train_idx = idx[:n_val], idx[n_val:]
+
+    X_train = X[train_idx]
+    y_train = y[train_idx]
+    X_val = X[val_idx]
+    _, _, selected_feature_cols = _select_features(X_train, y_train, X_val, list(available), cfg)
+    selected_feature_cols = [col for col in available if col in selected_feature_cols]
+    log.info(
+        f"[algorithm] Feature selection global desde referencia: "
+        f"{len(available)} -> {len(selected_feature_cols)} numericas"
+    )
+    log.info(f"[algorithm] Variables numericas globales seleccionadas: {selected_feature_cols}")
+    return selected_feature_cols
 
 
 def _group_attack_category(value):
@@ -478,11 +613,20 @@ def load_unsw_nb15(data_path, test_split=0.2, cfg=None):
         num_classes, class_names = 2, ["Normal", "Attack"]
         log.info("[algorithm] Modo BINARIO (fallback)")
 
-    available = [c for c in FEATURE_COLS if c in df.columns]
+    shared_numeric_features = cfg.get("selected_numeric_features") or SELECTED_NUMERIC_FEATURES
+    available = [c for c in shared_numeric_features if c in df.columns]
+    missing_selected = [c for c in shared_numeric_features if c not in df.columns]
+    if missing_selected:
+        log.warning(f"[algorithm] Variables numericas globales no encontradas: {missing_selected}")
     if not available:
         available = [c for c in df.select_dtypes(include="number").columns
                      if c not in (LABEL_COL, "id")]
-    log.info(f"[algorithm] Features numericas: {len(available)} de {len(FEATURE_COLS)}")
+    source_label = "runtime compartido" if cfg.get("selected_numeric_features") else "fallback compartido"
+    log.info(
+        f"[algorithm] Feature selection global ({source_label}): {len(available)} numericas "
+        f"compartidas entre todos los workers"
+    )
+    log.info(f"[algorithm] Variables numericas seleccionadas: {available}")
 
     X_df = df[available].fillna(0).replace([np.inf, -np.inf], 0)
     for col in [c for c in LOG_TRANSFORM_COLS if c in X_df.columns]:
@@ -491,12 +635,6 @@ def load_unsw_nb15(data_path, test_split=0.2, cfg=None):
         p99 = X_df[col].quantile(0.99)
         if p99 > 0:
             X_df[col] = X_df[col].clip(upper=p99)
-
-    ignored_cat_cols = [col for col in ("proto", "service", "state") if col in df.columns]
-    if ignored_cat_cols:
-        log.info(
-            f"[algorithm] Columnas categoricas presentes pero excluidas del modelo: {ignored_cat_cols}"
-        )
 
     scaler = StandardScaler()
     X = np.nan_to_num(scaler.fit_transform(X_df.values).astype(np.float32))
@@ -513,10 +651,34 @@ def load_unsw_nb15(data_path, test_split=0.2, cfg=None):
         idx = np.random.permutation(len(X))
         val_idx, train_idx = idx[:n_val], idx[n_val:]
 
-    X_train, X_val = X[train_idx], X[val_idx]
+    X_train_num, X_val_num = X[train_idx], X[val_idx]
     y_train, y_val = y[train_idx], y[val_idx]
     train_class_counts = np.bincount(y_train, minlength=num_classes).astype(np.int32)
-    X_train, X_val, feature_cols = _select_features(X_train, y_train, X_val, feature_cols, cfg)
+
+    categorical_cols = [col for col in CATEGORICAL_COLS if col in df.columns]
+    X_train_cat = np.empty((len(train_idx), 0), dtype=np.float32)
+    X_val_cat = np.empty((len(val_idx), 0), dtype=np.float32)
+    categorical_feature_cols = []
+    if categorical_cols:
+        X_train_cat, X_val_cat, categorical_feature_cols = _encode_categorical_columns(
+            df.iloc[train_idx][categorical_cols],
+            df.iloc[val_idx][categorical_cols],
+            categorical_cols,
+            cfg,
+        )
+        log.info(
+            f"[algorithm] Columnas categoricas incorporadas al modelo: {categorical_cols} "
+            f"({len(categorical_feature_cols)} features one-hot)"
+        )
+    else:
+        log.info("[algorithm] No hay columnas categoricas adicionales disponibles para el modelo")
+
+    X_train = X_train_num
+    X_val = X_val_num
+    if X_train_cat.shape[1] > 0:
+        X_train = np.concatenate([X_train_num, X_train_cat], axis=1).astype(np.float32)
+        X_val = np.concatenate([X_val_num, X_val_cat], axis=1).astype(np.float32)
+        feature_cols = feature_cols + categorical_feature_cols
 
     # SMOTE en train solamente
     X_train, y_train = _apply_smote(X_train, y_train, num_classes)
@@ -570,11 +732,11 @@ def compute_training_class_weights(train_class_counts, class_names):
 # ============================================================================
 def build_model(input_dim, num_classes, learning_rate=0.001,
                 class_weights=None, total_steps=100,
-                focal_gamma=1.5, label_smoothing=0.01,
+                focal_gamma=1.5, label_smoothing=0.005,
                 prox_mu=0.0):
     """
     DNN v2: 512->256->128->64->num_classes
-    Con Focal Loss, Label Smoothing, y Cosine Decay LR.
+    Con Focal Loss, Label Smoothing y FedProx.
     """
     inputs = keras.layers.Input(shape=(input_dim,), name="input_features")
 
@@ -605,7 +767,6 @@ def build_model(input_dim, num_classes, learning_rate=0.001,
         prox_mu=prox_mu
     )
 
-    # Cosine Decay LR
     # Focal Loss con class weights
     loss_fn = SparseFocalLoss(
         gamma=focal_gamma,
@@ -762,7 +923,7 @@ def run(data_path, global_weights_b64=None, config_path=CONFIG_PATH):
     test_split = float(cfg["test_split"])
     es_patience = int(cfg.get("early_stopping_patience", 3))
     focal_gamma = float(cfg.get("focal_gamma", 1.25))
-    label_smoothing = float(cfg.get("label_smoothing", 0.02))
+    label_smoothing = float(cfg.get("label_smoothing", 0.005))
     fedprox_mu = float(cfg.get("fedprox_mu", 0.005))
 
     X_train, y_train, X_val, y_val, feature_cols, num_classes, class_names, train_class_counts = \

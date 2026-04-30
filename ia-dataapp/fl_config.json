@@ -1,18 +1,21 @@
 {
-  "rounds": 15,
+  "rounds": 18,
   "round_timeout": 360,
   "min_workers": 3,
-  "epochs": 15,
+  "epochs": 18,
   "batch_size": 128,
   "learning_rate": 0.001,
   "test_split": 0.2,
   "early_stopping_patience": 3,
   "focal_gamma": 1.5,
-  "label_smoothing": 0.01,
+  "label_smoothing": 0.005,
   "fedprox_mu": 0.001,
+  "categorical_encoding_enabled": true,
+  "feature_selection_strategy": "shared_runtime_coordinator",
   "feature_selection_enabled": true,
   "feature_selection_keep_ratio": 0.75,
-  "feature_selection_min_features": 24,
-  "feature_selection_max_features": 32,
-  "feature_selection_variance_threshold": 1e-8
+  "feature_selection_min_features": 30,
+  "feature_selection_max_features": 30,
+  "feature_selection_variance_threshold": 1e-8,
+  "selected_numeric_features": []
 }
