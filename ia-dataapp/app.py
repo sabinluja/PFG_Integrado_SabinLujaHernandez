@@ -487,6 +487,16 @@ _ws_perf_lock = threading.Lock()
 
 global_event_loop = None
 
+_client_ws_stats = {
+    "connections": 0,
+    "active_connections": 0,
+    "requests": 0,
+    "failures": 0,
+    "last_client": None,
+    "last_path": None,
+}
+_client_ws_lock = threading.Lock()
+
 
 # =============================================================================
 # Estado Global para Monitorizacion
@@ -6031,6 +6041,7 @@ def health():
         "status"  : "ok",
         "instance": INSTANCE_ID,
         "role"    : "coordinator" if is_coordinator else "worker",
+        "client_ws": "/ws/client",
     }
 
 
@@ -6062,6 +6073,7 @@ def status():
             "fl_status"       : fl_state.get("status", "idle"),
             "fl_round"        : fl_state.get("current_round", 0),
             "fl_total_rounds" : fl_state.get("total_rounds", 0),
+            "client_ws"       : dict(_client_ws_stats),
         }
     except Exception as e:
         log.error(f"[status-500] Error: {e}")
@@ -6416,6 +6428,7 @@ def _get_tunnel_status_data():
         "fl_status_clients"       : len(_ws_manager._clients),
         "worker_tunnels_active"   : list(fl_ws_manager.active_workers.keys()),
         "coordinator_tunnel_active": fl_ws_client_conn is not None,
+        "client_dataapp_ws"       : dict(_client_ws_stats),
         "ecc_wss_enabled"         : WS_ECC_ENABLED,
         "ids_ecc_only"            : FL_IDS_ECC_ONLY,
         "role"                    : "coordinator" if is_coordinator else "worker",
@@ -6487,6 +6500,169 @@ def _get_performance_data():
         },
         "recent_transfers": history[-20:],
     }
+
+
+_CLIENT_WS_ALLOWED_PREFIXES = (
+    "/health",
+    "/status",
+    "/llm-status",
+    "/metrics",
+    "/proxy",
+    "/fl/",
+    "/ids/",
+    "/broker/",
+    "/dataset/",
+    "/catalog/",
+    "/system/",
+    "/ws/tunnel-status",
+    "/ws/performance",
+)
+
+
+def _client_ws_path_allowed(path: str) -> bool:
+    if not path or not path.startswith("/") or path.startswith("/ws/client"):
+        return False
+    return any(path == prefix.rstrip("/") or path.startswith(prefix)
+               for prefix in _CLIENT_WS_ALLOWED_PREFIXES)
+
+
+def _client_ws_local_request(method: str, path: str, body, timeout: int) -> dict:
+    """
+    Ejecuta una accion REST existente a traves del canal WS cliente->DataApp.
+    Mantiene los handlers actuales como fuente de verdad y evita duplicar logica FL.
+    """
+    method = (method or "GET").upper()
+    if method not in ("GET", "POST"):
+        return {"ok": False, "status_code": 405, "error": f"method_not_allowed:{method}"}
+    if not _client_ws_path_allowed(path):
+        return {"ok": False, "status_code": 403, "error": f"path_not_allowed:{path}"}
+
+    url = f"https://127.0.0.1:8500{path}"
+    kwargs = {
+        "timeout": max(1, int(timeout or 60)),
+        "verify": False,
+        "headers": {"X-Client-Transport": "websocket"},
+    }
+    if method == "POST":
+        kwargs["json"] = body if body is not None else {}
+
+    resp = requests.request(method, url, **kwargs)
+    content_type = resp.headers.get("Content-Type", "")
+    response = {
+        "ok": resp.ok,
+        "status_code": resp.status_code,
+        "content_type": content_type,
+    }
+    try:
+        response["body"] = resp.json()
+    except Exception:
+        response["text"] = resp.text
+    return response
+
+
+@app.websocket("/ws/client")
+async def ws_client_control(websocket: WebSocket):
+    """
+    Canal WebSocket cliente -> DataApp.
+
+    Protocolo JSON:
+      {"id":"1","type":"request","method":"GET","path":"/status","body":{}}
+      {"id":"2","type":"request","method":"POST","path":"/fl/start","body":{}}
+
+    La DataApp responde con el mismo id y el resultado del endpoint REST existente.
+    """
+    client_id = websocket.query_params.get("client_id") or f"client-{uuid.uuid4()}"
+    await websocket.accept()
+    with _client_ws_lock:
+        _client_ws_stats["connections"] += 1
+        _client_ws_stats["active_connections"] += 1
+        _client_ws_stats["last_client"] = client_id
+    log.info(f"[WS /client] Cliente conectado: {client_id}")
+
+    await websocket.send_json({
+        "type": "hello",
+        "transport": "client-dataapp-websocket",
+        "instance": INSTANCE_ID,
+        "client_id": client_id,
+        "allowed_prefixes": list(_CLIENT_WS_ALLOWED_PREFIXES),
+    })
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+            except Exception:
+                await websocket.send_json({
+                    "type": "error",
+                    "error": "invalid_json",
+                    "detail": raw[:120],
+                })
+                continue
+
+            msg_id = msg.get("id") or str(uuid.uuid4())
+            msg_type = msg.get("type", "request")
+            if msg_type == "ping":
+                await websocket.send_json({"id": msg_id, "type": "pong", "instance": INSTANCE_ID})
+                continue
+            if msg_type != "request":
+                await websocket.send_json({
+                    "id": msg_id,
+                    "type": "error",
+                    "error": f"unsupported_message_type:{msg_type}",
+                })
+                continue
+
+            method = msg.get("method", "GET")
+            path = msg.get("path", "/status")
+            body = msg.get("body")
+            timeout = msg.get("timeout", 60)
+            started = time.time()
+            try:
+                result = await asyncio.to_thread(
+                    _client_ws_local_request,
+                    method,
+                    path,
+                    body,
+                    timeout,
+                )
+                elapsed_ms = round((time.time() - started) * 1000, 2)
+                with _client_ws_lock:
+                    _client_ws_stats["requests"] += 1
+                    _client_ws_stats["last_client"] = client_id
+                    _client_ws_stats["last_path"] = f"{method.upper()} {path}"
+                    if not result.get("ok"):
+                        _client_ws_stats["failures"] += 1
+                log.info(
+                    f"[WS /client] {client_id} -> {method.upper()} {path} "
+                    f"status={result.get('status_code')} elapsed_ms={elapsed_ms}"
+                )
+                await websocket.send_json({
+                    "id": msg_id,
+                    "type": "response",
+                    "transport": "client-dataapp-websocket",
+                    "elapsed_ms": elapsed_ms,
+                    **result,
+                })
+            except Exception as exc:
+                with _client_ws_lock:
+                    _client_ws_stats["failures"] += 1
+                log.warning(f"[WS /client] Error procesando {method} {path}: {exc}")
+                await websocket.send_json({
+                    "id": msg_id,
+                    "type": "response",
+                    "ok": False,
+                    "status_code": 500,
+                    "error": str(exc),
+                })
+    except WebSocketDisconnect:
+        log.info(f"[WS /client] Cliente desconectado: {client_id}")
+    finally:
+        with _client_ws_lock:
+            _client_ws_stats["active_connections"] = max(
+                0,
+                _client_ws_stats["active_connections"] - 1,
+            )
 
 
 @app.websocket("/ws/fl-status")

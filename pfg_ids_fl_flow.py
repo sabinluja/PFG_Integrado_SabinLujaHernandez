@@ -38,6 +38,8 @@ import time
 import re
 import os
 import threading
+import ssl
+from urllib.parse import urlparse
 try:
     import msvcrt
     _HAS_MSVCRT = True
@@ -64,16 +66,16 @@ class TeeWithStripANSI:
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         self.file = open(filename, "w", encoding="utf-8")
         self.ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        
+
     def write(self, message):
         self.stdout.write(message)
         self.file.write(self.ansi_escape.sub('', message))
         self.file.flush()
-        
+
     def flush(self):
         self.stdout.flush()
         self.file.flush()
-        
+
     def isatty(self):
         return hasattr(self.stdout, 'isatty') and self.stdout.isatty()
 
@@ -199,10 +201,123 @@ def _cm_short_label(name):
 
 SESSION = requests.Session()
 SESSION.verify = False
+CLIENT_WS_ENABLED = os.getenv("PFG_CLIENT_DATAAPP_WS", "true").lower() not in ("0", "false", "no")
+_WS_RPC_CLIENTS = {}
+
+
+class DataAppWebSocketClient:
+    """
+    Cliente RPC minimo sobre WebSocket para hablar con la DataApp.
+    Mantiene una conexion persistente por DataApp y deja REST solo como fallback.
+    """
+    def __init__(self, base_url):
+        self.base_url = base_url.rstrip("/")
+        self.ws = None
+        self.seq = 0
+
+    def _ws_url(self):
+        parsed = urlparse(self.base_url)
+        scheme = "wss" if parsed.scheme == "https" else "ws"
+        return f"{scheme}://{parsed.netloc}/ws/client?client_id=pfg-orchestrator"
+
+    def _connect(self, timeout):
+        if self.ws is not None:
+            return
+        from websockets.sync.client import connect
+        ssl_ctx = None
+        if self._ws_url().startswith("wss://"):
+            ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl.CERT_NONE
+        self.ws = connect(
+            self._ws_url(),
+            ssl=ssl_ctx,
+            open_timeout=min(max(timeout, 1), 30),
+            close_timeout=3,
+            max_size=None,
+            ping_interval=None,
+            ping_timeout=None,
+        )
+        hello = json.loads(self.ws.recv())
+        if hello.get("transport") != "client-dataapp-websocket":
+            raise RuntimeError(f"handshake WS inesperado: {hello}")
+
+    def request(self, method, path, body=None, timeout=240):
+        self._connect(timeout)
+        self.seq += 1
+        request_id = f"pfg-{self.seq}"
+        self.ws.send(json.dumps({
+            "id": request_id,
+            "type": "request",
+            "method": method,
+            "path": path,
+            "body": body,
+            "timeout": timeout,
+        }))
+        while True:
+            response = json.loads(self.ws.recv())
+            if response.get("id") == request_id:
+                if not response.get("ok"):
+                    raise RuntimeError(
+                        f"WS {method} {path} devolvio "
+                        f"{response.get('status_code')}: {response.get('error') or response.get('body')}"
+                    )
+                return response
+
+    def close(self):
+        if self.ws is not None:
+            try:
+                self.ws.close()
+            finally:
+                self.ws = None
+
+
+def _url_parts_for_ws(url):
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return None, None
+    base_url = f"{parsed.scheme}://{parsed.netloc}"
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    return base_url, path
+
+
+def _ws_rpc(method, url, body=None, timeout=240):
+    if not CLIENT_WS_ENABLED or not _WS_AVAILABLE:
+        return None
+    base_url, path = _url_parts_for_ws(url)
+    if not base_url:
+        return None
+    client = _WS_RPC_CLIENTS.get(base_url)
+    if client is None:
+        client = DataAppWebSocketClient(base_url)
+        _WS_RPC_CLIENTS[base_url] = client
+    try:
+        return client.request(method, path, body=body, timeout=timeout)
+    except Exception:
+        client.close()
+        _WS_RPC_CLIENTS.pop(base_url, None)
+        raise
+
+
+def _close_ws_rpc_clients():
+    for client in list(_WS_RPC_CLIENTS.values()):
+        client.close()
+    _WS_RPC_CLIENTS.clear()
 
 
 def http_get(url, timeout=240):
     substep(f"GET  {url}")
+    if CLIENT_WS_ENABLED and _WS_AVAILABLE:
+        try:
+            ws_resp = _ws_rpc("GET", url, timeout=timeout)
+            if ws_resp is not None:
+                info(f"[WS cliente->DataApp] GET {url} OK ({ws_resp.get('elapsed_ms', '?')} ms)")
+                body = ws_resp.get("body")
+                return body if body is not None else {"_raw": ws_resp.get("text", "")}
+        except Exception as exc:
+            warn(f"WS cliente->DataApp fallo para GET {url}; fallback REST: {exc}")
     try:
         r = SESSION.get(url, timeout=timeout)
         r.raise_for_status()
@@ -220,6 +335,15 @@ def http_get(url, timeout=240):
 
 def http_post(url, body, timeout=240):
     substep(f"POST {url}")
+    if CLIENT_WS_ENABLED and _WS_AVAILABLE:
+        try:
+            ws_resp = _ws_rpc("POST", url, body=body, timeout=timeout)
+            if ws_resp is not None:
+                info(f"[WS cliente->DataApp] POST {url} OK ({ws_resp.get('elapsed_ms', '?')} ms)")
+                parsed_body = ws_resp.get("body")
+                return parsed_body if parsed_body is not None else {"_raw": ws_resp.get("text", "")}
+        except Exception as exc:
+            warn(f"WS cliente->DataApp fallo para POST {url}; fallback REST: {exc}")
     try:
         r = SESSION.post(url, json=body, timeout=timeout)
         r.raise_for_status()
@@ -246,6 +370,16 @@ def http_post(url, body, timeout=240):
 
 def http_post_raw(url, body, timeout=240):
     substep(f"POST {url}")
+    if CLIENT_WS_ENABLED and _WS_AVAILABLE:
+        try:
+            ws_resp = _ws_rpc("POST", url, body=body, timeout=timeout)
+            if ws_resp is not None:
+                info(f"[WS cliente->DataApp] POST {url} OK ({ws_resp.get('elapsed_ms', '?')} ms)")
+                if "text" in ws_resp:
+                    return ws_resp.get("text", "")
+                return json.dumps(ws_resp.get("body", {}), ensure_ascii=False)
+        except Exception as exc:
+            warn(f"WS cliente->DataApp fallo para POST {url}; fallback REST: {exc}")
     try:
         r = SESSION.post(url, json=body, timeout=timeout)
         r.raise_for_status()
@@ -446,15 +580,13 @@ def helper_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
         "para que los nodos autorizados puedan descargarla tras la negociación."
     )
     step("Compilación del algoritmo en imagen Docker (POST /fl/fetch-algorithm)")
-    
+
     try:
-        r = SESSION.post(f"{coordinator_url}/fl/fetch-algorithm", json={}, timeout=req_timeout)
-        r.raise_for_status()
-        data = r.json()
-        
+        data = http_post(f"{coordinator_url}/fl/fetch-algorithm", {}, timeout=req_timeout)
+
         mode  = data.get("delivery_mode", "ids_base64")
         image = data.get("docker_image")
-        
+
         if mode == "docker_image":
             print(f"      {GREEN}Imagen Docker compilada y registrada:{RESET}")
             print(f"        {BOLD}{image}{RESET}")
@@ -578,16 +710,11 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
             continue
 
         try:
-            r = SESSION.post(
+            w = http_post(
                 f"{coordinator_url}/broker/discover/worker",
-                json={"ecc_url": ecc_url, "connector_uri": uri},
+                {"ecc_url": ecc_url, "connector_uri": uri},
                 timeout=req_timeout,
             )
-            if not r.ok:
-                m_w = re.search(r"ecc-worker(\d+)", ecc_url)
-                warn(f"Worker-{m_w.group(1) if m_w else '?'} devolvio HTTP {r.status_code} -- saltando")
-                continue
-            w = r.json()
         except Exception as exc:
             m_w = re.search(r"ecc-worker(\d+)", ecc_url)
             warn(f"Worker-{m_w.group(1) if m_w else '?'} error: {exc}")
@@ -815,14 +942,11 @@ def fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout):
     fs     = data.get("feature_selection", {}) or {}
 
     if status == "started":
+        print()
         ok("Entrenamiento FL arrancado correctamente")
     else:
         warn(f"Respuesta inesperada: status={status}")
 
-    field("coordinator", data.get("coordinator", "?"))
-    if cfg:
-        field("rounds",        cfg.get("rounds"))
-        field("round_timeout", f"{cfg.get('round_timeout')}s")
     if fs.get("enabled"):
         source = fs.get("source") or "dataset de referencia del coordinator"
         source = os.path.basename(str(source))
@@ -928,26 +1052,28 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
     # -- Verificar estado real de los tuneles WS -------------------------------
     step("Verificación de túneles WebSocket (GET /ws/tunnel-status)")
     try:
-        ts = SESSION.get(f"{coordinator_url}/ws/tunnel-status", timeout=10, verify=TLS_CERT)
-        if ts.ok:
-            td = ts.json()
-            ws_status_clients  = td.get("fl_status_clients", 0)
-            ws_workers_active  = td.get("worker_tunnels_active", [])
-            ws_coord_tunnel    = td.get("coordinator_tunnel_active", False)
-            ecc_wss_enabled = td.get("ecc_wss_enabled", False)
-            ids_ecc_only = td.get("ids_ecc_only", False)
-            info(f"[WS] /ws/fl-status   -> {ws_status_clients} cliente(s) de monitorizacion")
-            if ws_workers_active:
-                ok(f"[WS] Tuneles directos DataApp↔DataApp ACTIVOS -> workers: {ws_workers_active}")
-            else:
-                info("[WS] Tuneles directos DataApp↔DataApp inactivos")
-            info(f"[WS] Tunel WS hacia coordinator: {'Activo' if ws_coord_tunnel else 'Inactivo'}")
-            if ids_ecc_only:
-                info(f"[WS] Transporte FL activo: IDS via ECC↔ECC sobre {'WSS' if ecc_wss_enabled else 'HTTPS'}")
+        td = http_get(f"{coordinator_url}/ws/tunnel-status", timeout=10)
+        ws_status_clients  = td.get("fl_status_clients", 0)
+        ws_workers_active  = td.get("worker_tunnels_active", [])
+        ws_coord_tunnel    = td.get("coordinator_tunnel_active", False)
+        client_ws          = td.get("client_dataapp_ws", {})
+        ecc_wss_enabled = td.get("ecc_wss_enabled", False)
+        ids_ecc_only = td.get("ids_ecc_only", False)
+        info(f"[WS] /ws/client      -> {client_ws.get('requests', 0)} peticion(es) cliente->DataApp")
+        info(f"[WS] /ws/fl-status   -> {ws_status_clients} cliente(s) de monitorizacion")
+        if ws_workers_active:
+            ok(f"[WS] Tuneles directos DataApp↔DataApp ACTIVOS -> workers: {ws_workers_active}")
         else:
-            warn(f"GET /ws/tunnel-status respondio {ts.status_code}")
+            info("[WS] Tuneles directos DataApp↔DataApp inactivos")
+        info(f"[WS] Tunel WS hacia coordinator: {'Activo' if ws_coord_tunnel else 'Inactivo'}")
+        if ids_ecc_only:
+            info(f"[WS] Transporte FL activo: IDS via ECC↔ECC sobre {'WSS' if ecc_wss_enabled else 'HTTPS'}")
     except Exception as _te:
         warn(f"No se pudo consultar /ws/tunnel-status: {_te}")
+
+    if _WS_RPC_CLIENTS:
+        info("[WS] Cerrando /ws/client antes de abrir el monitor /ws/fl-status")
+        _close_ws_rpc_clients()
 
     # wss:// -- el DataApp corre con TLS (uvicorn + ECDHE cipher suites, start.sh).
     # https://localhost:5002 -> wss://localhost:5002/ws/fl-status
@@ -1238,8 +1364,8 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
     # Esperar a que el FL arranque
     for _ in range(30):
         try:
-            r = SESSION.get(f"{coordinator_url}/fl/status", timeout=10, verify=TLS_CERT)
-            if r.ok and r.json().get("status") not in ("idle", ""):
+            fl = http_get(f"{coordinator_url}/fl/status", timeout=10)
+            if fl.get("status") not in ("idle", ""):
                 ok("FL en marcha"); break
         except Exception:
             pass
@@ -1257,9 +1383,7 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
             warn("Timeout de monitorizacion (1h)"); break
 
         try:
-            r  = SESSION.get(f"{coordinator_url}/fl/status", timeout=10, verify=TLS_CERT)
-            r.raise_for_status()
-            fl = r.json()
+            fl = http_get(f"{coordinator_url}/fl/status", timeout=10)
         except Exception as e:
             warn(f"Error polling /fl/status: {e}"); time.sleep(poll_interval); continue
 
@@ -1343,16 +1467,12 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
     fl_data = {}
     fl_results = []
     try:
-        r = SESSION.get(f"{coordinator_url}/fl/status", timeout=req_timeout, verify=TLS_CERT)
-        if r.ok:
-            fl_data = r.json()
+        fl_data = http_get(f"{coordinator_url}/fl/status", timeout=req_timeout)
     except Exception as e:
         warn(f"No se pudo obtener /fl/status: {e}")
 
     try:
-        r = SESSION.get(f"{coordinator_url}/fl/results", timeout=req_timeout, verify=TLS_CERT)
-        if r.ok:
-            fl_results = r.json()
+        fl_results = http_get(f"{coordinator_url}/fl/results", timeout=req_timeout)
     except Exception:
         pass
 
@@ -1364,9 +1484,8 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
     model_data = {}
     r_model = None
     try:
-        r_model = SESSION.get(f"{coordinator_url}/fl/model", timeout=req_timeout, verify=TLS_CERT)
-        if r_model.ok:
-            model_data = r_model.json()
+        model_data = http_get(f"{coordinator_url}/fl/model", timeout=req_timeout)
+        r_model = True
     except Exception:
         r_model = None
 
@@ -1470,7 +1589,7 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
 
     # --- Confusion Matrix ---
     try:
-        if r_model and r_model.ok:
+        if r_model:
             cm = model_data.get("confusion_matrix", [])
             class_names_cm = model_data.get("class_names", [
                 "Benign", "GenericAttack", "Exploits", "Fuzzers", "GroupedAttacks"
@@ -1509,31 +1628,29 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
         fl_res = None
         info("Esperando a que el recurso del modelo FL se publique en el catalogo IDS...")
         for _ in range(15):
-            r = SESSION.get(f"{coordinator_url}/ids/self-description", timeout=10, verify=TLS_CERT)
-            if r.ok:
-                sd = r.json()
-                cat = (sd.get("ids:resourceCatalog") or [{}])[0]
-                res = cat.get("ids:offeredResource", [])
-                
-                fl_res = next(
-                    (x for x in res if
-                     "fl_model_coordinator" in x.get("@id", "") or
-                     "FL Global Model" in ((x.get("ids:title") or [{}])[0]).get("@value", "")),
-                    None
-                )
-                if fl_res:
-                    break
+            sd = http_get(f"{coordinator_url}/ids/self-description", timeout=10)
+            cat = (sd.get("ids:resourceCatalog") or [{}])[0]
+            res = cat.get("ids:offeredResource", [])
+
+            fl_res = next(
+                (x for x in res if
+                 "fl_model_coordinator" in x.get("@id", "") or
+                 "FL Global Model" in ((x.get("ids:title") or [{}])[0]).get("@value", "")),
+                None
+            )
+            if fl_res:
+                break
             time.sleep(1)
-            
+
         if not fl_res:
             warn("No se encontro el recurso del modelo FL en el catalogo tras la espera")
             return
-            
+
         cid_val = ((fl_res.get("ids:contractOffer") or [{}])[0]).get("@id", "")
         if not cid_val:
             warn("No se encontro ContractOffer en el modelo")
             return
-            
+
     except Exception as e:
         warn(f"Error parseando IDs para la fase 6: {e}")
         return
@@ -1541,11 +1658,11 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
     # Obtenemos las URLs directamente del broker sin hardcodear
     coord_ecc = endpoints["coordinator"].get("ecc_url")
     coord_uri = endpoints["coordinator"].get("connector_uri")
-    
+
     if not coord_ecc or not coord_uri:
         warn("No se pudo extraer la URL del coordinator desde el Broker para realizar la prueba.")
         return
-    
+
     # -- Extraer TODOS los peers descubiertos (aceptados, rechazados Y descartados) --
     # De este modo worker-4 (schema incompatible -> descartado en discovery) tambien
     # se prueba y recibe un RejectionMessage real del coordinator porque su URI
@@ -1574,7 +1691,7 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
     for target_wid in workers_to_test:
         if f"worker{target_wid}" not in endpoints["peers"]:
             continue
-            
+
         w_url = f"https://localhost:{5000 + int(target_wid)}"
         # ECC :8889 no es accesible desde DataApps -- redirigir al DataApp coordinator
         # que implementa la logica del contrato IDS directamente en su endpoint /data.
@@ -1590,28 +1707,28 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
             "contractId"      : cid_val,
             "contractProvider": coord_uri,
         }
-        
+
         print()
         step(f"Test de acceso: Worker-{target_wid} solicita el modelo al Coordinador")
         _ids_log("out", "ids:ContractRequestMessage", f"worker-{target_wid}", f"coordinator-{cid}")
-        
+
         try:
             raw = http_post_raw(f"{w_url}/proxy", payload, timeout=req_timeout)
             parsed = parse_ids(raw)
             if not parsed:
                 parsed = parse_ids(raw, "Message") or {}
-                
+
             ids_type = parsed.get("@type", "")
-            
+
             if "ContractAgreement" in ids_type:
                 step("Resultado: Acceso PERMITIDO (Contract Agreement)")
                 _ids_log("in", "ids:ContractAgreementMessage", f"coordinator-{cid}", f"worker-{target_wid}")
-                
+
                 transfer_contract = parsed.get("@id", "?")
                 ok(f"Worker-{target_wid} -- acceso PERMITIDO al modelo (Contract Agreement)")
                 field("Recurso Target", fl_res.get("@id", "?"), indent=8)
                 field("transferContract id", transfer_contract, indent=8)
-                
+
             elif ("Rejection" in ids_type or "ContractRejection" in ids_type
                   or parsed.get("status") == "rejected"
                   or parsed.get("reason") in ("unauthorized_consumer", "fl_opt_out")):
@@ -1634,16 +1751,16 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
                     reason = parsed.get("ids:rejectionReason", "?")
                     fail(f"Worker-{target_wid} -- acceso DENEGADO al modelo (sorprendente, era participante)")
                     field("Rejection Reason", str(reason), indent=8)
-                
+
             else:
                 step("Resultado: Respuesta IDS no reconocida")
                 _ids_log("in", "PolicyRejection", f"coordinator-{cid}", f"worker-{target_wid}")
                 warn(f"Worker-{target_wid} -- respuesta IDS no reconocida: {ids_type!r}")
                 field("raw_response", (raw[:200] + "...") if len(raw) > 200 else raw, indent=8)
-                
+
         except Exception as e:
             warn(f"Error proxy Worker-{target_wid}: {e}")
-            
+
         print()
 
 
@@ -1667,6 +1784,8 @@ def parse_args():
                    help="No arrancar el entrenamiento (solo fases 0-3)")
     p.add_argument("--timeout", type=int, default=240, metavar="SEG",
                    help="Timeout HTTP en segundos (default: 240)")
+    p.add_argument("--no-client-ws", action="store_true",
+                   help="Desactiva el canal WebSocket cliente->DataApp y usa REST directo")
     return p.parse_args()
 
 
@@ -1814,22 +1933,14 @@ def fase1_verificar_catalogo_coordinator(coordinator_url, cid, req_timeout):
         "Solo un nodo que tenga datos registrados puede actuar como orquestador legítimo."
     )
     step("Inspección del Catálogo local (GET /ids/self-description)")
-    
+
     ecc_port = 8090 if int(cid) == 1 else 8090 + int(cid)
     # Mostramos rutas para debugging pero de forma mas limpia
     print(f"      {GRAY}[Ruta DAPS/ECC] https://localhost:{ecc_port}/api/selfDescription/{RESET}")
     print(f"      {GRAY}[Ruta DataApp]  https://localhost:5002/ids/self-description/{RESET}")
-    
+
     try:
-        r = SESSION.get(
-            f"{coordinator_url}/ids/self-description",
-            timeout=req_timeout,
-            verify=TLS_CERT,
-        )
-        if not r.ok:
-            warn(f"Error HTTP {r.status_code} al leer el catalogo IDS")
-            return
-        sd  = r.json()
+        sd  = http_get(f"{coordinator_url}/ids/self-description", timeout=req_timeout)
         cat = (sd.get("ids:resourceCatalog") or [{}])[0]
         resources = cat.get("ids:offeredResource", [])
         datasets = []
@@ -1851,8 +1962,11 @@ def fase1_verificar_catalogo_coordinator(coordinator_url, cid, req_timeout):
 
 
 def main():
+    global CLIENT_WS_ENABLED
     args = parse_args()
     cid  = args.coordinator
+    if args.no_client_ws:
+        CLIENT_WS_ENABLED = False
 
     try:
         cid_int = int(cid)
@@ -1874,6 +1988,10 @@ def main():
     field("coordinator_port", coordinator_port)
     field("Arrancar FL",     "No (--skip-fl)" if args.skip_fl else "Si")
     field("Timeout HTTP",    f"{req_timeout}s")
+    field(
+        "Cliente -> DataApp",
+        "WebSocket /ws/client" if CLIENT_WS_ENABLED and _WS_AVAILABLE else "REST directo",
+    )
 
     # Referencias mutables para que el listener las actualice en caliente
     _coord_ref     = [coordinator_url]
@@ -1917,6 +2035,7 @@ def main():
         print()
         print(f"  {RED}{BOLD}[CTRL+C] Ejecucion interrumpida. Limpiando Workers...{RESET}")
         _cleanup_workers(coordinator_url, _endpoints_ref[0], req_timeout)
+        _close_ws_rpc_clients()
         print(f"  {GREEN}Sistema restaurado.{RESET}")
         sys.exit(0)
 
@@ -1950,13 +2069,11 @@ def main():
     if not args.skip_fl:
         try:
             import json
-            import requests
-            raw_metrics = requests.get(f"{coordinator_url}/metrics", timeout=req_timeout, verify=TLS_CERT).text
-            perf = json.loads(raw_metrics)
-            
+            perf = http_get(f"{coordinator_url}/metrics", timeout=req_timeout)
+
             print(f"  {CYAN}[RENDIMIENTO] DE TRANSFERENCIAS (WS directo - IDS por ECC){RESET}")
             print(f"  {CYAN}----------------------------------------------------------------------{RESET}")
-            
+
             ws_sends  = perf.get("ws_sends", 0)
             ws_ms     = perf.get("ws_total_ms", 0.0)
             ws_bytes  = perf.get("ws_bytes", 0)
@@ -2000,7 +2117,7 @@ def main():
         import requests
         print(f"  {CYAN}[AUDITORÍA] CLEARING HOUSE (Notario IDS){RESET}")
         print(f"  {CYAN}----------------------------------------------------------------------{RESET}")
-        
+
         try:
             r_integ = requests.get("http://localhost:8100/api/transactions/audit/integrity", timeout=req_timeout)
             if r_integ.ok:
@@ -2020,7 +2137,7 @@ def main():
                 print(f"    {BOLD}Muestreo Auditado (Nº Logs){RESET}    : {total} transacciones IDS")
         except:
             pass
-            
+
         print()
         print(f"  ► Explora el historial completo del notario digital en:")
         print(f"      {MAGENTA}http://localhost:8100/api/transactions?page_size=1000&sort_order=asc{RESET}")
@@ -2039,13 +2156,13 @@ def main():
         import os, datetime
         exports_dir = os.path.join(os.getcwd(), "ClearingHouse", "exports")
         os.makedirs(exports_dir, exist_ok=True)
-        
+
         timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         export_filename = f"fl_ids_audit_report_{timestamp_str}.json"
         export_path = os.path.join(exports_dir, export_filename)
-        
+
         print(f"  {CYAN}[REPORTE] DESCARGANDO REPORTE DE AUDITORÍA (Notario IDS)...{RESET}")
-        
+
         r_export = requests.get("http://localhost:8100/api/export/json", timeout=10)
         if r_export.ok:
             with open(export_path, "w", encoding="utf-8") as f:
@@ -2062,6 +2179,7 @@ def main():
     info(f"GET {coordinator_url}/fl/model")
     info(f"GET {coordinator_url}/ids/self-description")
     info(f"GET {coordinator_url}/ids/contract?contractOffer=<fl_model_contract_id>")
+    _close_ws_rpc_clients()
     print()
 
 
