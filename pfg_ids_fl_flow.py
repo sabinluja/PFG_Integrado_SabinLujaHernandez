@@ -224,13 +224,14 @@ class DataAppWebSocketClient:
         if self.ws is not None:
             return
         from websockets.sync.client import connect
+        ws_url = self._ws_url()
         ssl_ctx = None
-        if self._ws_url().startswith("wss://"):
+        if ws_url.startswith("wss://"):
             ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             ssl_ctx.check_hostname = False
             ssl_ctx.verify_mode = ssl.CERT_NONE
         self.ws = connect(
-            self._ws_url(),
+            ws_url,
             ssl=ssl_ctx,
             open_timeout=min(max(timeout, 1), 30),
             close_timeout=3,
@@ -241,6 +242,11 @@ class DataAppWebSocketClient:
         hello = json.loads(self.ws.recv())
         if hello.get("transport") != "client-dataapp-websocket":
             raise RuntimeError(f"handshake WS inesperado: {hello}")
+        info(
+            "[WS cliente->DataApp] CONEXION ABIERTA "
+            f"transporte=WSS url={ws_url} "
+            f"dataapp_worker={hello.get('instance', '?')}"
+        )
 
     def request(self, method, path, body=None, timeout=240):
         self._connect(timeout)
@@ -313,7 +319,11 @@ def http_get(url, timeout=240):
         try:
             ws_resp = _ws_rpc("GET", url, timeout=timeout)
             if ws_resp is not None:
-                info(f"[WS cliente->DataApp] GET {url} OK ({ws_resp.get('elapsed_ms', '?')} ms)")
+                info(
+                    "[WS cliente->DataApp] OK "
+                    f"transporte=WSS metodo=GET url_rest_logica={url} "
+                    f"despachado_por=/ws/client elapsed_ms={ws_resp.get('elapsed_ms', '?')}"
+                )
                 body = ws_resp.get("body")
                 return body if body is not None else {"_raw": ws_resp.get("text", "")}
         except Exception as exc:
@@ -339,7 +349,11 @@ def http_post(url, body, timeout=240):
         try:
             ws_resp = _ws_rpc("POST", url, body=body, timeout=timeout)
             if ws_resp is not None:
-                info(f"[WS cliente->DataApp] POST {url} OK ({ws_resp.get('elapsed_ms', '?')} ms)")
+                info(
+                    "[WS cliente->DataApp] OK "
+                    f"transporte=WSS metodo=POST url_rest_logica={url} "
+                    f"despachado_por=/ws/client elapsed_ms={ws_resp.get('elapsed_ms', '?')}"
+                )
                 parsed_body = ws_resp.get("body")
                 return parsed_body if parsed_body is not None else {"_raw": ws_resp.get("text", "")}
         except Exception as exc:
@@ -374,7 +388,11 @@ def http_post_raw(url, body, timeout=240):
         try:
             ws_resp = _ws_rpc("POST", url, body=body, timeout=timeout)
             if ws_resp is not None:
-                info(f"[WS cliente->DataApp] POST {url} OK ({ws_resp.get('elapsed_ms', '?')} ms)")
+                info(
+                    "[WS cliente->DataApp] OK "
+                    f"transporte=WSS metodo=POST url_rest_logica={url} "
+                    f"despachado_por=/ws/client elapsed_ms={ws_resp.get('elapsed_ms', '?')}"
+                )
                 if "text" in ws_resp:
                     return ws_resp.get("text", "")
                 return json.dumps(ws_resp.get("body", {}), ensure_ascii=False)
@@ -596,7 +614,9 @@ def helper_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
             print(f"      {GRAY}Algoritmo cargado en memoria (modo legacy base64){RESET}")
         print()
     except Exception as exc:
-        fail(f"El coordinator no pudo obtener el algoritmo internamente: {exc}")# =============================================================================
+        fail(f"El coordinator no pudo obtener el algoritmo internamente: {exc}")
+        
+# =============================================================================
 # FASE 2 -- Descubrimiento de peers compatibles
 # =============================================================================
 

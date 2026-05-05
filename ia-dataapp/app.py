@@ -92,7 +92,7 @@ WS_ECC_ENABLED = os.getenv("WS_ECC", "true").lower() == "true"
 # El coordinator construye una imagen con algorithm.py + fl_config.json + deps
 # y la pushea al registry. Los workers la descargan (docker pull) via IDS.
 FL_DOCKER_REGISTRY = os.getenv("FL_DOCKER_REGISTRY", "fl-registry:5000")
-FL_ALGO_VIA_DOCKER = os.getenv("FL_ALGO_VIA_DOCKER", "false").lower() == "true"
+FL_ALGO_VIA_DOCKER = os.getenv("FL_ALGO_VIA_DOCKER", "true").lower() == "true"
 
 # Credenciales para la API interna del ECC
 API_USER = os.getenv("API_USER", "apiUser")
@@ -6577,7 +6577,17 @@ async def ws_client_control(websocket: WebSocket):
         _client_ws_stats["connections"] += 1
         _client_ws_stats["active_connections"] += 1
         _client_ws_stats["last_client"] = client_id
-    log.info(f"[WS /client] Cliente conectado: {client_id}")
+    try:
+        peer = f"{websocket.client.host}:{websocket.client.port}" if websocket.client else "unknown"
+    except Exception:
+        peer = "unknown"
+    public_port_hint = 5000 + int(INSTANCE_ID) if str(INSTANCE_ID).isdigit() else "500N"
+    log.info(
+        "[WS CLIENTE->DATAAPP] CONEXION ACEPTADA "
+        f"transporte=WSS endpoint=/ws/client cliente={client_id} peer={peer} "
+        f"url_publica=wss://localhost:{public_port_hint}/ws/client "
+        f"contenedor=be-dataapp-worker{INSTANCE_ID}:8500"
+    )
 
     await websocket.send_json({
         "type": "hello",
@@ -6634,7 +6644,9 @@ async def ws_client_control(websocket: WebSocket):
                     if not result.get("ok"):
                         _client_ws_stats["failures"] += 1
                 log.info(
-                    f"[WS /client] {client_id} -> {method.upper()} {path} "
+                    "[WS CLIENTE->DATAAPP] PETICION OK "
+                    f"transporte=WSS cliente={client_id} endpoint_ws=/ws/client "
+                    f"despacho_interno={method.upper()} {path} "
                     f"status={result.get('status_code')} elapsed_ms={elapsed_ms}"
                 )
                 await websocket.send_json({
@@ -6647,7 +6659,11 @@ async def ws_client_control(websocket: WebSocket):
             except Exception as exc:
                 with _client_ws_lock:
                     _client_ws_stats["failures"] += 1
-                log.warning(f"[WS /client] Error procesando {method} {path}: {exc}")
+                log.warning(
+                    "[WS CLIENTE->DATAAPP] PETICION ERROR "
+                    f"transporte=WSS cliente={client_id} endpoint_ws=/ws/client "
+                    f"despacho_interno={method.upper()} {path}: {exc}"
+                )
                 await websocket.send_json({
                     "id": msg_id,
                     "type": "response",
@@ -6656,7 +6672,7 @@ async def ws_client_control(websocket: WebSocket):
                     "error": str(exc),
                 })
     except WebSocketDisconnect:
-        log.info(f"[WS /client] Cliente desconectado: {client_id}")
+        log.info(f"[WS CLIENTE->DATAAPP] CONEXION CERRADA cliente={client_id}")
     finally:
         with _client_ws_lock:
             _client_ws_stats["active_connections"] = max(
