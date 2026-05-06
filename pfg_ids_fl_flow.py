@@ -50,7 +50,6 @@ import requests
 import urllib3
 try:
     import websockets
-    import websockets.exceptions
     _WS_AVAILABLE = True
 except ImportError:
     _WS_AVAILABLE = False
@@ -945,7 +944,7 @@ def fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout):
         "Entrenamiento Federado (Federated Learning)",
         "Arranca la primera ronda de entrenamiento. El coordinador notifica a los trabajadores\n"
         "autorizados que comiencen a entrenar de forma distribuida y monitoriza el progreso\n"
-        "en tiempo real vía WebSocket."
+        "mediante polling HTTP."
     )
 
     step("Arranque del entrenamiento (POST /fl/start)")
@@ -1044,19 +1043,8 @@ def _print_handshake_algoritmo(rnd_num, wid, peer_lbl, cid):
 
 def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
     """
-    Monitoriza el entrenamiento FL en tiempo real via WebSocket /ws/fl-status.
-
-    El coordinator emite eventos JSON por cada cambio de estado:
-      connected       -> conexion establecida, estado inicial
-      fl_started      -> FL arranco (total_rounds, min_workers)
-      round_started   -> inicio de ronda N
-      round_completed -> ronda N cerrada con metricas (accuracy, auc, loss...)
-      fl_completed    -> FL terminado con mejor ronda y metricas finales
-      fl_failed       -> FL abortado (min_workers no alcanzado)
-      fl_update       -> cambio de estado generico
-
-    Fallback: si websockets no esta instalado o la conexion falla,
-    vuelve al polling HTTP (GET /fl/status cada 5s).
+    Monitoriza el entrenamiento FL con polling HTTP sobre /fl/status.
+    Los pesos se siguen transportando por IDS/ECC, usando WSS cuando WS_ECC=true.
     """
     accepted      = nego.get("accepted", [])
     accepted_wids = sorted(
@@ -1065,319 +1053,28 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
         for m in [re.search(r"worker(\d+)", w.get("connector_uri", ""))] if m
     )
 
-    step("Monitorización en tiempo real vía WebSocket")
-    print(f"      {GRAY}Endpoint: wss://localhost:{coordinator_url.split(':')[-1]}/ws/fl-status{RESET}")
+    step("Monitorizacion del entrenamiento via HTTP")
+    print(f"      {GRAY}Endpoint: {coordinator_url}/fl/status{RESET}")
     print(f"      {GRAY}Workers participantes: {', '.join('worker-' + w for w in accepted_wids)}{RESET}")
 
-    # -- Verificar estado real de los tuneles WS -------------------------------
-    step("Verificación de túneles WebSocket (GET /ws/tunnel-status)")
+    step("Verificacion de transporte conservado (GET /transport/status)")
     try:
-        td = http_get(f"{coordinator_url}/ws/tunnel-status", timeout=10)
-        ws_status_clients  = td.get("fl_status_clients", 0)
-        ws_workers_active  = td.get("worker_tunnels_active", [])
-        ws_coord_tunnel    = td.get("coordinator_tunnel_active", False)
-        client_ws          = td.get("client_dataapp_ws", {})
+        td = http_get(f"{coordinator_url}/transport/status", timeout=10)
+        client_ws = td.get("client_dataapp_ws", {})
         ecc_wss_enabled = td.get("ecc_wss_enabled", False)
         ids_ecc_only = td.get("ids_ecc_only", False)
+        weights_via_ecc = td.get("weights_via_ecc", False)
         info(f"[WS] /ws/client      -> {client_ws.get('requests', 0)} peticion(es) cliente->DataApp")
-        info(f"[WS] /ws/fl-status   -> {ws_status_clients} cliente(s) de monitorizacion")
-        if ws_workers_active:
-            ok(f"[WS] Tuneles directos DataApp↔DataApp ACTIVOS -> workers: {ws_workers_active}")
-        else:
-            info("[WS] Tuneles directos DataApp↔DataApp inactivos")
-        info(f"[WS] Tunel WS hacia coordinator: {'Activo' if ws_coord_tunnel else 'Inactivo'}")
-        if ids_ecc_only:
-            info(f"[WS] Transporte FL activo: IDS via ECC↔ECC sobre {'WSS' if ecc_wss_enabled else 'HTTPS'}")
+        if ids_ecc_only or weights_via_ecc:
+            info(f"[ECC] Transporte de pesos FL: IDS via ECC<->ECC sobre {'WSS' if ecc_wss_enabled else 'HTTPS'}")
     except Exception as _te:
-        warn(f"No se pudo consultar /ws/tunnel-status: {_te}")
+        warn(f"No se pudo consultar /transport/status: {_te}")
 
-    if _WS_RPC_CLIENTS:
-        info("[WS] Cerrando /ws/client antes de abrir el monitor /ws/fl-status")
-        _close_ws_rpc_clients()
-
-    # wss:// -- el DataApp corre con TLS (uvicorn + ECDHE cipher suites, start.sh).
-    # https://localhost:5002 -> wss://localhost:5002/ws/fl-status
-    ws_url = coordinator_url.replace("https://", "wss://").replace("http://", "ws://")
-    ws_url = f"{ws_url}/ws/fl-status"
-
-    if not _WS_AVAILABLE:
-        warn(
-            "libreria 'websockets' no instalada -- usando polling HTTP como fallback.\n"
-            "      Instala con: pip install websockets"
-        )
-        _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids)
-        return
-
-    info(f"Conectando a {ws_url} ...")
-
-    import asyncio as _asyncio
-
-    async def _ws_monitor():
-        conn_attempts = 0
-        max_attempts  = 5
-
-        while conn_attempts < max_attempts:
-            try:
-                # wss:// con TLS -- el DataApp usa ECDHE (start.sh con ssl_keyfile).
-                # ssl_ctx con verify=TLS_CERT para certificado auto-firmado del DataApp.
-                import ssl as _ssl_fl
-                _ssl_fl_ctx = _ssl_fl.SSLContext(_ssl_fl.PROTOCOL_TLS_CLIENT)
-                _ssl_fl_ctx.check_hostname = False
-                _ssl_fl_ctx.verify_mode    = _ssl_fl.CERT_NONE
-                async with websockets.connect(
-                    ws_url,
-                    ssl          = _ssl_fl_ctx,
-                    ping_interval = 20,
-                    ping_timeout  = 30,
-                    open_timeout  = 15,
-                ) as ws:
-                    ok(f"WebSocket conectado a {ws_url}")
-                    conn_attempts = 0   # reset en conexion exitosa
-
-                    seen_rounds   = 0
-                    total_rounds  = None
-                    weights_shown = {}   # rnd -> set de wids ya mostrados
-                    fl_done       = False
-
-                    async for raw_msg in ws:
-                        try:
-                            evt = json.loads(raw_msg)
-                        except Exception:
-                            continue
-
-                        event = evt.get("event", "")
-
-                        # -- connected -----------------------------------------
-                        if event == "connected":
-                            role         = evt.get("role", "?")
-                            status       = evt.get("status", "?")
-                            current_rnd  = evt.get("current_round", 0)
-                            total_rounds = evt.get("total_rounds") or total_rounds
-
-                            print()
-                            ok(f"WebSocket activo -- coordinator-{cid}  "
-                               f"role={role}  status={status}")
-                            info(f"Canal WS: {ws_url}")
-                            info(f"El servidor emite eventos IDS en tiempo real "
-                                 f"(fl_started -> round_started -> round_completed -> fl_completed)")
-
-                            if status in ("completed", "failed"):
-                                warn("El FL ya termino antes de conectar -- mostrando resultados")
-                                fl_done = True
-                                break
-
-                            # -- FIX race condition ronda 1 --------------------
-                            import re as _re_status
-                            rnd_match = _re_status.match(r"round_(\d+)", status)
-                            if rnd_match:
-                                rnd_num = int(rnd_match.group(1))
-                                if rnd_num not in weights_shown:
-                                    print()
-                                    weights_shown.setdefault(rnd_num, set())
-                                    _print_ronda_header(rnd_num, total_rounds, cid)
-                                    print()
-                                    print(f"    {BOLD}[ronda {rnd_num}] Distribuyendo algorithm.py + "
-                                          f"fl_config.json a peers via IDS...{RESET}")
-                                    for w in accepted:
-                                        uri = w.get("connector_uri", "")
-                                        m   = re.search(r"worker(\d+)", uri)
-                                        wid = m.group(1) if m else "?"
-                                        pe  = endpoints["peers"].get(f"worker{wid}", {})
-                                        pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
-                                        _print_handshake_algoritmo(rnd_num, wid, pl, cid)
-                                    print()
-                                    print(f"    {BOLD}[ronda {rnd_num}]  Enviando pesos globales a peers via WebSocket (High-Speed Data Plane)...{RESET}")
-                                    for w in accepted:
-                                        uri = w.get("connector_uri", "")
-                                        m   = re.search(r"worker(\d+)", uri)
-                                        wid = m.group(1) if m else "?"
-                                        pe  = endpoints["peers"].get(f"worker{wid}", {})
-                                        pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
-                                        print(f"      {CYAN}[WS]  fl_global_weights::round{rnd_num}  {GRAY}{_coord_ecc_label(cid)}  --  {pl}{RESET}")
-                                        print(f"      {GRAY}Pesos globales ronda {rnd_num} "
-                                              f"-> {pl}  {GREEN}{RESET}")
-                                    print()
-                                    print(f"    {BOLD}[ronda {rnd_num}] Entrenando localmente "
-                                          f"(coordinator-{cid})...{RESET}")
-                                    n_exp = len(accepted_wids) + 1
-                                    print(f"    {GRAY}[WS] Esperando pesos... 1/{n_exp}  "
-                                          f"(coordinator-{cid} local en progreso){RESET}")
-
-                        # -- fl_started ----------------------------------------
-                        elif event == "fl_started":
-                            total_rounds = evt.get("total_rounds")
-                            min_workers  = evt.get("min_workers")
-                            print()
-                            ok(f"[WS] FL arrancado -- {total_rounds} rondas  "
-                               f"min_workers={min_workers}")
-                            info(f"[WS] Workers participantes: "
-                                 f"{', '.join('worker-' + w for w in accepted_wids)}")
-                            info(f"[WS] Escuchando eventos en tiempo real...")
-
-                        # -- round_started -------------------------------------
-                        elif event == "round_started":
-                            rnd_num      = evt.get("round", "?")
-                            total_rounds = evt.get("total_rounds") or total_rounds
-
-                            if rnd_num in weights_shown:
-                                # Ya renderizado desde el evento 'connected'
-                                pass
-                            else:
-                                weights_shown.setdefault(rnd_num, set())
-                                print()
-                                info(f"[WS] Evento round_started recibido -- ronda {rnd_num}")
-                                _print_ronda_header(rnd_num, total_rounds, cid)
-
-                                # Distribucion de algorithm.py via IDS (en cada ronda)
-                                print()
-                                print(f"    {BOLD}[ronda {rnd_num}] Distribuyendo algorithm.py + "
-                                      f"fl_config.json a peers via IDS...{RESET}")
-                                for w in accepted:
-                                    uri = w.get("connector_uri", "")
-                                    m   = re.search(r"worker(\d+)", uri)
-                                    wid = m.group(1) if m else "?"
-                                    pe  = endpoints["peers"].get(f"worker{wid}", {})
-                                    pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
-                                    _print_handshake_algoritmo(rnd_num, wid, pl, cid)
-
-                                print()
-                                print(f"    {BOLD}[ronda {rnd_num}]  Enviando pesos globales a peers via WebSocket (High-Speed Data Plane)...{RESET}")
-                                for w in accepted:
-                                    uri = w.get("connector_uri", "")
-                                    m   = re.search(r"worker(\d+)", uri)
-                                    wid = m.group(1) if m else "?"
-                                    pe  = endpoints["peers"].get(f"worker{wid}", {})
-                                    pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
-                                    print(f"      {CYAN}[WS]  fl_global_weights::round{rnd_num}  {GRAY}{_coord_ecc_label(cid)}  --  {pl}{RESET}")
-                                    print(f"      {GRAY}Pesos globales ronda {rnd_num} "
-                                          f"-> {pl}  {GREEN}{RESET}")
-
-                                print()
-                                print(f"    {BOLD}[ronda {rnd_num}] Entrenando localmente "
-                                      f"(coordinator-{cid})...{RESET}")
-                                n_exp = len(accepted_wids) + 1
-                                print(f"    {GRAY}[WS] Esperando pesos... 1/{n_exp}  "
-                                      f"(coordinator-{cid} local en progreso){RESET}")
-
-                        # -- round_completed -----------------------------------
-                        elif event == "round_completed":
-                            rnd_num  = evt.get("round", seen_rounds + 1)
-                            elapsed  = evt.get("elapsed_seconds", 0)
-                            workers  = evt.get("workers_ok", "?")
-                            samples  = evt.get("total_samples", 0)
-                            gm       = evt.get("global_metrics", {})
-                            total_rounds = evt.get("total_rounds") or total_rounds
-
-                            def _fv(k):
-                                v = gm.get(k)
-                                return f"{v:.4f}" if isinstance(v, float) else (
-                                    str(v) if v is not None else "--")
-
-                            info(f"[WS] Evento round_completed -- ronda {rnd_num}")
-
-                            # Mostrar llegada de pesos de cada worker
-                            already = weights_shown.get(rnd_num, set())
-                            n_exp   = len(accepted_wids) + 1
-                            for wid in accepted_wids:
-                                if wid not in already:
-                                    already.add(wid)
-                                    total_so_far = 1 + len(already)
-                                    pe  = endpoints["peers"].get(f"worker{wid}", {})
-                                    pl  = pe.get("ecc_label", f"ecc-worker{wid}:8889")
-                                    print()
-                                    print(f"    {BOLD}[ronda {rnd_num}]  Pesos locales "
-                                          f"recibidos de worker-{wid} (WebSocket):{RESET}")
-                                    print(f"      {GREEN}[WS]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  --  {_coord_ecc_label(cid)}{RESET}")
-                                    print(f"    {GRAY}[WS] [fl_weights]  Pesos de worker-{wid} "
-                                          f"ronda {rnd_num} acumulados "
-                                          f"({total_so_far}/{n_exp}){RESET}")
-                            weights_shown[rnd_num] = already
-
-                            # FedAvg + metricas de cierre de ronda
-                            print()
-                            print(f"    {GRAY}[ronda {rnd_num}] FedAvg sobre {workers} workers  "
-                                  f"({samples:,} muestras totales){RESET}")
-                            print(f"    {GREEN}Ronda {rnd_num} OK en {elapsed}s  "
-                                  f"acc={_fv('accuracy')}  auc={_fv('auc')}  "
-                                  f"loss={_fv('loss')}  prec={_fv('precision')}  "
-                                  f"rec={_fv('recall')}{RESET}")
-                            seen_rounds += 1
-
-                        # -- fl_completed --------------------------------------
-                        elif event in ("fl_completed", "fl_finished"):
-                            n_rounds    = evt.get("n_rounds", total_rounds or "?")
-                            best_round  = evt.get("best_round", "?")
-                            best_m      = evt.get("best_metrics") or {}
-
-                            print()
-                            info(f"[WS] Evento fl_completed recibido")
-                            ok(f" FL completado -- {n_rounds} rondas")
-                            if best_round != "?":
-                                field("Mejor ronda",   best_round)
-                            for k in ("accuracy", "auc", "loss", "precision", "recall", "f1_macro", "mcc"):
-                                v = best_m.get(k)
-                                if v is not None:
-                                    field(f"  {k}", f"{v:.4f}")
-                            fl_done = True
-                            break
-
-                        # -- fl_failed -----------------------------------------
-                        elif event == "fl_failed":
-                            reason = evt.get("reason", "?")
-                            rnd    = evt.get("round", "?")
-                            print()
-                            info(f"[WS] Evento fl_failed recibido")
-                            warn(f" FL abortado en ronda {rnd} -- {reason}")
-                            fl_done = True
-                            break
-
-                        # -- fl_update generico --------------------------------
-                        # Emitido por el polling interno de /ws/fl-status cuando
-                        # hay cambio de estado pero sin evento especifico.
-                        # Solo actuamos si el FL termino.
-                        elif event == "fl_update":
-                            status = evt.get("status", "?")
-                            # Silenciar los updates de ronda en curso -- ya los
-                            # mostramos via round_started/round_completed.
-                            # Solo reaccionar si el FL termino inesperadamente.
-                            if status in ("completed", "failed"):
-                                info(f"[WS] fl_update: status={status} -- FL terminado")
-                                fl_done = True
-                                break
-
-                    if fl_done:
-                        return   # exito -- salir del loop de reconexion
-
-            except websockets.exceptions.ConnectionClosed as exc:
-                conn_attempts += 1
-                warn(f"WebSocket cerrado inesperadamente (intento {conn_attempts}/{max_attempts}): {exc}")
-                if conn_attempts < max_attempts:
-                    info(f"Reconectando en 3s...")
-                    await _asyncio.sleep(3)
-
-            except (ConnectionRefusedError, OSError) as exc:
-                conn_attempts += 1
-                warn(f"No se pudo conectar al WebSocket (intento {conn_attempts}/{max_attempts}): {exc}")
-                if conn_attempts < max_attempts:
-                    info(f"Reintentando en 3s...")
-                    await _asyncio.sleep(3)
-
-            except Exception as exc:
-                warn(f"Error inesperado en WebSocket: {exc}")
-                break
-
-        if conn_attempts >= max_attempts:
-            warn(f"No se pudo conectar al WebSocket tras {max_attempts} intentos.")
-            warn("Fallback a polling HTTP...")
-            _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids)
-
-    _asyncio.run(_ws_monitor())
-
+    _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids)
 
 def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids):
     """
-    Fallback de monitorizacion por polling HTTP (GET /fl/status cada 5s).
-    Se usa cuando websockets no esta disponible o la conexion WS falla.
+    Monitorizacion por polling HTTP (GET /fl/status cada 5s).
     """
     info("Monitorizando via polling HTTP GET /fl/status cada 5s...")
 
@@ -1433,8 +1130,8 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
                     pe   = endpoints["peers"].get(f"worker{wid}", {})
                     pl   = pe.get("ecc_label", f"ecc-worker{wid}:8889")
                     print()
-                    print(f"    {BOLD}[ronda {rnd_num}]  Pesos recibidos de worker-{wid} (WebSocket):{RESET}")
-                    print(f"      {GREEN}[WS]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  --  {_coord_ecc_label(cid)}{RESET}")
+                    print(f"    {BOLD}[ronda {rnd_num}]  Pesos recibidos de worker-{wid} (ECC-WSS):{RESET}")
+                    print(f"      {GREEN}[ECC-WSS]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  --  {_coord_ecc_label(cid)}{RESET}")
                     print(f"    {GRAY} Pesos acumulados ({total_so_far}/{n_exp}){RESET}")
             weights_shown[rnd_num] = already
 

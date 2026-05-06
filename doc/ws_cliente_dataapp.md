@@ -6,12 +6,12 @@ cliente Python (`pfg_ids_fl_flow.py`) y la DataApp Python (`ia-dataapp/app.py`).
 La idea principal es:
 
 ```text
-Cliente Python -> WSS /ws/client -> DataApp -> endpoint interno real
+Cliente Python -> WSS /ws/client -> DataApp -> POST /proxy -> endpoint interno real
 ```
 
 Es decir, la funcion de negocio puede seguir siendo `/fl/start`, `/status`,
 `/broker/discover/worker`, etc., pero el transporte externo cliente -> DataApp
-entra por WebSocket.
+entra por WebSocket y la DataApp despacha la accion desde `/proxy`.
 
 ## Puertos y URLs
 
@@ -102,8 +102,9 @@ https://localhost:5002       -> wss://localhost:5002
 client_id=pfg-orchestrator   -> identificador visible en logs
 ```
 
-La ruta funcional `/fl/start` todavia no se envia en este paso. Esa ruta se
-enviara despues dentro del JSON como `"path": "/fl/start"`.
+La ruta funcional `/fl/start` todavia no se envia en este paso. En el siguiente
+paso el flow la traduce a un `message` para que sea `/proxy` quien decida
+que endpoint interno ejecutar.
 
 Despues, `DataAppWebSocketClient._connect(...)` abre realmente la conexion WSS
 usando la libreria Python `websockets`:
@@ -151,23 +152,40 @@ Si el `hello` contiene:
 entonces la conexion WSS cliente -> DataApp queda abierta y lista para que el
 siguiente paso envie la peticion funcional.
 
-### 3. El cliente envia la peticion por WS
+### 3. El cliente envia la peticion por WS hacia `/proxy`
 
-El orquestador envia un JSON por el WebSocket:
+Antes de enviar, `_ws_rpc(...)` traduce:
+
+```text
+POST /fl/start -> message = fl_start
+```
+
+El orquestador envia este JSON por el WebSocket:
 
 ```json
 {
   "id": "pfg-12",
   "type": "request",
   "method": "POST",
-  "path": "/fl/start",
-  "body": {},
+  "path": "/proxy",
+  "body": {
+    "multipart": "wss",
+    "Forward-To": "wss://localhost:5002/ws/client?client_id=pfg-orchestrator",
+    "Forward-To-Internal": "/fl/start",
+    "messageType": "ArtifactRequestMessage",
+    "message": "fl_start",
+    "params": {},
+    "timeout": 240,
+    "logicalMethod": "POST",
+    "logicalPath": "/fl/start"
+  },
   "timeout": 240
 }
 ```
 
-Aqui `/fl/start` ya no es la URL de transporte. Es la ruta logica que la
-DataApp debe ejecutar internamente.
+Aqui `/proxy` es la ruta que recibe la DataApp por el WS. `messageType` mantiene
+semantica IDS y el endpoint real `/fl/start` va representado como
+`message="fl_start"`.
 
 ### 4. La DataApp recibe la conexion en `/ws/client`
 
@@ -196,12 +214,12 @@ Y devuelve un saludo inicial:
 }
 ```
 
-### 5. La DataApp valida la ruta
+### 5. La DataApp valida la ruta WS
 
 La DataApp comprueba que la ruta esta permitida:
 
 ```python
-_client_ws_path_allowed("/fl/start")
+_client_ws_path_allowed("/proxy")
 ```
 
 Rutas permitidas por `/ws/client`:
@@ -218,38 +236,83 @@ Rutas permitidas por `/ws/client`:
 /dataset/
 /catalog/
 /system/
-/ws/tunnel-status
-/ws/performance
+/transport/status
+/transport/performance
 ```
 
 Esto evita que `/ws/client` sea un proxy arbitrario.
 
-### 6. La DataApp despacha al endpoint interno real
+### 6. `/ws/client` llama internamente a `/proxy`
 
 Si la ruta esta permitida, `ws_client_control(...)` llama a:
 
 ```python
-_client_ws_local_request("POST", "/fl/start", {}, 240)
+_client_ws_local_request("POST", "/proxy", body, 240)
 ```
 
 Internamente se ejecuta:
 
 ```text
-POST https://127.0.0.1:8500/fl/start
+POST https://127.0.0.1:8500/proxy
 ```
 
-Esto es una llamada local dentro de la propia DataApp para reutilizar los
-handlers existentes de FastAPI. No contradice el objetivo: el transporte externo
-cliente -> DataApp ya ha entrado por WSS.
+Esto es una llamada local dentro de la propia DataApp. No contradice el
+objetivo: el transporte externo cliente -> DataApp ya ha entrado por WSS.
+
+### 7. `/proxy` lee `message` y decide con `if/elif`
+
+En `ia-dataapp/app.py`, el endpoint:
+
+```python
+@app.post("/proxy")
+async def proxy(request: Request):
+    ...
+```
+
+detecta que el cuerpo trae:
+
+```json
+{
+  "multipart": "wss",
+  "Forward-To": "wss://localhost:5002/ws/client?client_id=pfg-orchestrator",
+  "Forward-To-Internal": "/fl/start",
+  "messageType": "ArtifactRequestMessage",
+  "message": "fl_start",
+  "params": {}
+}
+```
+
+Como existe `message="fl_start"`, entra en el modo dispatcher. El campo
+`messageType` sigue indicando el tipo IDS de la peticion. Los campos
+`multipart`, `Forward-To` y `Forward-To-Internal` se mantienen para que el
+mensaje sea trazable como una llamada WSS/proxy completa:
+
+```python
+_proxy_dispatch_message("fl_start", params={}, timeout=240)
+```
+
+Dentro de `_proxy_dispatch_message(...)` hay un bloque `if/elif` explicito:
+
+```python
+elif normalized in ("fl_start", "start_fl") or path_alias == "/fl/start":
+    target = ("POST", "/fl/start", endpoint_body or {})
+```
+
+Y despues ejecuta localmente:
+
+```text
+POST https://127.0.0.1:8500/fl/start
+```
 
 Resumen de este subtramo:
 
 ```text
 Cliente externo -> WSS /ws/client -> DataApp
-DataApp -> HTTPS local 127.0.0.1 -> endpoint real
+DataApp -> HTTPS local 127.0.0.1 -> /proxy
+/proxy -> if/elif message=fl_start -> endpoint real /fl/start
 ```
 
-### 7. Se ejecuta la funcion real `/fl/start`
+### 8. Se ejecuta la funcion real `/fl/start`
 
 La llamada interna entra en el endpoint real:
 
@@ -274,9 +337,10 @@ wss://ecc-worker1:8086/data
 wss://ecc-worker3:8086/data
 ```
 
-### 8. La DataApp responde al cliente por el mismo WS
+### 9. La DataApp responde al cliente por el mismo WS
 
-La DataApp devuelve la respuesta al orquestador por `/ws/client`:
+La DataApp devuelve la respuesta al orquestador por `/ws/client`. La respuesta
+incluye primero la capa `/proxy`:
 
 ```json
 {
@@ -286,8 +350,16 @@ La DataApp devuelve la respuesta al orquestador por `/ws/client`:
   "ok": true,
   "status_code": 200,
   "body": {
-    "status": "started",
-    "peers": ["worker1", "worker3"]
+    "transport": "proxy-message-dispatcher",
+    "messageType": "ids:ArtifactRequestMessage",
+    "message": "fl_start",
+    "target_method": "POST",
+    "target_path": "/fl/start",
+    "ok": true,
+    "status_code": 200,
+    "body": {
+      "status": "started"
+    }
   }
 }
 ```
@@ -302,28 +374,19 @@ Y `http_post(...)` devuelve el `body` a `fase4_arrancar_fl(...)`.
 
 ## Monitorizacion posterior
 
-Despues de arrancar FL, el flow usa otro WebSocket distinto:
+Despues de arrancar FL, el flow ya no abre un WebSocket de monitorizacion.
+Consulta el estado con polling HTTP:
 
 ```text
-wss://localhost:5002/ws/fl-status
-```
-
-Este canal no lanza funciones. Sirve para escuchar eventos:
-
-```text
-connected
-fl_started
-round_started
-round_completed
-fl_completed
-fl_failed
+GET https://localhost:5002/fl/status
+GET https://localhost:5002/transport/status
 ```
 
 Resumen:
 
 ```text
 /ws/client     -> llamadas de control cliente -> DataApp
-/ws/fl-status  -> monitorizacion en vivo del entrenamiento
+/transport/*   -> estado REST de transportes conservados
 ```
 
 ## Logs esperados
@@ -332,24 +395,27 @@ En el flow:
 
 ```text
 INFO [WS cliente->DataApp] CONEXION ABIERTA transporte=WSS url=wss://localhost:5002/ws/client?client_id=pfg-orchestrator dataapp_worker=2
-INFO [WS cliente->DataApp] OK transporte=WSS metodo=POST url_rest_logica=https://localhost:5002/fl/start despachado_por=/ws/client elapsed_ms=...
+INFO [WS cliente->DataApp] OK transporte=WSS metodo=POST url_rest_logica=https://localhost:5002/fl/start despachado_por=/ws/client -> /proxy message=fl_start elapsed_ms=...
 ```
 
 En `docker logs be-dataapp-worker2 -f`:
 
 ```text
 [WS CLIENTE->DATAAPP] CONEXION ACEPTADA transporte=WSS endpoint=/ws/client cliente=pfg-orchestrator url_publica=wss://localhost:5002/ws/client contenedor=be-dataapp-worker2:8500
-[WS CLIENTE->DATAAPP] PETICION OK transporte=WSS cliente=pfg-orchestrator endpoint_ws=/ws/client despacho_interno=POST /fl/start status=200 elapsed_ms=...
+[/proxy dispatcher] message=fl_start params_type=dict
+[/proxy dispatcher] fl_start -> POST /fl/start
+[WS CLIENTE->DATAAPP] PETICION OK transporte=WSS cliente=pfg-orchestrator endpoint_ws=/ws/client despacho_interno=POST /proxy status=200 elapsed_ms=...
 ```
 
 Si aparece una linea como:
 
 ```text
+127.0.0.1 - "POST /proxy HTTP/1.1" 200 OK
 127.0.0.1 - "POST /fl/start HTTP/1.1" 200 OK
 ```
 
-es normal. Es la llamada local interna de la DataApp a su propio handler. La
-conexion externa del cliente ya entro por WSS.
+es normal. Son llamadas locales internas de la DataApp a su propio `/proxy` y
+despues al handler real. La conexion externa del cliente ya entro por WSS.
 
 ## Ciclo completo resumido
 
@@ -358,12 +424,17 @@ pfg_ids_fl_flow.py
   -> fase4_arrancar_fl(...)
   -> http_post("https://localhost:5002/fl/start", {})
   -> _ws_rpc("POST", ...)
+  -> _proxy_message_for_ws_request("POST", "/fl/start") = "fl_start"
   -> DataAppWebSocketClient._connect()
   -> WSS wss://localhost:5002/ws/client?client_id=pfg-orchestrator
   -> DataApp @app.websocket("/ws/client")
   -> ws_client_control(...)
-  -> _client_ws_path_allowed("/fl/start")
-  -> _client_ws_local_request("POST", "/fl/start", ...)
+  -> _client_ws_path_allowed("/proxy")
+  -> _client_ws_local_request("POST", "/proxy", ...)
+  -> POST interno https://127.0.0.1:8500/proxy
+  -> @app.post("/proxy")
+  -> _proxy_dispatch_message("fl_start", ...)
+  -> if/elif fl_start => POST /fl/start
   -> POST interno https://127.0.0.1:8500/fl/start
   -> @app.post("/fl/start")
   -> respuesta
@@ -375,7 +446,8 @@ Frase clave:
 
 ```text
 La funcion sigue siendo /fl/start, pero el transporte externo cliente -> DataApp
-es WSS mediante /ws/client. La DataApp recibe el JSON por WebSocket, valida la
-ruta, despacha internamente al endpoint real y devuelve la respuesta por el mismo
+es WSS mediante /ws/client. La DataApp recibe el JSON por WebSocket, llama a
+/proxy, /proxy lee message=fl_start, ejecuta el if/elif correspondiente y
+despacha internamente al endpoint real. La respuesta vuelve por el mismo
 WebSocket.
 ```

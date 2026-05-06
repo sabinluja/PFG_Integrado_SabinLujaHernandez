@@ -134,53 +134,6 @@
       "enabled": true
     },
     {
-      "key": "WS_Coordinator_URL",
-      "value": "",
-      "description": "Auto-rellenado por WS-0. URL WebSocket del coordinator: wss://localhost:500N/ws/fl-status.",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "WS_Worker1_URL",
-      "value": "",
-      "description": "Auto-rellenado por WS-0 desde el broker. URL WebSocket de Worker-1.",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "WS_Worker3_URL",
-      "value": "",
-      "description": "Auto-rellenado por WS-0 desde el broker. URL WebSocket de Worker-3.",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "WS_Worker4_URL",
-      "value": "",
-      "description": "Auto-rellenado por WS-0 desde el broker. URL WebSocket de Worker-4 (FL_OPT_OUT — estado siempre idle).",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "WS_IDS_Data_URL",
-      "value": "",
-      "description": "Auto-rellenado por WS-5 pre-request. URL WebSocket del canal IDS-data del coordinator (wss://localhost:500N/ws/ids-data).",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "WS_Tunnel_Status_URL",
-      "value": "",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "WS_Performance_URL",
-      "value": "",
-      "type": "default",
-      "enabled": true
-    },
-    {
       "key": "dataset_title",
       "value": "Titatic Dataset TEST",
       "type": "default",

@@ -7,7 +7,7 @@ en la FASE 1. La comunicación se orquesta nativamente mediante la red IDS.
 
 Arquitectura Híbrida:
   - Control Plane (IDS): Negociación de contratos y descubrimiento (HTTPS/REST + DAPS).
-  - Data Plane (WS): Transferencia asíncrona de alto rendimiento de pesos FL (WebSockets).
+  - Data Plane (ECC-WSS): transferencia de pesos FL entre conectores ECC.
 
 Flujo actual (alineado con pfg_ids_fl_flow.py y Postman):
   FASE 0: Resolución de Endpoints, validación de Broker y Catálogo IDS dinámico.
@@ -15,7 +15,7 @@ Flujo actual (alineado con pfg_ids_fl_flow.py y Postman):
   FASE 2: Preparación de Artefactos FL (Imagen Docker)
   FASE 3: Descubrimiento de peers en Broker (Fuseki) y filtro semántico (LLM).
   FASE 4: Negociación de contratos IDS obligatorios (Restringido > Worker4 descartado).
-  FASE 5: Arranque del Entrenamiento FL vía propagación IDS, Monitorización y Benchmarking (WebSocket Performance) en tiempo real.
+  FASE 5: Arranque del Entrenamiento FL via propagacion IDS y seguimiento HTTP.
   FASE 6: Protección de datos (Soberanía) denegando recursos al Worker descartado.
 
 Se incluye soporte de Cancelación de Entornos Globales (/system/reset) pulsando P.
@@ -79,7 +79,7 @@ BROKER_SPARQL_URL = "http://broker-fuseki:3030/connectorData/sparql"
 # Permite a un worker auto-excluirse del entrenamiento FL (Data Sovereignty)
 FL_OPT_OUT = os.getenv("FL_OPT_OUT", "false").lower() == "true"
 
-# Permite bypass de IDS (peticiones HTTP directas entre DataApps) si falla WebSockets
+# Permite bypass HTTP directo entre DataApps si falla el transporte IDS/ECC
 ALLOW_IDS_BYPASS = os.getenv("ALLOW_IDS_BYPASS", "false").lower() == "true"
 
 # Fuerza que los pesos FL viajen por ECC->ECC usando el endpoint interno del ECC
@@ -466,7 +466,7 @@ _compatible_workers_cache: list = []
 _compatible_workers_lock = threading.Lock()
 
 # =============================================================================
-# Metricas de rendimiento WebSocket vs HTTP
+# Metricas de rendimiento ECC-WSS vs HTTP
 # =============================================================================
 _ws_perf_stats = {
     "ws_sends": 0,
@@ -2052,7 +2052,6 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
                           weights_b64: str, round_num: int,
                           transfer_contract: str | None = None,
                           requested_artifact: str | None = None):
-    import re as _re_gw
     peer_dataapp = _dataapp_url_from_ecc(peer_ecc_url)
     if not peer_dataapp:
         log.error(f"No se pudo derivar DataApp URL de {peer_ecc_url}")
@@ -2060,40 +2059,6 @@ def _send_global_weights(peer_ecc_url: str, peer_conn_uri: str,
 
     payload_size = len(weights_b64) if weights_b64 else 0
     local_transfer_contract, local_requested_artifact = _local_contract_artifact()
-
-    # --- Canal WebSocket (data-plane): intentar primero si el túnel está activo ---
-    _m_gw = _re_gw.search(r"worker(\d+)", peer_ecc_url) or _re_gw.search(r"worker(\d+)", peer_conn_uri)
-    if _m_gw and not FL_WEIGHTS_VIA_ECC:
-        _peer_wid = _m_gw.group(1)
-        t_start = time.time()
-        if _send_global_weights_ws(_peer_wid, weights_b64, round_num):
-            elapsed_ms = (time.time() - t_start) * 1000
-            log.info(
-                f"  Pesos globales ronda {round_num} -> worker-{_peer_wid} "
-                f"[OK WS]  {payload_size/1024:.0f} KB en {elapsed_ms:.1f}ms"
-            )
-            _record_ws_perf("ws", elapsed_ms, payload_size, round_num, f"global->worker{_peer_wid}")
-            # --- CH [GAP 3-WS]: Pesos globales enviados via WebSocket ---
-            _report_to_ch(
-                message_type="ids:ArtifactRequestMessage",
-                source_connector=CONNECTOR_URI,
-                target_connector=peer_conn_uri,
-                status="success",
-                response_time_ms=elapsed_ms,
-                additional_data={
-                    "event": "global_weights_sent_ws",
-                    "round": round_num,
-                    "target_worker": _peer_wid,
-                    "payload_kb": round(payload_size / 1024, 1),
-                    "channel": "websocket",
-                },
-            )
-            return True
-        else:
-            log.info(
-                f"  [WS] Túnel no activo para worker-{_peer_wid} en ronda {round_num} "
-                f"-- fallback HTTP DataApp-to-DataApp"
-            )
 
     # --- Canal IDS por ECC (el tramo ECC<->ECC puede ir por WSS/IDSCP segun config) ---
     t_start = time.time()
@@ -2551,6 +2516,7 @@ def _llm_recommend_dataset(
     coordinator_cols: list | None = None,
     context: str = "",
     timeout: int = 180,
+    event_sink=None,
 ) -> dict | None:
     """
     Interroga al LLM configurado (Ollama local o OpenAI) para que elija
@@ -2631,13 +2597,16 @@ def _llm_recommend_dataset(
         f"[llm-recommend] Model={LLM_MODEL}  "
         f"Candidatos={[c['filename'] for c in csvs]}"
     )
-    _notify_ws_clients({
+    thinking_event = {
         "event": "llm_thinking",
         "instance": INSTANCE_ID,
         "model": LLM_MODEL,
         "candidates": [c['filename'] for c in csvs],
-        "message": "Analizando semántica de datasets con Ollama..."
-    })
+        "message": "Analizando semantica de datasets con Ollama..."
+    }
+    if event_sink:
+        event_sink(thinking_event)
+    _notify_ws_clients(thinking_event)
 
     full_response = ""
     try:
@@ -2658,15 +2627,17 @@ def _llm_recommend_dataset(
                 token = chunk.get("response", "")
                 full_response += token
                 
-                # Notificar a los clientes WebSocket (efecto "Live Typing")
+                # Emitir tokens de Ollama para la conexion activa
                 if token:
                     msg = {
                         "event": "llm_token",
                         "instance": INSTANCE_ID,
                         "token": token
                     }
+                    if event_sink:
+                        event_sink(msg)
                     _notify_ws_clients(msg)
-                    _notify_ai_clients(msg) # Asegurar que llega al canal dedicado ai-insights
+                    _notify_ai_clients(msg) # Hook legacy sin endpoint dedicado
                 
                 if chunk.get("done"):
                     break
@@ -2745,6 +2716,8 @@ def _llm_recommend_dataset(
             global _last_ai_insight
             _last_ai_insight = insight_data
 
+        if event_sink:
+            event_sink(insight_data)
         _notify_ws_clients(insight_data)
         _notify_ai_clients(insight_data) # Canal dedicado
 
@@ -3807,7 +3780,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                 "coordinator": INSTANCE_ID,
             },
         )
-        # Notificar a clientes WebSocket conectados
+        # Hook legacy de eventos FL
         _notify_ws_clients({
             "event"         : "round_completed",
             "round"         : round_num,
@@ -3855,7 +3828,7 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
     with _fl_lock:
         fl_state["status"] = "completed"
 
-    # Notificar fin del FL a clientes WebSocket
+    # Hook legacy de fin de FL
     _notify_ws_clients({
         "event"      : "fl_completed",
         "status"     : "completed",
@@ -4374,9 +4347,6 @@ async def ids_data(request: Request):
                 coordinator_conn_uri = _coord_uri
                 coordinator_transfer_contract = payload_dict.get("coordinator_transfer_contract")
                 coordinator_requested_artifact = payload_dict.get("coordinator_requested_artifact")
-                if not FL_WEIGHTS_VIA_ECC:
-                    _start_worker_ws_client()
-
             with _fl_lock:
                 fl_state["current_round"] = round_num
                 if fl_state.get("status") == "idle":
@@ -4989,8 +4959,12 @@ async def ws_llm_recommend(websocket: WebSocket):
     )
 
     # Reutilizar _llm_recommend_dataset — prompt unificado, robusto y agnóstico al dataset.
-    # El streaming de tokens al WebSocket ya lo hace _notify_ws_clients internamente.
+    # El streaming de tokens se reenvia por esta misma conexion.
     loop = asyncio.get_running_loop()
+    event_queue: asyncio.Queue = asyncio.Queue()
+
+    def _emit_llm_event(event: dict):
+        loop.call_soon_threadsafe(event_queue.put_nowait, event)
 
     def _run_llm():
         return _llm_recommend_dataset(
@@ -4998,10 +4972,22 @@ async def ws_llm_recommend(websocket: WebSocket):
             coordinator_cols = coordinator_cols if coordinator_cols else None,
             context          = context_str,
             timeout          = 120,
+            event_sink       = _emit_llm_event,
         )
 
     try:
-        result = await loop.run_in_executor(None, _run_llm)
+        llm_task = loop.run_in_executor(None, _run_llm)
+        while not llm_task.done():
+            try:
+                event = await asyncio.wait_for(event_queue.get(), timeout=0.25)
+                await websocket.send_json(event)
+            except asyncio.TimeoutError:
+                continue
+
+        result = await llm_task
+
+        while not event_queue.empty():
+            await websocket.send_json(event_queue.get_nowait())
 
         if result:
             await websocket.send_json({
@@ -5624,10 +5610,6 @@ async def fl_accept_negotiation(request: Request):
     if coord_requested_artifact:
         coordinator_requested_artifact = coord_requested_artifact
 
-    # Solo abrir tunel DataApp->DataApp cuando no estemos forzando transporte via ECC.
-    if not FL_WEIGHTS_VIA_ECC:
-        _start_worker_ws_client()
-
     log.info(
         f"[/fl/accept-negotiation] ACEPTADO -- worker-{INSTANCE_ID} participara en FL\n"
         f"  Coordinator: {coord_uri}  |  CSV asignado: {sel_csv or '(auto)'}"
@@ -6147,38 +6129,9 @@ def fl_model():
     }
 
 
-# =============================================================================
-# WebSocket -- Gestion de conexiones en tiempo real
-# =============================================================================
-
-# Tunel High-Speed para Federacion de Pesos (Bypass IDS payload bottleneck)
-class FLTrainingWSManager:
-    def __init__(self):
-        self.active_workers: dict[str, WebSocket] = {}
-
-    async def connect(self, worker_id: str, websocket: WebSocket):
-        await websocket.accept()
-        self.active_workers[worker_id] = websocket
-        log.info(
-            f"[WS FL-Train]  TUNEL ESTABLECIDO: Worker-{worker_id} -> Coordinator-{INSTANCE_ID}\n"
-            f"  Tuneles activos: {list(self.active_workers.keys())}\n"
-            f"  Total: {len(self.active_workers)} worker(s) en data-plane WS"
-        )
-
-    def disconnect(self, worker_id: str):
-        if worker_id in self.active_workers:
-            del self.active_workers[worker_id]
-            log.info(
-                f"[WS FL-Train] [WARN] TUNEL CERRADO: Worker-{worker_id}\n"
-                f"  Tuneles activos restantes: {list(self.active_workers.keys())}"
-            )
-
-fl_ws_manager = FLTrainingWSManager()
-
-
 def _record_ws_perf(channel: str, elapsed_ms: float, payload_bytes: int,
                     round_num: int, label: str):
-    """Registra una transferencia en las metricas de rendimiento WS vs HTTP."""
+    """Registra una transferencia en las metricas de rendimiento."""
     with _ws_perf_lock:
         if channel == "ws":
             key = "ws"
@@ -6201,277 +6154,58 @@ def _record_ws_perf(channel: str, elapsed_ms: float, payload_bytes: int,
         if len(_ws_perf_stats["history"]) > 50:
             _ws_perf_stats["history"] = _ws_perf_stats["history"][-50:]
 
-@app.websocket("/ws/fl-training/{worker_id}")
-async def ws_fl_training(websocket: WebSocket, worker_id: str):
-    await fl_ws_manager.connect(worker_id, websocket)
-    try:
-        while True:
-            data = await websocket.receive_json()
-            if data.get("type") == "fl_weights":
-                sender      = data.get("instance_id", "?")
-                round_num   = data.get("round", 0)
-                weights_b64 = data.get("weights_b64")
-                n_samples   = data.get("n_samples")
-                metrics     = data.get("metrics")
-                
-                with _round_lock:
-                    if fl_state.get("current_round") != round_num:
-                        log.warning(f"[WS FL-Train] Ignorando pesos de worker-{sender} para ronda {round_num} (ronda actual: {fl_state.get('current_round')})")
-                        continue
-                    _round_weights[sender] = {
-                        "weights_b64": weights_b64,
-                        "n_samples"  : n_samples,
-                        "metrics"    : metrics,
-                    }
-                log.info(f"[WS FL-Train]  Pesos locales recibidos via WS: worker-{sender} ronda {round_num}")
-    except WebSocketDisconnect:
-        fl_ws_manager.disconnect(worker_id)
-    except Exception as e:
-        log.error(f"[WS FL-Train] Error en conexion WS para worker-{worker_id}: {e}")
-        fl_ws_manager.disconnect(worker_id)
-
-def _send_global_weights_ws(worker_id: str, weights_b64: str, round_num: int) -> bool:
-    global global_event_loop
-    if worker_id in fl_ws_manager.active_workers and global_event_loop:
-        ws = fl_ws_manager.active_workers[worker_id]
-        payload = {
-            "type"              : "fl_global_weights",
-            "round"             : round_num,
-            "global_weights_b64": weights_b64,
-            "from_coordinator"  : INSTANCE_ID
-        }
-        asyncio.run_coroutine_threadsafe(ws.send_json(payload), global_event_loop)
-        return True
-    return False
-
-# Client WS logic for Workers connecting to Coordinator
-fl_ws_client_conn = None
-
-async def _fl_worker_ws_client_connect():
-    global fl_ws_client_conn, coordinator_ecc_url
-    if not coordinator_ecc_url:
-        return
-    import re
-    import websockets
-    m = re.search(r"worker(\d+)", coordinator_ecc_url)
-    if not m:
-        return
-    coord_id = m.group(1)
-    if str(coord_id) == str(INSTANCE_ID):
-        return # Auto-loop
-    # wss:// -- el DataApp corre con TLS tambien dentro de Docker (start.sh + ECDHE).
-    # Las DataApps internas usan certificados auto-firmados en /cert/dataapp/
-    # ssl_ctx con verify=TLS_CERT para aceptar certificados auto-firmados.
-    ws_url = f"wss://be-dataapp-worker{coord_id}:8500/ws/fl-training/{INSTANCE_ID}"
-    import ssl as _ssl_worker
-    _ssl_ctx_worker = _ssl_worker.SSLContext(_ssl_worker.PROTOCOL_TLS_CLIENT)
-    _ssl_ctx_worker.check_hostname = False
-    _ssl_ctx_worker.verify_mode    = _ssl_worker.CERT_NONE
-    try:
-        fl_ws_client_conn = await websockets.connect(
-            ws_url, ssl=_ssl_ctx_worker, max_size=None, ping_timeout=None
-        )
-        log.info(
-            f"[WS FL-Train]  TUNEL WORKER->COORDINATOR ESTABLECIDO\n"
-            f"  Worker-{INSTANCE_ID} --WS---> Coordinator (worker{coord_id})\n"
-            f"  URL: {ws_url}\n"
-            f"  Canal: ws:// (data-plane interno Docker, sin TLS overhead)\n"
-            f"  Modo: Bypass IDS -- pesos viajaran por WS en lugar de HTTP multipart"
-        )
-        
-        while True:
-            try:
-                data = await fl_ws_client_conn.recv()
-                payload = json.loads(data)
-                if payload.get("type") == "fl_global_weights":
-                    round_num = payload.get("round", 1)
-                    global_weights = payload.get("global_weights_b64")
-                    log.info(f"[WS FL-Train]  Pesos globales recibidos via WS -- ronda {round_num}")
-                    
-                    def _train_and_reply_ext():
-                        try:
-                            result = _train_local(global_weights, round_num, _my_selected_csv)
-                            _send_local_weights(result["weights_b64"], result["n_samples"], result["metrics"], round_num)
-                        except Exception as exc:
-                            log.error(f"Error WS training local ronda {round_num}: {exc}")
-                    threading.Thread(target=_train_and_reply_ext, daemon=True).start()
-            except Exception as loop_e:
-                log.warning(f"[WS FL-Train] [WARN] Enlace websocket interrumpido: {loop_e}")
-                break
-                
-    except Exception as e:
-        log.warning(
-            f"[WS FL-Train] OK TUNEL WS NO DISPONIBLE\n"
-            f"  URL: {ws_url}\n"
-            f"  Error: {e}\n"
-            f"  Fallback: Los pesos se enviaran por IDS/HTTP multipart (mas lento)"
-        )
-        fl_ws_client_conn = None
-
-def _start_worker_ws_client():
-    global global_event_loop
-    if global_event_loop:
-        asyncio.run_coroutine_threadsafe(_fl_worker_ws_client_connect(), global_event_loop)
-
-class _WSConnectionManager:
-    """
-    Gestor de conexiones WebSocket activas.
-    Permite broadcast a todos los clientes conectados simultaneamente.
-    Usa threading.Lock para compatibilidad con Python 3.12+ donde
-    asyncio.Lock() no puede crearse fuera del event loop.
-    """
-    def __init__(self):
-        self._clients: list[WebSocket] = []
-        self._lock = threading.Lock()  # threading.Lock es seguro fuera del event loop
-
-    async def connect(self, ws: WebSocket):
-        await ws.accept()
-        with self._lock:
-            self._clients.append(ws)
-        log.info(f"[WS] Cliente conectado -- total activos: {len(self._clients)}")
-
-    async def disconnect(self, ws: WebSocket):
-        with self._lock:
-            if ws in self._clients:
-                self._clients.remove(ws)
-        log.info(f"[WS] Cliente desconectado -- total activos: {len(self._clients)}")
-
-    async def broadcast(self, data: dict):
-        """Envia el mismo JSON a todos los clientes conectados."""
-        dead = []
-        with self._lock:
-            clients_snapshot = list(self._clients)
-        for ws in clients_snapshot:
-            try:
-                await ws.send_json(data)
-            except Exception:
-                dead.append(ws)
-        for ws in dead:
-            await self.disconnect(ws)
-
-
-_ws_manager = _WSConnectionManager()
-_ws_ai_manager = _WSConnectionManager()
-_ws_ids_monitor_manager = _WSConnectionManager() # Monitor de trazas IDS
-
-
 def _notify_ai_clients(data: dict):
-    """Notifica al canal exclusivo de IA."""
-    try:
-        global global_event_loop
-        if global_event_loop and global_event_loop.is_running():
-            asyncio.run_coroutine_threadsafe(_ws_ai_manager.broadcast(data), global_event_loop)
-    except Exception:
-        pass
+    """Compatibilidad interna: Ollama emite ahora por /ws/llm-recommend."""
+    pass
 
 
 def _notify_ids_monitor(data: dict):
-    """Envia trazas de paquetes IDS al monitor de Postman."""
-    try:
-        global global_event_loop
-        if global_event_loop and global_event_loop.is_running():
-            asyncio.run_coroutine_threadsafe(_ws_ids_monitor_manager.broadcast(data), global_event_loop)
-    except Exception:
-        pass
+    """Monitor IDS live eliminado; se conserva como hook no operativo."""
+    pass
 
 
 def _notify_ws_clients(data: dict):
-    """
-    Helper sincrono para notificar desde codigo no-async (p.ej. _run_fl).
-    Crea una tarea asyncio si hay un event loop corriendo.
-    """
-    try:
-        global global_event_loop
-        if global_event_loop and global_event_loop.is_running():
-            asyncio.run_coroutine_threadsafe(_ws_manager.broadcast(data), global_event_loop)
-    except Exception as exc:
-        log.warning(f"Error WS notify: {exc}")
+    """Monitor FL por WebSocket eliminado; el orquestador usa polling HTTP."""
+    pass
 
 
-# =============================================================================
-# WebSocket endpoint -- /ws/fl-status
-# Monitorizacion en tiempo real del estado del Federated Learning.
-# El cliente recibe un JSON por cada cambio de ronda / estado.
-#
-# Uso desde Postman:
-#   ws://localhost:500N/ws/fl-status
-#
-# Uso desde Python:
-#   import websockets, asyncio
-#   async def monitor():
-#       async with websockets.connect("wss://localhost:500N/ws/fl-status") as ws:
-#           async for msg in ws:
-#               print(msg)
-#   asyncio.run(monitor())
-# =============================================================================
-
-@app.get("/ws/tunnel-status")
-@app.get("/ws/tunnel-status/")
-def ws_tunnel_status():
-    """Version REST GET del estado de tuneles."""
-    return _get_tunnel_status_data()
-
-@app.websocket("/ws/tunnel-status-live")
-async def ws_tunnel_status_live(websocket: WebSocket):
-    """Version WebSocket: Envia el estado de tuneles cada 2 segundos."""
-    await websocket.accept()
-    try:
-        while True:
-            await websocket.send_json(_get_tunnel_status_data())
-            await asyncio.sleep(2)
-    except Exception:
-        pass
-
-def _get_tunnel_status_data():
+def _get_transport_status_data():
     return {
-        "instance"                : INSTANCE_ID,
-        "fl_status_clients"       : len(_ws_manager._clients),
-        "worker_tunnels_active"   : list(fl_ws_manager.active_workers.keys()),
-        "coordinator_tunnel_active": fl_ws_client_conn is not None,
-        "client_dataapp_ws"       : dict(_client_ws_stats),
-        "ecc_wss_enabled"         : WS_ECC_ENABLED,
-        "ids_ecc_only"            : FL_IDS_ECC_ONLY,
-        "role"                    : "coordinator" if is_coordinator else "worker",
+        "instance"          : INSTANCE_ID,
+        "client_dataapp_ws" : dict(_client_ws_stats),
+        "ecc_wss_enabled"   : WS_ECC_ENABLED,
+        "ids_ecc_only"      : FL_IDS_ECC_ONLY,
+        "weights_via_ecc"   : FL_WEIGHTS_VIA_ECC,
+        "role"              : "coordinator" if is_coordinator else "worker",
     }
 
 
-@app.get("/ws/performance")
-@app.get("/ws/performance/")
-def ws_performance():
-    """Version REST GET de las metricas de rendimiento."""
+@app.get("/transport/status")
+@app.get("/transport/status/")
+def transport_status():
+    """Estado REST de los transportes que se conservan."""
+    return _get_transport_status_data()
+
+
+@app.get("/transport/performance")
+@app.get("/transport/performance/")
+def transport_performance():
+    """Metricas REST de transferencia de pesos por IDS/ECC."""
     return _get_performance_data()
 
-@app.websocket("/ws/performance-live")
-async def ws_performance_live(websocket: WebSocket):
-    """Version WebSocket: Streaming de metricas de rendimiento cada 2 segundos."""
-    await websocket.accept()
-    try:
-        while True:
-            await websocket.send_json(_get_performance_data())
-            await asyncio.sleep(2)
-    except Exception:
-        pass
 
 def _get_performance_data():
     with _ws_perf_lock:
         stats = dict(_ws_perf_stats)
         history = list(stats.pop("history", []))
 
-    ws_avg = (stats["ws_total_ms"] / stats["ws_sends"]) if stats["ws_sends"] > 0 else 0
     ids_ecc_avg = (stats["ids_ecc_total_ms"] / stats["ids_ecc_sends"]) if stats["ids_ecc_sends"] > 0 else 0
     http_avg = (stats["http_total_ms"] / stats["http_sends"]) if stats["http_sends"] > 0 else 0
-    speedup = (ids_ecc_avg / ws_avg) if ws_avg > 0 and ids_ecc_avg > 0 else None
 
     return {
         "instance": INSTANCE_ID,
         "role": "coordinator" if is_coordinator else "worker",
         "summary": {
-            "ws_dataapp": {
-                "sends": stats["ws_sends"],
-                "avg_ms": round(ws_avg, 2),
-                "total_kb": round(stats["ws_bytes"] / 1024, 1),
-                "failures": stats["ws_failures"],
-            },
             "ids_ecc": {
                 "sends": stats["ids_ecc_sends"],
                 "avg_ms": round(ids_ecc_avg, 2),
@@ -6484,23 +6218,9 @@ def _get_performance_data():
                 "total_kb": round(stats["http_bytes"] / 1024, 1),
                 "failures": stats["http_failures"],
             },
-            "ws": {
-                "sends": stats["ws_sends"],
-                "avg_ms": round(ws_avg, 2),
-                "total_kb": round(stats["ws_bytes"] / 1024, 1),
-                "failures": stats["ws_failures"],
-            },
-            "http": {
-                "sends": stats["http_sends"],
-                "avg_ms": round(http_avg, 2),
-                "total_kb": round(stats["http_bytes"] / 1024, 1),
-                "failures": stats["http_failures"],
-            },
-            "ws_speedup_factor_vs_ids_ecc": round(speedup, 2) if speedup else "N/A (datos insuficientes)",
         },
         "recent_transfers": history[-20:],
     }
-
 
 _CLIENT_WS_ALLOWED_PREFIXES = (
     "/health",
@@ -6514,8 +6234,7 @@ _CLIENT_WS_ALLOWED_PREFIXES = (
     "/dataset/",
     "/catalog/",
     "/system/",
-    "/ws/tunnel-status",
-    "/ws/performance",
+    "/transport/",
 )
 
 
@@ -6679,157 +6398,6 @@ async def ws_client_control(websocket: WebSocket):
                 0,
                 _client_ws_stats["active_connections"] - 1,
             )
-
-
-@app.websocket("/ws/fl-status")
-async def ws_fl_status(websocket: WebSocket):
-    """
-    Stream WebSocket del estado del Federated Learning.
-    - Envia el estado inicial al conectar.
-    - Emite un JSON cada vez que cambia la ronda o el estado.
-    - Cierra la conexion cuando el FL termina (completed / failed).
-    """
-    await _ws_manager.connect(websocket)
-    last_snapshot = None
-    try:
-        # Estado inicial inmediato al conectar
-        with _fl_lock:
-            current = dict(fl_state)
-        await websocket.send_json({
-            "event"   : "connected",
-            "instance": INSTANCE_ID,
-            "role"    : "coordinator" if is_coordinator else "worker",
-            **current,
-        })
-        last_snapshot = current.copy()
-
-        while True:
-            with _fl_lock:
-                current = dict(fl_state)
-
-            # Emitir solo si hay cambio real
-            if current != last_snapshot:
-                await websocket.send_json({
-                    "event": "fl_update",
-                    **current,
-                })
-                last_snapshot = current.copy()
-
-                # Notificar progreso cuando el FL concluye (sin break para historial final)
-                if current.get("status") in ("completed", "failed"):
-                    await websocket.send_json({"event": "fl_finished", **current})
-
-            await asyncio.sleep(1)
-
-    except WebSocketDisconnect:
-        log.info("[WS /fl-status] Cliente desconectado")
-    except Exception as exc:
-        if "1000" not in str(exc) and "1001" not in str(exc):
-            log.warning(f"[WS /fl-status] Error: {exc}")
-    finally:
-        await _ws_manager.disconnect(websocket)
-
-
-# =============================================================================
-# WebSocket endpoint -- /ws/ids-data
-# Canal de entrada para mensajes IDS enviados via WebSocket por el ECC.
-# Activo cuando WS_EDGE=true en el ECC (la DataApp se pone en modo WSS).
-#
-# El ECC envia un JSON {"header": "...", "payload": "..."} por el WebSocket
-# en lugar de usar HTTP POST /data.
-# Este endpoint lo deserializa y delega en la misma logica que /data.
-# =============================================================================
-
-@app.websocket("/ws/logs")
-async def ws_logs(websocket: WebSocket):
-    """
-    Streaming de logs en tiempo real via WebSocket.
-    Permite ver lo que pasa en el contenedor sin usar docker logs.
-    """
-    await websocket.accept()
-    log.info(f"[WS /logs] Cliente suscrito a logs (Worker {INSTANCE_ID})")
-    try:
-        # 1. Enviar las ultimas 20 lineas como contexto inicial
-        if os.path.exists(log_file):
-            with open(log_file, "r") as f:
-                lines = f.readlines()
-                for line in lines[-20:]:
-                    await websocket.send_text(line.strip())
-
-        # 2. Tail -f del archivo de logs
-        async def tail_log():
-            if not os.path.exists(log_file):
-                return
-            with open(log_file, "r") as f:
-                f.seek(0, os.SEEK_END)
-                while True:
-                    line = f.readline()
-                    if not line:
-                        await asyncio.sleep(0.5)
-                        continue
-                    await websocket.send_text(line.strip())
-
-        await tail_log()
-    except WebSocketDisconnect:
-        log.info(f"[WS /logs] Cliente desconectado")
-    except Exception as e:
-        log.error(f"[WS /logs] Error: {e}")
-
-
-@app.websocket("/ws/ai-insights")
-async def ws_ai_insights(websocket: WebSocket):
-    """
-    Canal exclusivo de IA con PERSISTENCIA.
-    Al conectar, recibe inmediatamente la ultima decision tomada por el LLM.
-    """
-    await _ws_ai_manager.connect(websocket)
-    try:
-        # Enviar la ultima decision como contexto inmediato si existe
-        with _ai_insight_lock:
-            if _last_ai_insight:
-                await websocket.send_json(_last_ai_insight)
-            else:
-                await websocket.send_json({
-                    "event": "info",
-                    "message": "Esperando primera recomendacion de IA...",
-                    "instance": INSTANCE_ID
-                })
-
-        # Mantener conexion activa con un heartbeat cada 30s
-        while True:
-            # Enviar un latido tecnico para evitar timeouts de proxies/Postman
-            await websocket.send_json({"event": "ping", "instance": INSTANCE_ID})
-            # Esperar una respuesta o tiempo de espera
-            try:
-                await asyncio.wait_for(websocket.receive_text(), timeout=30)
-            except asyncio.TimeoutError:
-                # El timeout es normal, volvemos a enviar el ping
-                continue
-    except WebSocketDisconnect:
-        await _ws_ai_manager.disconnect(websocket)
-    except Exception:
-        await _ws_ai_manager.disconnect(websocket)
-
-
-@app.websocket("/ws/ids-monitor")
-async def ws_ids_monitor(websocket: WebSocket):
-    """
-    Monitor de trafico IDS LIVE. 
-    Muestra los paquetes IDS (Request/Response) que pasan por el DataApp.
-    """
-    await _ws_ids_monitor_manager.connect(websocket)
-    # Mantener conexion activa con un heartbeat cada 30s
-    try:
-        while True:
-            await websocket.send_json({"event": "ping", "instance": INSTANCE_ID})
-            try:
-                await asyncio.wait_for(websocket.receive_text(), timeout=30)
-            except asyncio.TimeoutError:
-                continue
-    except WebSocketDisconnect:
-        await _ws_ids_monitor_manager.disconnect(websocket)
-    except Exception:
-        await _ws_ids_monitor_manager.disconnect(websocket)
 
 
 if __name__ == "__main__":
