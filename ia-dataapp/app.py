@@ -6678,39 +6678,31 @@ def _get_performance_data():
         "recent_transfers": history[-20:],
     }
 
-_CLIENT_WS_ALLOWED_PREFIXES = (
-    "/health",
-    "/status",
-    "/llm-status",
-    "/metrics",
-    "/proxy",
-    "/fl/",
-    "/ids/",
-    "/broker/",
-    "/dataset/",
-    "/catalog/",
-    "/system/",
-    "/transport/",
-)
+_CLIENT_WS_ALLOWED_PATHS = ("/proxy",)
 
 
 def _client_ws_path_allowed(path: str) -> bool:
     if not path or not path.startswith("/") or path.startswith("/ws/client"):
         return False
-    return any(path == prefix.rstrip("/") or path.startswith(prefix)
-               for prefix in _CLIENT_WS_ALLOWED_PREFIXES)
+    return path.split("?", 1)[0] in _CLIENT_WS_ALLOWED_PATHS
 
 
 def _client_ws_local_request(method: str, path: str, body, timeout: int) -> dict:
     """
-    Ejecuta una accion REST existente a traves del canal WS cliente->DataApp.
-    Mantiene los handlers actuales como fuente de verdad y evita duplicar logica FL.
+    Puente WS cliente->DataApp hacia la capa IDS /proxy.
+    El cliente no ejecuta endpoints funcionales directamente por WebSocket:
+    siempre envia POST /proxy y /proxy interpreta messageType/payload.action.
     """
     method = (method or "GET").upper()
-    if method not in ("GET", "POST"):
+    if method != "POST":
         return {"ok": False, "status_code": 405, "error": f"method_not_allowed:{method}"}
     if not _client_ws_path_allowed(path):
-        return {"ok": False, "status_code": 403, "error": f"path_not_allowed:{path}"}
+        return {
+            "ok": False,
+            "status_code": 403,
+            "error": f"path_not_allowed:{path}",
+            "allowed_paths": list(_CLIENT_WS_ALLOWED_PATHS),
+        }
 
     url = f"https://127.0.0.1:8500{path}"
     kwargs = {
@@ -6741,10 +6733,12 @@ async def ws_client_control(websocket: WebSocket):
     Canal WebSocket cliente -> DataApp.
 
     Protocolo JSON:
-      {"id":"1","type":"request","method":"GET","path":"/status","body":{}}
-      {"id":"2","type":"request","method":"POST","path":"/fl/start","body":{}}
+      {"id":"1","type":"request","method":"POST","path":"/proxy","body":{...}}
 
-    La DataApp responde con el mismo id y el resultado del endpoint REST existente.
+    La DataApp responde con el mismo id y el resultado de /proxy.
+    /proxy conserva la semantica IDS: messageType es el tipo IDS real y
+    payload.action indica la accion local cuando se solicita un artifact
+    de control del propio conector.
     """
     client_id = websocket.query_params.get("client_id") or f"client-{uuid.uuid4()}"
     await websocket.accept()
@@ -6769,7 +6763,7 @@ async def ws_client_control(websocket: WebSocket):
         "transport": "client-dataapp-websocket",
         "instance": INSTANCE_ID,
         "client_id": client_id,
-        "allowed_prefixes": list(_CLIENT_WS_ALLOWED_PREFIXES),
+        "allowed_paths": list(_CLIENT_WS_ALLOWED_PATHS),
     })
 
     try:
@@ -6798,8 +6792,8 @@ async def ws_client_control(websocket: WebSocket):
                 })
                 continue
 
-            method = msg.get("method", "GET")
-            path = msg.get("path", "/status")
+            method = msg.get("method", "POST")
+            path = msg.get("path", "/proxy")
             body = msg.get("body")
             timeout = msg.get("timeout", 60)
             started = time.time()
