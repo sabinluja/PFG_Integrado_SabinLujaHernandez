@@ -201,6 +201,16 @@ def _cm_short_label(name):
 SESSION = requests.Session()
 SESSION.verify = False
 CLIENT_WS_ENABLED = os.getenv("PFG_CLIENT_DATAAPP_WS", "true").lower() not in ("0", "false", "no")
+CLIENT_WS_OPEN_TIMEOUT = float(os.getenv("PFG_CLIENT_WS_OPEN_TIMEOUT", "8"))
+CLIENT_WS_CONNECT_RETRIES = int(os.getenv("PFG_CLIENT_WS_CONNECT_RETRIES", "2"))
+PROXY_CONTROL_ARTIFACT_BASE = os.getenv(
+    "PFG_PROXY_CONTROL_ARTIFACT_BASE",
+    "http://w3id.org/engrd/connector/artifact/fl-control",
+)
+PROXY_CONTROL_CONTRACT_BASE = os.getenv(
+    "PFG_PROXY_CONTROL_CONTRACT_BASE",
+    "http://w3id.org/engrd/connector/contract/fl-control",
+)
 _WS_RPC_CLIENTS = {}
 
 
@@ -229,18 +239,35 @@ class DataAppWebSocketClient:
             ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             ssl_ctx.check_hostname = False
             ssl_ctx.verify_mode = ssl.CERT_NONE
-        self.ws = connect(
-            ws_url,
-            ssl=ssl_ctx,
-            open_timeout=min(max(timeout, 1), 30),
-            close_timeout=3,
-            max_size=None,
-            ping_interval=None,
-            ping_timeout=None,
-        )
-        hello = json.loads(self.ws.recv())
-        if hello.get("transport") != "client-dataapp-websocket":
-            raise RuntimeError(f"handshake WS inesperado: {hello}")
+        last_exc = None
+        open_timeout = min(max(CLIENT_WS_OPEN_TIMEOUT, 1.0), max(float(timeout or 1), 1.0))
+        for attempt in range(max(1, CLIENT_WS_CONNECT_RETRIES)):
+            try:
+                self.ws = connect(
+                    ws_url,
+                    ssl=ssl_ctx,
+                    open_timeout=open_timeout,
+                    close_timeout=3,
+                    max_size=None,
+                    ping_interval=None,
+                    ping_timeout=None,
+                )
+                hello = json.loads(self.ws.recv(timeout=open_timeout))
+                if hello.get("transport") != "client-dataapp-websocket":
+                    raise RuntimeError(f"handshake WS inesperado: {hello}")
+                break
+            except Exception as exc:
+                last_exc = exc
+                if self.ws is not None:
+                    try:
+                        self.ws.close()
+                    except Exception:
+                        pass
+                self.ws = None
+                if attempt + 1 < max(1, CLIENT_WS_CONNECT_RETRIES):
+                    time.sleep(0.5)
+        else:
+            raise last_exc
         info(
             "[WS cliente->DataApp] CONEXION ABIERTA "
             f"transporte=WSS url={ws_url} "
@@ -288,18 +315,161 @@ def _url_parts_for_ws(url):
     return base_url, path
 
 
+def _proxy_message_for_ws_request(method, path):
+    """
+    Traduce la URL logica a una accion de artifact para /proxy.
+    El transporte externo sigue siendo /ws/client, pero la DataApp registra
+    despacho_interno=POST /proxy y /proxy decide el endpoint final a partir
+    de messageType=ArtifactRequestMessage + payload.action.
+    """
+    method = (method or "GET").upper()
+    clean_path = (path or "/").split("?", 1)[0]
+    mapping = {
+        ("GET", "/health"): "health",
+        ("GET", "/status"): "status",
+        ("GET", "/metrics"): "metrics",
+        ("GET", "/transport/status"): "transport_status",
+        ("GET", "/ids/self-description"): "ids_self_description",
+        ("GET", "/ids/contract"): "ids_contract",
+        ("GET", "/broker/connectors"): "broker_connectors",
+        ("POST", "/broker/discover"): "broker_discover",
+        ("POST", "/broker/discover/worker"): "broker_discover_worker",
+        ("GET", "/dataset/info"): "dataset_info",
+        ("GET", "/dataset/all-columns"): "dataset_all_columns",
+        ("GET", "/dataset/llm-recommend"): "dataset_llm_recommend",
+        ("POST", "/catalog/publish-datasets"): "catalog_publish_datasets",
+        ("POST", "/fl/fetch-algorithm"): "fl_fetch_algorithm",
+        ("POST", "/fl/start"): "fl_start",
+        ("GET", "/fl/status"): "fl_status",
+        ("GET", "/fl/docker-image-status"): "fl_docker_image_status",
+        ("GET", "/fl/results"): "fl_results",
+        ("GET", "/fl/model"): "fl_model",
+        ("POST", "/fl/negotiate"): "fl_negotiate",
+        ("POST", "/fl/accept-negotiation"): "fl_accept_negotiation",
+        ("POST", "/fl/receive-algorithm"): "fl_receive_algorithm",
+        ("POST", "/fl/receive-global-weights"): "fl_receive_global_weights",
+        ("POST", "/fl/receive-local-weights"): "fl_receive_local_weights",
+        ("POST", "/system/reset"): "system_reset",
+        ("POST", "/system/reset-all"): "system_reset_all",
+    }
+    return mapping.get((method, clean_path))
+
+
+def _safe_uri_segment(value):
+    segment = (value or "operation").strip().lower().replace("_", "-")
+    return "".join(ch if ch.isalnum() or ch in ".-" else "-" for ch in segment).strip("-") or "operation"
+
+
+def _proxy_control_ids_refs(proxy_action):
+    """
+    Cada accion local se modela como un artifact/contrato de control distinto.
+    Asi /proxy no reutiliza el mismo requestedArtifact/transferContract para
+    fases semanticamente diferentes del flujo.
+    """
+    segment = _safe_uri_segment(proxy_action)
+    artifact_base = PROXY_CONTROL_ARTIFACT_BASE.rstrip("/")
+    contract_base = PROXY_CONTROL_CONTRACT_BASE.rstrip("/")
+    return f"{artifact_base}/{segment}", f"{contract_base}/{segment}"
+
+
+def _proxy_wss_forward_for_base_url(base_url):
+    parsed = urlparse(base_url or "")
+    port = parsed.port
+    if port and port >= DEFAULT_COORDINATOR_PORT_BASE:
+        worker_id = port - DEFAULT_COORDINATOR_PORT_BASE
+        if worker_id > 0:
+            return f"wss://ecc-worker{worker_id}:8086/data"
+    return os.getenv("PFG_PROXY_FORWARD_TO", "")
+
+
+def _proxy_body_for_local_request(method, path, body=None, timeout=240, base_url=None):
+    proxy_action = _proxy_message_for_ws_request(method, path)
+    if not proxy_action:
+        return None
+    forward_to = os.getenv("PFG_PROXY_FORWARD_TO") or _proxy_wss_forward_for_base_url(base_url)
+    forward_to_internal = os.getenv("PFG_PROXY_FORWARD_TO_INTERNAL") or forward_to
+    requested_artifact, transfer_contract = _proxy_control_ids_refs(proxy_action)
+    return {
+        "multipart": "wss",
+        "Forward-To": forward_to,
+        "Forward-To-Internal": forward_to_internal,
+        "messageType": "ArtifactRequestMessage",
+        "requestedArtifact": requested_artifact,
+        "transferContract": transfer_contract,
+        "payload": {
+            "action": proxy_action,
+            "body": body if body is not None else {},
+            "logicalMethod": method,
+            "logicalPath": path,
+        },
+        "timeout": timeout,
+    }
+
+
+def _unwrap_proxy_body(parsed):
+    if not isinstance(parsed, dict):
+        return parsed
+    if parsed.get("transport") not in ("proxy-artifact-dispatcher", "proxy-message-dispatcher"):
+        return parsed
+    if not parsed.get("ok"):
+        raise RuntimeError(
+            f"/proxy {parsed.get('action') or parsed.get('message') or parsed.get('messageType')} devolvio "
+            f"{parsed.get('status_code')}: {parsed.get('error') or parsed.get('body') or parsed.get('text')}"
+        )
+    if "body" in parsed:
+        return parsed.get("body")
+    if "text" in parsed:
+        return {"_raw": parsed.get("text", "")}
+    return parsed
+
+
+def _unwrap_proxy_dispatch_response(ws_resp):
+    body = ws_resp.get("body")
+    if not isinstance(body, dict):
+        return ws_resp
+    if body.get("transport") not in ("proxy-artifact-dispatcher", "proxy-message-dispatcher"):
+        return ws_resp
+    if not body.get("ok"):
+        raise RuntimeError(
+            f"/proxy {body.get('action') or body.get('message') or body.get('messageType')} devolvio "
+            f"{body.get('status_code')}: {body.get('error') or body.get('body') or body.get('text')}"
+        )
+    ws_resp["proxy_action"] = body.get("action") or body.get("message")
+    ws_resp["proxy_message"] = ws_resp["proxy_action"]
+    ws_resp["proxy_target"] = body.get("target_path")
+    if "body" in body:
+        ws_resp["body"] = body.get("body")
+        ws_resp.pop("text", None)
+    elif "text" in body:
+        ws_resp["text"] = body.get("text", "")
+        ws_resp.pop("body", None)
+    return ws_resp
+
+
 def _ws_rpc(method, url, body=None, timeout=240):
     if not CLIENT_WS_ENABLED or not _WS_AVAILABLE:
         return None
     base_url, path = _url_parts_for_ws(url)
     if not base_url:
         return None
+    proxy_action = None
+    if path != "/proxy":
+        proxy_body = _proxy_body_for_local_request(method, path, body=body, timeout=timeout, base_url=base_url)
+        if proxy_body:
+            payload = proxy_body.get("payload") if isinstance(proxy_body.get("payload"), dict) else {}
+            proxy_action = payload.get("action")
+            body = proxy_body
+            method = "POST"
+            path = "/proxy"
     client = _WS_RPC_CLIENTS.get(base_url)
     if client is None:
         client = DataAppWebSocketClient(base_url)
         _WS_RPC_CLIENTS[base_url] = client
     try:
-        return client.request(method, path, body=body, timeout=timeout)
+        ws_resp = client.request(method, path, body=body, timeout=timeout)
+        if proxy_action:
+            ws_resp = _unwrap_proxy_dispatch_response(ws_resp)
+        return ws_resp
     except Exception:
         client.close()
         _WS_RPC_CLIENTS.pop(base_url, None)
@@ -312,28 +482,42 @@ def _close_ws_rpc_clients():
     _WS_RPC_CLIENTS.clear()
 
 
-def http_get(url, timeout=240):
-    substep(f"GET  {url}")
+def http_get(url, timeout=240, quiet=False):
+    if not quiet:
+        substep(f"GET  {url}")
+    ws_exc = None
     if CLIENT_WS_ENABLED and _WS_AVAILABLE:
         try:
             ws_resp = _ws_rpc("GET", url, timeout=timeout)
             if ws_resp is not None:
-                info(
-                    "[WS cliente->DataApp] OK "
-                    f"transporte=WSS metodo=GET url_rest_logica={url} "
-                    f"despachado_por=/ws/client elapsed_ms={ws_resp.get('elapsed_ms', '?')}"
-                )
+                proxy_hop = " -> /proxy" if ws_resp.get("proxy_action") else ""
+                proxy_msg = f" payload.action={ws_resp.get('proxy_action')}" if ws_resp.get("proxy_action") else ""
+                if not quiet:
+                    info(
+                        "[WS cliente->DataApp] OK "
+                        f"transporte=WSS metodo=GET url_rest_logica={url} "
+                        f"despachado_por=/ws/client{proxy_hop}{proxy_msg} "
+                        f"elapsed_ms={ws_resp.get('elapsed_ms', '?')}"
+                    )
                 body = ws_resp.get("body")
                 return body if body is not None else {"_raw": ws_resp.get("text", "")}
         except Exception as exc:
-            warn(f"WS cliente->DataApp fallo para GET {url}; fallback REST: {exc}")
+            ws_exc = exc
     try:
-        r = SESSION.get(url, timeout=timeout)
+        base_url, path = _url_parts_for_ws(url)
+        proxy_body = _proxy_body_for_local_request("GET", path, timeout=timeout, base_url=base_url) if path != "/proxy" else None
+        if proxy_body:
+            r = SESSION.post(f"{base_url}/proxy", json=proxy_body, timeout=timeout)
+        else:
+            r = SESSION.get(url, timeout=timeout)
         r.raise_for_status()
         try:
-            return r.json()
+            result = _unwrap_proxy_body(r.json())
         except Exception:
-            return {"_raw": r.text}
+            result = {"_raw": r.text}
+        if ws_exc and not quiet:
+            info(f"[WS cliente->DataApp] handshake no disponible; fallback REST /proxy OK ({ws_exc})")
+        return result
     except requests.exceptions.ConnectionError:
         fail(f"Conexion rechazada en {url} -- el container no esta levantado?")
     except requests.exceptions.ReadTimeout:
@@ -344,26 +528,38 @@ def http_get(url, timeout=240):
 
 def http_post(url, body, timeout=240):
     substep(f"POST {url}")
+    ws_exc = None
     if CLIENT_WS_ENABLED and _WS_AVAILABLE:
         try:
             ws_resp = _ws_rpc("POST", url, body=body, timeout=timeout)
             if ws_resp is not None:
+                proxy_hop = " -> /proxy" if ws_resp.get("proxy_action") else ""
+                proxy_msg = f" payload.action={ws_resp.get('proxy_action')}" if ws_resp.get("proxy_action") else ""
                 info(
                     "[WS cliente->DataApp] OK "
                     f"transporte=WSS metodo=POST url_rest_logica={url} "
-                    f"despachado_por=/ws/client elapsed_ms={ws_resp.get('elapsed_ms', '?')}"
+                    f"despachado_por=/ws/client{proxy_hop}{proxy_msg} "
+                    f"elapsed_ms={ws_resp.get('elapsed_ms', '?')}"
                 )
                 parsed_body = ws_resp.get("body")
                 return parsed_body if parsed_body is not None else {"_raw": ws_resp.get("text", "")}
         except Exception as exc:
-            warn(f"WS cliente->DataApp fallo para POST {url}; fallback REST: {exc}")
+            ws_exc = exc
     try:
-        r = SESSION.post(url, json=body, timeout=timeout)
+        base_url, path = _url_parts_for_ws(url)
+        proxy_body = _proxy_body_for_local_request("POST", path, body=body, timeout=timeout, base_url=base_url) if path != "/proxy" else None
+        if proxy_body:
+            r = SESSION.post(f"{base_url}/proxy", json=proxy_body, timeout=timeout)
+        else:
+            r = SESSION.post(url, json=body, timeout=timeout)
         r.raise_for_status()
         try:
-            return r.json()
+            result = _unwrap_proxy_body(r.json())
         except Exception:
-            return {"_raw": r.text}
+            result = {"_raw": r.text}
+        if ws_exc:
+            info(f"[WS cliente->DataApp] handshake no disponible; fallback REST /proxy OK ({ws_exc})")
+        return result
     except requests.exceptions.ConnectionError:
         fail(f"Conexion rechazada en {url}")
     except requests.exceptions.ReadTimeout:
@@ -383,23 +579,42 @@ def http_post(url, body, timeout=240):
 
 def http_post_raw(url, body, timeout=240):
     substep(f"POST {url}")
+    ws_exc = None
     if CLIENT_WS_ENABLED and _WS_AVAILABLE:
         try:
             ws_resp = _ws_rpc("POST", url, body=body, timeout=timeout)
             if ws_resp is not None:
+                proxy_hop = " -> /proxy" if ws_resp.get("proxy_action") else ""
+                proxy_msg = f" payload.action={ws_resp.get('proxy_action')}" if ws_resp.get("proxy_action") else ""
                 info(
                     "[WS cliente->DataApp] OK "
                     f"transporte=WSS metodo=POST url_rest_logica={url} "
-                    f"despachado_por=/ws/client elapsed_ms={ws_resp.get('elapsed_ms', '?')}"
+                    f"despachado_por=/ws/client{proxy_hop}{proxy_msg} "
+                    f"elapsed_ms={ws_resp.get('elapsed_ms', '?')}"
                 )
                 if "text" in ws_resp:
                     return ws_resp.get("text", "")
                 return json.dumps(ws_resp.get("body", {}), ensure_ascii=False)
         except Exception as exc:
-            warn(f"WS cliente->DataApp fallo para POST {url}; fallback REST: {exc}")
+            ws_exc = exc
     try:
-        r = SESSION.post(url, json=body, timeout=timeout)
+        base_url, path = _url_parts_for_ws(url)
+        proxy_body = _proxy_body_for_local_request("POST", path, body=body, timeout=timeout, base_url=base_url) if path != "/proxy" else None
+        if proxy_body:
+            r = SESSION.post(f"{base_url}/proxy", json=proxy_body, timeout=timeout)
+        else:
+            r = SESSION.post(url, json=body, timeout=timeout)
         r.raise_for_status()
+        if proxy_body:
+            try:
+                result = json.dumps(_unwrap_proxy_body(r.json()), ensure_ascii=False)
+                if ws_exc:
+                    info(f"[WS cliente->DataApp] handshake no disponible; fallback REST /proxy OK ({ws_exc})")
+                return result
+            except Exception:
+                pass
+        if ws_exc:
+            info(f"[WS cliente->DataApp] handshake no disponible; fallback REST /proxy OK ({ws_exc})")
         return r.text
     except requests.exceptions.ConnectionError:
         fail(f"Conexion rechazada en {url}")
@@ -1053,8 +1268,13 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
         for m in [re.search(r"worker(\d+)", w.get("connector_uri", ""))] if m
     )
 
-    step("Monitorizacion del entrenamiento via HTTP")
-    print(f"      {GRAY}Endpoint: {coordinator_url}/fl/status{RESET}")
+    step("Monitorizacion del entrenamiento via /proxy")
+    if CLIENT_WS_ENABLED and _WS_AVAILABLE:
+        ws_url = coordinator_url.replace("https://", "wss://").replace("http://", "ws://")
+        print(f"      {GRAY}Entrada real : WebSocket {ws_url}/ws/client{RESET}")
+        print(f"      {GRAY}Despacho    : POST /proxy  (messageType=ArtifactRequestMessage; payload.action=fl_status){RESET}")
+    else:
+        print(f"      {GRAY}Endpoint    : POST {coordinator_url}/proxy  (messageType=ArtifactRequestMessage; payload.action=fl_status){RESET}")
     print(f"      {GRAY}Workers participantes: {', '.join('worker-' + w for w in accepted_wids)}{RESET}")
 
     step("Verificacion de transporte conservado (GET /transport/status)")
@@ -1076,12 +1296,15 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
     """
     Monitorizacion por polling HTTP (GET /fl/status cada 5s).
     """
-    info("Monitorizando via polling HTTP GET /fl/status cada 5s...")
+    if CLIENT_WS_ENABLED and _WS_AVAILABLE:
+        info("Monitorizando via WebSocket /ws/client -> POST /proxy payload.action=fl_status cada 5s...")
+    else:
+        info("Monitorizando via POST /proxy payload.action=fl_status cada 5s...")
 
     # Esperar a que el FL arranque
     for _ in range(30):
         try:
-            fl = http_get(f"{coordinator_url}/fl/status", timeout=10)
+            fl = http_get(f"{coordinator_url}/fl/status", timeout=10, quiet=True)
             if fl.get("status") not in ("idle", ""):
                 ok("FL en marcha"); break
         except Exception:
@@ -1100,7 +1323,7 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
             warn("Timeout de monitorizacion (1h)"); break
 
         try:
-            fl = http_get(f"{coordinator_url}/fl/status", timeout=10)
+            fl = http_get(f"{coordinator_url}/fl/status", timeout=10, quiet=True)
         except Exception as e:
             warn(f"Error polling /fl/status: {e}"); time.sleep(poll_interval); continue
 
@@ -1421,6 +1644,7 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
             "Forward-To"      : _fwd_dataapp,
             "connectorUri"    : coord_uri,   # URI IDS explicita -- evita inferencia incorrecta
             "messageType"     : "ContractRequestMessage",
+            "requestedElement" : fl_res.get("@id", ""),
             "contractId"      : cid_val,
             "contractProvider": coord_uri,
         }
@@ -1707,7 +1931,7 @@ def main():
     field("Timeout HTTP",    f"{req_timeout}s")
     field(
         "Cliente -> DataApp",
-        "WebSocket /ws/client" if CLIENT_WS_ENABLED and _WS_AVAILABLE else "REST directo",
+        "WebSocket /ws/client -> POST /proxy" if CLIENT_WS_ENABLED and _WS_AVAILABLE else "REST POST /proxy",
     )
 
     # Referencias mutables para que el listener las actualice en caliente

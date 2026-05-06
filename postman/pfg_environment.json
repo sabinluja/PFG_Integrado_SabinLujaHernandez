@@ -24,35 +24,35 @@
     {
       "key": "Worker4_ECC_Forward_To",
       "value": "https://ecc-worker2:8889/data",
-      "description": "Auto-calculado en el pre-request del paso 15 según Coordinator_Port. ECC del coordinator al que worker4 intenta acceder.",
+      "description": "Auto-calculado en el pre-request del paso 15 segÃºn Coordinator_Port. ECC del coordinator al que worker4 intenta acceder.",
       "type": "default",
       "enabled": true
     },
     {
       "key": "fl_model_resource_id",
       "value": "",
-      "description": "Auto-rellenado por el paso 13 → @id del recurso FL publicado por el coordinator.",
+      "description": "Auto-rellenado por el paso 13 â†’ @id del recurso FL publicado por el coordinator.",
       "type": "default",
       "enabled": true
     },
     {
       "key": "fl_model_contract_id",
       "value": "",
-      "description": "Auto-rellenado por el paso 13 → @id del contractOffer del recurso FL (política connector-restricted-policy).",
+      "description": "Auto-rellenado por el paso 13 â†’ @id del contractOffer del recurso FL (polÃ­tica connector-restricted-policy).",
       "type": "default",
       "enabled": true
     },
     {
       "key": "w4_fl_resource_id",
       "value": "",
-      "description": "Auto-rellenado por el paso 15 → @id del recurso FL visible por worker4 en el catálogo del coordinator.",
+      "description": "Auto-rellenado por el paso 15 â†’ @id del recurso FL visible por worker4 en el catÃ¡logo del coordinator.",
       "type": "default",
       "enabled": true
     },
     {
       "key": "w4_fl_contract_id",
       "value": "",
-      "description": "Auto-rellenado por el paso 15 → @id del contrato FL usado por worker4 en el intento de negociación (paso 16).",
+      "description": "Auto-rellenado por el paso 15 â†’ @id del contrato FL usado por worker4 en el intento de negociaciÃ³n (paso 16).",
       "type": "default",
       "enabled": true
     },
@@ -115,7 +115,7 @@
     {
       "key": "Coordinator_Instance",
       "value": "",
-      "description": "Auto-rellenado por DAPS-0 → instance ID del coordinator (1, 2, 3 o 4).",
+      "description": "Auto-rellenado por DAPS-0 â†’ instance ID del coordinator (1, 2, 3 o 4).",
       "type": "default",
       "enabled": true
     },
@@ -138,7 +138,7 @@
       "value": "Titatic Dataset TEST",
       "type": "default",
       "enabled": true,
-      "description": "Título del dataset a publicar manulmente"
+      "description": "TÃ­tulo del dataset a publicar manulmente"
     },
     {
       "key": "dataset_filename",
@@ -149,10 +149,10 @@
     },
     {
       "key": "dataset_description",
-      "value": "Dataset subido vía variables de Postman",
+      "value": "Dataset subido vÃ­a variables de Postman",
       "type": "default",
       "enabled": true,
-      "description": "Descripción del dataset"
+      "description": "DescripciÃ³n del dataset"
     },
     {
       "key": "Proxy_Endpoint",
@@ -165,7 +165,7 @@
       "value": "https://localhost:5002",
       "type": "default",
       "enabled": true,
-      "description": "URL del DataApp del worker al que quieres registrar el CSV manualmente. El pre-request del Paso 1 llama a {DataApp_Worker_URL}/dataset/all-columns para obtener los metadatos reales del CSV (columnas, filas, tamaño). Worker1=5001, Worker2=5002, Worker3=5003, Worker4=5004."
+      "description": "URL del DataApp del worker al que quieres registrar el CSV manualmente. El pre-request del Paso 1 llama a {DataApp_Worker_URL}/dataset/all-columns para obtener los metadatos reales del CSV (columnas, filas, tamaÃ±o). Worker1=5001, Worker2=5002, Worker3=5003, Worker4=5004."
     },
     {
       "key": "body_offered_resource",
@@ -194,6 +194,66 @@
       "type": "default",
       "enabled": true,
       "description": "Auto-generado por el pre-request del Paso 1. Payload del Contract Offer ODRL."
+    },
+    {
+      "key": "Forward-To",
+      "value": "https://ecc-worker1:8889/data",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "Forward-To-WS",
+      "value": "wss://ecc-worker1:8086/data",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "Forward-To-Internal",
+      "value": "wss://ecc-worker2:8086/data",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "offered_resource",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "contract_artifact",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "contract_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "contract_permission",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "contract_provider",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "contract_agreement",
+      "value": "{}",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "transfer_contract",
+      "value": "",
+      "type": "default",
+      "enabled": true
     }
   ],
   "_postman_variable_scope": "environment",

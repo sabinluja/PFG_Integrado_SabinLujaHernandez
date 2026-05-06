@@ -21,13 +21,13 @@
                   "pm.test('Publicacion automatica OK', () => pm.response.to.have.status(200));",
                   "const json = pm.response.json();",
                   "if (json.status === 'success') {",
-                  "    console.log('✅ Publicados ' + json.published_count + ' dataset(s) automaticamente via /catalog/publish-datasets');",
-                  "    (json.published || []).forEach(p => console.log('   📂 ' + p.filename + ' -> ' + p.resource_id));",
+                  "    console.log('âœ… Publicados ' + json.published_count + ' dataset(s) automaticamente via /catalog/publish-datasets');",
+                  "    (json.published || []).forEach(p => console.log('   ðŸ“‚ ' + p.filename + ' -> ' + p.resource_id));",
                   "    console.log('');",
                   "    console.log('Los datasets ya estan disponibles para el LLM y el discovery.');",
                   "    console.log('Usa los pasos 1-4 solo si necesitas registrar un campo especifico manualmente.');",
                   "} else {",
-                  "    console.warn('⚠️  ' + JSON.stringify(json));",
+                  "    console.warn('âš ï¸  ' + JSON.stringify(json));",
                   "}"
                 ]
               }
@@ -59,18 +59,18 @@
           "description": "Atajo directo: llama a POST /catalog/publish-datasets en el DataApp del worker. Publica TODOS los CSVs de la carpeta /data/input/ con todos los campos correctos (igual que el arranque automatico).\n\nUSA ESTE PASO en lugar de los pasos 1-4 si solo quieres re-publicar rapido. Los pasos 1-4 son para registro manual avanzado o depuracion."
         },
         {
-          "name": "2. Ver Catálogo Completo",
+          "name": "2. Ver CatÃ¡logo Completo",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"Catálogo recuperado\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"CatÃ¡logo recuperado\", () => pm.response.to.have.status(200));",
                   "const sd = pm.response.json();",
                   "const cats = sd[\"ids:resourceCatalog\"] || [];",
                   "if (cats.length > 0 && cats[0][\"ids:offeredResource\"]) {",
-                  "    console.log(\"✅ Datasets en el catálogo:\");",
+                  "    console.log(\"âœ… Datasets en el catÃ¡logo:\");",
                   "    cats[0][\"ids:offeredResource\"].forEach(r => {",
                   "        var titles = r[\"ids:title\"] || [];",
                   "        var value = titles.length > 0 ? titles[0][\"@value\"] : r[\"@id\"];",
@@ -110,7 +110,7 @@
               ]
             }
           },
-          "description": "Obtiene el Self-Description completo del ECC seleccionado e imprime en la consola los titulos de los Datasets publicados para verificación."
+          "description": "Obtiene el Self-Description completo del ECC seleccionado e imprime en la consola los titulos de los Datasets publicados para verificaciÃ³n."
         }
       ]
     },
@@ -128,7 +128,7 @@
                   "const json = pm.response.json();",
                   "pm.test(\"Es coordinator\", () => {",
                   "    pm.expect(json.role).to.equal(\"coordinator\");",
-                  "    console.log(\"✅ Worker\", json.instance, \"| role:\", json.role, \"| algorithm_loaded:\", json.algorithm_loaded);",
+                  "    console.log(\"âœ… Worker\", json.instance, \"| role:\", json.role, \"| algorithm_loaded:\", json.algorithm_loaded);",
                   "    console.log(\"   FL status:\", json.fl_status, \"| CSV:\", json.csv_selected);",
                   "    console.log(\"   Peers:\", json.peer_eccs);",
                   "});"
@@ -151,11 +151,11 @@
               "query": []
             }
           },
-          "description": "Comprueba que el Coordinator está vivo y listo para orquestar la red.",
+          "description": "Comprueba que el Coordinator estÃ¡ vivo y listo para orquestar la red.",
           "response": []
         },
         {
-          "name": "1b. Ver Catálogo IDS (Datasets)",
+          "name": "1b. Ver CatÃ¡logo IDS (Datasets)",
           "event": [
             {
               "listen": "test",
@@ -172,7 +172,7 @@
                   "   const titleObj = (r['ids:title'] || [{}])[0];",
                   "   let title = titleObj['@value'] || String(titleObj);",
                   "   if (title.includes('Dataset:')) {",
-                  "       console.log('✅ ' + title.replace('Dataset: ', ''));",
+                  "       console.log('âœ… ' + title.replace('Dataset: ', ''));",
                   "       count++;",
                   "   }",
                   "});",
@@ -196,7 +196,7 @@
               "query": []
             }
           },
-          "description": "Extrae el catálogo IDS (self-description) del coordinator e imprime por consola los Datasets publicados disponibles para entrenar.",
+          "description": "Extrae el catÃ¡logo IDS (self-description) del coordinator e imprime por consola los Datasets publicados disponibles para entrenar.",
           "response": []
         },
         {
@@ -215,7 +215,7 @@
               ],
               "query": []
             },
-            "description": "Consulta el broker Fuseki via SPARQL y lista todos los connectors registrados. Ejecutar antes del paso 5b para confirmar que los workers están en el broker. El coordinator se excluye de la lista (solo devuelve peers)."
+            "description": "Consulta el broker Fuseki via SPARQL y lista todos los connectors registrados. Ejecutar antes del paso 5b para confirmar que los workers estÃ¡n en el broker. El coordinator se excluye de la lista (solo devuelve peers)."
           },
           "event": [
             {
@@ -236,10 +236,10 @@
                   "        console.log(`       Endpoint: ${c.endpoint || '(sin endpoint)'}`);",
                   "    });",
                   "    if (json.count === 0) {",
-                  "        console.log('⚠️  No hay conectores en el broker — los workers pueden tardar en registrarse.');",
+                  "        console.log('âš ï¸  No hay conectores en el broker â€” los workers pueden tardar en registrarse.');",
                   "        console.log('   Espera 30s y repite esta llamada.');",
                   "    } else {",
-                  "        console.log('✅ Broker activo con', json.count, 'conector(es) registrado(s)');",
+                  "        console.log('âœ… Broker activo con', json.count, 'conector(es) registrado(s)');",
                   "    }",
                   "});"
                 ]
@@ -412,7 +412,7 @@
               ],
               "query": []
             },
-            "description": "El coordinator negocia contratos IDS con los workers compatibles descubiertos en el paso 5b. Worker1 y Worker3 aceptan. Worker4 rechaza porque FL_AUTHORIZED_URIS esta vacio — soberania del dato IDS."
+            "description": "El coordinator negocia contratos IDS con los workers compatibles descubiertos en el paso 5b. Worker1 y Worker3 aceptan. Worker4 rechaza porque FL_AUTHORIZED_URIS esta vacio â€” soberania del dato IDS."
           },
           "response": []
         },
@@ -427,7 +427,7 @@
                   "pm.test('FL arrancado con workers aceptados', () => {",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.status).to.equal('started');",
-                  "    console.log('FL arrancado — coordinator:', json.coordinator);",
+                  "    console.log('FL arrancado â€” coordinator:', json.coordinator);",
                   "    console.log('Peers seleccionados:', JSON.stringify(json.peers));",
                   "    console.log('Rondas:', json.fl_config?.rounds);",
                   "});"
@@ -464,7 +464,7 @@
               ],
               "query": []
             },
-            "description": "Arranca el ciclo FL completo en el coordinator.\nLos parámetros (rounds, round_timeout, etc.) se leen automáticamente de fl_config.json\nrecibido en el paso 5. No es necesario pasar ningún parámetro en el body."
+            "description": "Arranca el ciclo FL completo en el coordinator.\nLos parÃ¡metros (rounds, round_timeout, etc.) se leen automÃ¡ticamente de fl_config.json\nrecibido en el paso 5. No es necesario pasar ningÃºn parÃ¡metro en el body."
           },
           "description": "Arranca el ciclo FL. Usa los workers aceptados en el paso 5c (/fl/negotiate). Envia algorithm.py + fl_config.json a los workers aceptados (worker1, worker3) y arranca FedAvg. Worker4 ya fue excluido en el paso anterior.",
           "response": []
@@ -478,7 +478,7 @@
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
                   "const json = pm.response.json();",
-                  "pm.test(\"FL no está idle (arrancó correctamente)\", () => {",
+                  "pm.test(\"FL no estÃ¡ idle (arrancÃ³ correctamente)\", () => {",
                   "    pm.expect(json.status).to.not.equal(\"idle\");",
                   "    console.log(\"FL status:\", json.status, \"| ronda:\", json.current_round, \"/\", json.total_rounds);",
                   "});",
@@ -489,10 +489,10 @@
                   "});",
                   "if (json.status === \"completed\") {",
                   "    const last = json.history[json.history.length - 1];",
-                  "    console.log(\"✅ FL completado —\", json.total_rounds, \"rondas\");",
+                  "    console.log(\"âœ… FL completado â€”\", json.total_rounds, \"rondas\");",
                   "    console.log(\"   acc=\", last?.global_metrics?.accuracy, \"| auc=\", last?.global_metrics?.auc);",
                   "} else {",
-                  "    console.log(\"FL status:\", json.status, \"— ronda\", json.current_round, \"/\", json.total_rounds);",
+                  "    console.log(\"FL status:\", json.status, \"â€” ronda\", json.current_round, \"/\", json.total_rounds);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -514,7 +514,7 @@
               "query": []
             }
           },
-          "description": "Ejecutar justo tras arrancar FL para confirmar que no está idle, y repetir periódicamente hasta ver status=completed. Muestra ronda actual y métricas finales al completarse.",
+          "description": "Ejecutar justo tras arrancar FL para confirmar que no estÃ¡ idle, y repetir periÃ³dicamente hasta ver status=completed. Muestra ronda actual y mÃ©tricas finales al completarse.",
           "response": []
         },
         {
@@ -541,7 +541,7 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Modelo disponible con métricas\", () => {",
+                  "pm.test(\"Modelo disponible con mÃ©tricas\", () => {",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.metrics).to.exist;",
                   "    pm.expect(json.weights_available).to.be.true;",
@@ -583,12 +583,12 @@
                   "    pm.expect(json.status).to.equal('ok');",
                   "    pm.expect(json.instance).to.exist;",
                   "    pm.expect(json.role).to.exist;",
-                  "    console.log('✅ Worker', json.instance, '| status:', json.status, '| role:', json.role);",
+                  "    console.log('âœ… Worker', json.instance, '| status:', json.status, '| role:', json.role);",
                   "});",
                   "",
-                  "// INSTRUCCIÓN: Para verificar todos los workers cambia Coordinator_URL:",
+                  "// INSTRUCCIÃ“N: Para verificar todos los workers cambia Coordinator_URL:",
                   "console.log('');",
-                  "console.log('ℹ️  Para verificar todos los workers:');",
+                  "console.log('â„¹ï¸  Para verificar todos los workers:');",
                   "console.log('   Worker-1: cambiar Coordinator_URL=https://localhost:5001');",
                   "console.log('   Worker-2: cambiar Coordinator_URL=https://localhost:5002');",
                   "console.log('   Worker-3: cambiar Coordinator_URL=https://localhost:5003');",
@@ -617,7 +617,7 @@
           "response": []
         },
         {
-          "name": "11. Verificar Publicación del Modelo",
+          "name": "11. Verificar PublicaciÃ³n del Modelo",
           "event": [
             {
               "listen": "test",
@@ -631,9 +631,9 @@
                   "    pm.expect(sd).to.exist;",
                   "",
                   "    const resources = (sd['ids:resourceCatalog'] || [{}])[0]['ids:offeredResource'] || [];",
-                  "    console.log('Total recursos en catálogo:', resources.length);",
+                  "    console.log('Total recursos en catÃ¡logo:', resources.length);",
                   "    resources.forEach((r, i) => {",
-                  "        const title = ((r['ids:title'] || [{}])[0]['@value'] || '(sin título)');",
+                  "        const title = ((r['ids:title'] || [{}])[0]['@value'] || '(sin tÃ­tulo)');",
                   "        console.log('  Recurso', i+1, ':', title, '|', r['@id']);",
                   "    });",
                   "",
@@ -643,7 +643,7 @@
                   "        return title.includes('FL Global Model') || id.includes('fl_model_coordinator');",
                   "    });",
                   "    pm.expect(flResource).to.exist;",
-                  "    console.log('✅ Recurso FL encontrado:', flResource['@id']);",
+                  "    console.log('âœ… Recurso FL encontrado:', flResource['@id']);",
                   "",
                   "    // Contrato existe en la self-description",
                   "    const contract = (flResource['ids:contractOffer'] || [{}])[0];",
@@ -651,13 +651,13 @@
                   "    pm.expect(contract['@id']).to.include('contractOffer');",
                   "    console.log('   Contrato :', contract['@id']);",
                   "",
-                  "    // Representación existe",
+                  "    // RepresentaciÃ³n existe",
                   "    const repr = (flResource['ids:representation'] || [{}])[0];",
                   "    pm.expect(repr['@id']).to.exist;",
                   "    console.log('   Repr     :', repr['@id']);",
                   "",
                   "    // Extraer lista de connector URIs autorizados del constraint del contrato",
-                  "    // (publicados por _publish_fl_model_as_ids_resource con política connector-restricted-policy)",
+                  "    // (publicados por _publish_fl_model_as_ids_resource con polÃ­tica connector-restricted-policy)",
                   "    const perm        = (contract['ids:permission'] || [{}])[0] || {};",
                   "    const constraint  = (perm['ids:constraint']    || [{}])[0] || {};",
                   "    const authorised  = (constraint['ids:rightOperand'] || []).map(v => v['@value'] || v['@id'] || String(v));",
@@ -667,10 +667,10 @@
                   "    pm.environment.set('fl_model_resource_id', flResource['@id']);",
                   "    pm.environment.set('fl_model_contract_id', contract['@id']);",
                   "    pm.environment.set('fl_model_authorised_peers', JSON.stringify(authorised));",
-                  "    console.log('✅ IDs guardados en environment para pasos 14-16');",
+                  "    console.log('âœ… IDs guardados en environment para pasos 14-16');",
                   "});",
                   "",
-                  "pm.test('Catálogo tiene al menos 2 recursos (original + FL model)', () => {",
+                  "pm.test('CatÃ¡logo tiene al menos 2 recursos (original + FL model)', () => {",
                   "    const sd = pm.response.json();",
                   "    const resources = (sd['ids:resourceCatalog'] || [{}])[0]['ids:offeredResource'] || [];",
                   "    pm.expect(resources.length).to.be.at.least(2);",
@@ -695,7 +695,7 @@
               "query": []
             }
           },
-          "description": "Verifica que el modelo FL se publicó correctamente como recurso IDS en el ECC del coordinator.\n\nLlama a GET /ids/self-description del DataApp del coordinator — un endpoint que consulta internamente la self-description del ECC local (puerto 8449) y la devuelve directamente.\n\nEsto evita el timeout que ocurría cuando /proxy intentaba que el coordinator se preguntara a sí mismo vía IDS, creando un bucle interno.\n\nComprueba:\n- Existe un recurso 'FL Global Model' en el catálogo IDS\n- El contrato tiene ids:assignee (acceso restringido a los peers participantes)\n- Tiene representación con artifact (los pesos finales)\n- El catálogo tiene al menos 4 recursos (3 originales + 1 FL)\n\nGuarda en environment: fl_model_resource_id, fl_model_artifact_id, fl_model_contract_id",
+          "description": "Verifica que el modelo FL se publicÃ³ correctamente como recurso IDS en el ECC del coordinator.\n\nLlama a GET /ids/self-description del DataApp del coordinator â€” un endpoint que consulta internamente la self-description del ECC local (puerto 8449) y la devuelve directamente.\n\nEsto evita el timeout que ocurrÃ­a cuando /proxy intentaba que el coordinator se preguntara a sÃ­ mismo vÃ­a IDS, creando un bucle interno.\n\nComprueba:\n- Existe un recurso 'FL Global Model' en el catÃ¡logo IDS\n- El contrato tiene ids:assignee (acceso restringido a los peers participantes)\n- Tiene representaciÃ³n con artifact (los pesos finales)\n- El catÃ¡logo tiene al menos 4 recursos (3 originales + 1 FL)\n\nGuarda en environment: fl_model_resource_id, fl_model_artifact_id, fl_model_contract_id",
           "response": []
         },
         {
@@ -734,7 +734,7 @@
                   "    pm.expect(contract).to.exist;",
                   "    pm.expect(contract['@id']).to.exist;",
                   "    pm.expect(contract['@type']).to.include('ContractOffer');",
-                  "    console.log('✅ Contrato recibido:', contract['@id']);",
+                  "    console.log('âœ… Contrato recibido:', contract['@id']);",
                   "});",
                   "",
                   "pm.test('Contrato FL usa connector-restricted-policy', () => {",
@@ -745,22 +745,22 @@
                   "",
                   "    const desc = ((perm['ids:description'] || [{}])[0]['@value'] || '');",
                   "    pm.expect(desc).to.equal('connector-restricted-policy',",
-                  "        'La política debe ser connector-restricted-policy');",
-                  "    console.log('✅ Política:', desc);",
+                  "        'La polÃ­tica debe ser connector-restricted-policy');",
+                  "    console.log('âœ… PolÃ­tica:', desc);",
                   "",
                   "    const constraint = (perm['ids:constraint'] || [{}])[0] || {};",
                   "    const operator   = (constraint['ids:operator'] || {})['@id'] || '';",
                   "    pm.expect(operator).to.include('IN', 'El operador del constraint debe ser IN');",
-                  "    console.log('✅ Operador constraint:', operator);",
+                  "    console.log('âœ… Operador constraint:', operator);",
                   "",
                   "    const allowed = (constraint['ids:rightOperand'] || [])",
                   "        .map(v => v['@value'] || v['@id'] || String(v));",
                   "    pm.expect(allowed.length).to.be.above(0, 'Sin conectores permitidos en constraint');",
-                  "    console.log('✅ Conectores autorizados:', allowed.join(', '));",
+                  "    console.log('âœ… Conectores autorizados:', allowed.join(', '));",
                   "",
                   "    const hasWorker4 = allowed.some(u => u.toLowerCase().includes('worker4'));",
                   "    pm.expect(hasWorker4).to.be.false;",
-                  "    console.log('✅ Worker4 NO está en la lista autorizada — correcto');",
+                  "    console.log('âœ… Worker4 NO estÃ¡ en la lista autorizada â€” correcto');",
                   "",
                   "    // Guardar allowed para cruce con paso 5c",
                   "    pm.environment.set('fl_model_authorised_peers', JSON.stringify(allowed));",
@@ -778,7 +778,7 @@
                   "    const acceptedUris = acceptedWorkers.map(w => w.connector_uri || '');",
                   "",
                   "    if (acceptedUris.length === 0) {",
-                  "        console.log('⚠️  accepted_workers no encontrado — ejecuta paso 5c primero');",
+                  "        console.log('âš ï¸  accepted_workers no encontrado â€” ejecuta paso 5c primero');",
                   "        return;",
                   "    }",
                   "",
@@ -787,7 +787,7 @@
                   "",
                   "    acceptedUris.forEach(uri => {",
                   "        const present = allowed.some(a => a === uri || uri.includes(a) || a.includes(uri));",
-                  "        console.log(present ? '  ✅' : '  ⚠️ ', uri, present ? '→ presente' : '→ NO encontrado');",
+                  "        console.log(present ? '  âœ…' : '  âš ï¸ ', uri, present ? 'â†’ presente' : 'â†’ NO encontrado');",
                   "    });",
                   "",
                   "    pm.expect(allowed.length).to.be.at.least(acceptedUris.length,",
@@ -799,7 +799,7 @@
           ]
         },
         {
-          "name": "13. Worker4: Leer Catálogo",
+          "name": "13. Worker4: Leer CatÃ¡logo",
           "event": [
             {
               "listen": "prerequest",
@@ -808,7 +808,7 @@
                 "exec": [
                   "// Derivar Worker4_ECC_Forward_To desde Coordinator_URL sin hardcodear.",
                   "// El ECC interno del coordinator siempre es ecc-workerN:8889/data",
-                  "// donde N se extrae del puerto de Coordinator_URL (500N → N).",
+                  "// donde N se extrae del puerto de Coordinator_URL (500N â†’ N).",
                   "const coordUrl = pm.environment.get('Coordinator_URL') || 'https://localhost:5002';",
                   "const portMatch = coordUrl.match(/:(\\d+)\\s*$/);",
                   "const port = portMatch ? portMatch[1] : '5002';",
@@ -824,7 +824,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 — Worker4 accede al proxy IDS', () => pm.response.to.have.status(200));",
+                  "pm.test('Status 200 â€” Worker4 accede al proxy IDS', () => pm.response.to.have.status(200));",
                   "",
                   "pm.test('Worker4 ve el catalogo del coordinator y extrae recurso FL', () => {",
                   "    const raw = pm.response.text();",
@@ -857,7 +857,7 @@
                   "    });",
                   "",
                   "    if (!flResource) {",
-                  "        console.log('AVISO: recurso FL no encontrado — puede que el FL no haya terminado aun.');",
+                  "        console.log('AVISO: recurso FL no encontrado â€” puede que el FL no haya terminado aun.');",
                   "        console.log('Recursos disponibles:', resources.map(r => r['@id']).join(', '));",
                   "        // Usar fl_model_resource_id del paso 10 como fallback",
                   "        const fallbackId  = pm.environment.get('fl_model_resource_id') || '';",
@@ -913,7 +913,7 @@
                 "{{Worker4_Proxy_Endpoint}}"
               ]
             },
-            "description": "Worker-4 consulta el catalogo del coordinator via su propio proxy IDS.\nObjetivo: extraer w4_fl_resource_id y w4_fl_contract_id para el paso 12.\n\nEl pre-request calcula Worker4_ECC_Forward_To dinamicamente desde Coordinator_URL\n(puerto 500N → ecc-workerN:8889/data) sin hardcodear valores.\n\nSi el recurso FL no aparece en el catalogo, usa como fallback los IDs del paso 10."
+            "description": "Worker-4 consulta el catalogo del coordinator via su propio proxy IDS.\nObjetivo: extraer w4_fl_resource_id y w4_fl_contract_id para el paso 12.\n\nEl pre-request calcula Worker4_ECC_Forward_To dinamicamente desde Coordinator_URL\n(puerto 500N â†’ ecc-workerN:8889/data) sin hardcodear valores.\n\nSi el recurso FL no aparece en el catalogo, usa como fallback los IDs del paso 10."
           },
           "response": []
         },
@@ -937,7 +937,7 @@
                 "{{Worker4_Proxy_Endpoint}}"
               ]
             },
-            "description": "Worker4 intenta negociar el contrato del modelo FL publicado por el coordinator.\nDebe recibir un RejectionMessage porque:\n  - Si FL_AUTHORIZED_URIS está vacío en worker-coordinator → razón: fl_participation_denied\n  - Si FL_AUTHORIZED_URIS está configurado pero worker4 no está → razón: unauthorized_consumer\nEn ningún caso debe recibir un ContractAgreement."
+            "description": "Worker4 intenta negociar el contrato del modelo FL publicado por el coordinator.\nDebe recibir un RejectionMessage porque:\n  - Si FL_AUTHORIZED_URIS estÃ¡ vacÃ­o en worker-coordinator â†’ razÃ³n: fl_participation_denied\n  - Si FL_AUTHORIZED_URIS estÃ¡ configurado pero worker4 no estÃ¡ â†’ razÃ³n: unauthorized_consumer\nEn ningÃºn caso debe recibir un ContractAgreement."
           },
           "event": [
             {
@@ -947,7 +947,7 @@
                 "exec": [
                   "pm.test('Status 200 (proxy IDS activo)', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('Worker4 recibe RejectionMessage — no puede acceder al modelo FL', () => {",
+                  "pm.test('Worker4 recibe RejectionMessage â€” no puede acceder al modelo FL', () => {",
                   "    const raw = pm.response.text();",
                   "    console.log('Respuesta completa (primeros 1200 chars):', raw.substring(0, 1200));",
                   "",
@@ -960,7 +960,7 @@
                   "        raw.includes('NOT_AUTHORIZED')           ||",
                   "        raw.includes('\"rejected\"');",
                   "",
-                  "    // Acceso concedido — NO debe ocurrir",
+                  "    // Acceso concedido â€” NO debe ocurrir",
                   "    const isAccepted =",
                   "        raw.includes('ContractAgreementMessage') ||",
                   "        raw.includes('ContractAgreement')        ||",
@@ -968,33 +968,33 @@
                   "",
                   "    pm.expect(isAccepted).to.be.false;",
                   "    pm.expect(isRejected).to.be.true;",
-                  "    console.log('✅ Worker4 rechazado — acceso al modelo FL denegado');",
+                  "    console.log('âœ… Worker4 rechazado â€” acceso al modelo FL denegado');",
                   "",
-                  "    // Identificar razón exacta del rechazo para el log",
+                  "    // Identificar razÃ³n exacta del rechazo para el log",
                   "    if (raw.includes('fl_participation_denied')) {",
-                  "        console.log('   Razón: fl_participation_denied',",
-                  "            '(worker-coordinator tiene FL_AUTHORIZED_URIS vacío → cualquier acceso externo denegado)');",
+                  "        console.log('   RazÃ³n: fl_participation_denied',",
+                  "            '(worker-coordinator tiene FL_AUTHORIZED_URIS vacÃ­o â†’ cualquier acceso externo denegado)');",
                   "    } else if (raw.includes('unauthorized_consumer')) {",
-                  "        console.log('   Razón: unauthorized_consumer',",
-                  "            '(worker4 no está en FL_AUTHORIZED_URIS del coordinator)');",
+                  "        console.log('   RazÃ³n: unauthorized_consumer',",
+                  "            '(worker4 no estÃ¡ en FL_AUTHORIZED_URIS del coordinator)');",
                   "    } else if (raw.includes('NOT_AUTHORIZED')) {",
-                  "        console.log('   Razón: NOT_AUTHORIZED (ids:rejectionReason del ECC)');",
+                  "        console.log('   RazÃ³n: NOT_AUTHORIZED (ids:rejectionReason del ECC)');",
                   "    } else {",
-                  "        console.log('   Razón: rechazo detectado en respuesta raw');",
+                  "        console.log('   RazÃ³n: rechazo detectado en respuesta raw');",
                   "    }",
-                  "    console.log('   Política IDS: connector-restricted-policy excluye a worker4');",
-                  "    console.log('   Soberanía del dato: ✅ Funcionando correctamente');",
+                  "    console.log('   PolÃ­tica IDS: connector-restricted-policy excluye a worker4');",
+                  "    console.log('   SoberanÃ­a del dato: âœ… Funcionando correctamente');",
                   "});",
                   "",
                   "pm.test('Broker registra al coordinator correctamente (worker4 no puede suplantar peers)', () => {",
                   "    // Este test es documental: el broker IDS + DAPS garantizan que",
-                  "    // worker4 no puede obtener un token DAT válido que lo identifique",
+                  "    // worker4 no puede obtener un token DAT vÃ¡lido que lo identifique",
                   "    // como uno de los workers autorizados. El rechazo se aplica tanto",
                   "    // a nivel de contrato IDS como a nivel de identidad DAPS.",
-                  "    console.log('ℹ️  Garantías del ecosistema IDS:');",
-                  "    console.log('   · DAPS: token DAT único por conector — worker4 no puede suplantar a worker1/2/3');",
-                  "    console.log('   · Broker: discovery solo devuelve connectors registrados con certificado válido');",
-                  "    console.log('   · Contrato: connector-restricted-policy con constraint IN [worker1_uri, worker3_uri]');",
+                  "    console.log('â„¹ï¸  GarantÃ­as del ecosistema IDS:');",
+                  "    console.log('   Â· DAPS: token DAT Ãºnico por conector â€” worker4 no puede suplantar a worker1/2/3');",
+                  "    console.log('   Â· Broker: discovery solo devuelve connectors registrados con certificado vÃ¡lido');",
+                  "    console.log('   Â· Contrato: connector-restricted-policy con constraint IN [worker1_uri, worker3_uri]');",
                   "    pm.expect(true).to.be.true; // test documental",
                   "});"
                 ]
@@ -1016,7 +1016,7 @@
                 "status"
               ]
             },
-            "description": "Verifica que worker4 no recibió algorithm.py ni participó en el FL. Puerto 5004 = worker-4 (fijo). Comprueba: algorithm_loaded=false, config_loaded=false, fl_config=null, role=worker, fl_status=idle, peer_eccs=[]."
+            "description": "Verifica que worker4 no recibiÃ³ algorithm.py ni participÃ³ en el FL. Puerto 5004 = worker-4 (fijo). Comprueba: algorithm_loaded=false, config_loaded=false, fl_config=null, role=worker, fl_status=idle, peer_eccs=[]."
           },
           "event": [
             {
@@ -1024,7 +1024,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status 200 — worker4 activo', () => pm.response.to.have.status(200));",
+                  "pm.test('Status 200 â€” worker4 activo', () => pm.response.to.have.status(200));",
                   "",
                   "pm.test('Worker4 sin algorithm.py ni fl_config.json', () => {",
                   "    const body = pm.response.json();",
@@ -1035,27 +1035,27 @@
                   "    pm.expect(body.algorithm_loaded).to.be.false;",
                   "    pm.expect(body.config_loaded).to.be.false;",
                   "    pm.expect(body.fl_config).to.be.null;",
-                  "    console.log('✅ algorithm_loaded:', body.algorithm_loaded, '— correcto (false)');",
-                  "    console.log('✅ config_loaded   :', body.config_loaded,    '— correcto (false)');",
-                  "    console.log('✅ fl_config       :', body.fl_config,        '— correcto (null)');",
+                  "    console.log('âœ… algorithm_loaded:', body.algorithm_loaded, 'â€” correcto (false)');",
+                  "    console.log('âœ… config_loaded   :', body.config_loaded,    'â€” correcto (false)');",
+                  "    console.log('âœ… fl_config       :', body.fl_config,        'â€” correcto (null)');",
                   "});",
                   "",
                   "pm.test('Worker4 role=worker y fl_status=idle', () => {",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.role).to.equal('worker');",
                   "    pm.expect(body.fl_status).to.equal('idle');",
-                  "    console.log('✅ role     :', body.role,      '— correcto (no coordinator)');",
-                  "    console.log('✅ fl_status:', body.fl_status, '— correcto (idle, no participó)');",
+                  "    console.log('âœ… role     :', body.role,      'â€” correcto (no coordinator)');",
+                  "    console.log('âœ… fl_status:', body.fl_status, 'â€” correcto (idle, no participÃ³)');",
                   "});",
                   "",
                   "pm.test('Worker4 no tiene peers FL configurados', () => {",
                   "    const body = pm.response.json();",
-                  "    // peer_eccs debe estar vacío — worker4 no participó en la negociación",
+                  "    // peer_eccs debe estar vacÃ­o â€” worker4 no participÃ³ en la negociaciÃ³n",
                   "    const peers = body.peer_eccs || [];",
-                  "    // coordinator_ecc debe ser null — worker4 no recibió pesos globales",
+                  "    // coordinator_ecc debe ser null â€” worker4 no recibiÃ³ pesos globales",
                   "    const coordEcc = body.coordinator_ecc;",
-                  "    console.log('✅ peer_eccs      :', JSON.stringify(peers));",
-                  "    console.log('✅ coordinator_ecc:', coordEcc);",
+                  "    console.log('âœ… peer_eccs      :', JSON.stringify(peers));",
+                  "    console.log('âœ… coordinator_ecc:', coordEcc);",
                   "    pm.expect(peers.length).to.equal(0, 'Worker4 no debe tener peers configurados');",
                   "});"
                 ]
@@ -1073,7 +1073,7 @@
                 "exec": [
                   "pm.test('Reset total completado', () => pm.response.to.have.status(200));",
                   "const resp = pm.response.json();",
-                  "console.log('🧹 Reset-All completado:', resp.message);",
+                  "console.log('ðŸ§¹ Reset-All completado:', resp.message);",
                   "const nodes = resp.nodes || {};",
                   "Object.keys(nodes).forEach(n => console.log('  ' + n + ':', nodes[n]));",
                   "console.log('Archivos eliminados del coordinator:', (resp.deleted || []).join(', ') || '(ninguno)');"
@@ -1100,11 +1100,11 @@
           "response": []
         }
       ],
-      "description": "\nEl flujo \"FL Algorithm Deployment Flow\" simula la ejecución paso a paso de un entrenamiento de Machine Learning Federado sobre un ecosistema de soberanía de datos (International Data Spaces - IDSA).\n\nCaracterísticas Clave:\n- Intercambio de modelos e hiperparámetros cifrados vía payload IDS (ContractRequestMessage).\n- Auto-descubrimiento en ecosistema mediante Catálogo Federado (Broker).\n- Negociación ODRL estricta evaluada con tokens DAPS reales.\n- Data Plane ECC-WSS: transporte grueso de pesos (.json) via IDS entre conectores ECC.\n- Tests automáticos de resiliencia (rechazo de nodos por soberanía, caída controlada).\n\nSigue los Requests en órden numérico para visualizar exactamente los mismos logs y validaciones que se ejecutan en consola mediante el orquestador pfg_ids_fl_flow.py.\n"
+      "description": "\nEl flujo \"FL Algorithm Deployment Flow\" simula la ejecuciÃ³n paso a paso de un entrenamiento de Machine Learning Federado sobre un ecosistema de soberanÃ­a de datos (International Data Spaces - IDSA).\n\nCaracterÃ­sticas Clave:\n- Intercambio de modelos e hiperparÃ¡metros cifrados vÃ­a payload IDS (ContractRequestMessage).\n- Auto-descubrimiento en ecosistema mediante CatÃ¡logo Federado (Broker).\n- NegociaciÃ³n ODRL estricta evaluada con tokens DAPS reales.\n- Data Plane ECC-WSS: transporte grueso de pesos (.json) via IDS entre conectores ECC.\n- Tests automÃ¡ticos de resiliencia (rechazo de nodos por soberanÃ­a, caÃ­da controlada).\n\nSigue los Requests en Ã³rden numÃ©rico para visualizar exactamente los mismos logs y validaciones que se ejecutan en consola mediante el orquestador pfg_ids_fl_flow.py.\n"
     },
     {
       "name": "DAPS Verification",
-      "description": "Verifica que el DAPS (Omejdn) está operativo y que los conectores IDS pueden obtener tokens DAT válidos. DAPS_URL se auto-rellena en el paso 0 leyendo la configuración del broker desde {{Coordinator_URL}}/status. Sin hardcodear URLs ni credenciales.",
+      "description": "Verifica que el DAPS (Omejdn) estÃ¡ operativo y que los conectores IDS pueden obtener tokens DAT vÃ¡lidos. DAPS_URL se auto-rellena en el paso 0 leyendo la configuraciÃ³n del broker desde {{Coordinator_URL}}/status. Sin hardcodear URLs ni credenciales.",
       "item": [
         {
           "name": "DAPS - 1: Resolver DAPS_URL desde el coordinator (ejecutar primero)",
@@ -1169,7 +1169,7 @@
                 "{{DAPS_URL}}/auth/.well-known/openid-configuration"
               ]
             },
-            "description": "Verifica que el DAPS (Omejdn via nginx) está operativo y expone la configuración OpenID Connect estándar. Comprueba issuer, token_endpoint y jwks_uri."
+            "description": "Verifica que el DAPS (Omejdn via nginx) estÃ¡ operativo y expone la configuraciÃ³n OpenID Connect estÃ¡ndar. Comprueba issuer, token_endpoint y jwks_uri."
           },
           "event": [
             {
@@ -1179,7 +1179,7 @@
                 "exec": [
                   "pm.test('DAPS responde con 200', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('OpenID config válida — issuer, token_endpoint y jwks_uri presentes', () => {",
+                  "pm.test('OpenID config vÃ¡lida â€” issuer, token_endpoint y jwks_uri presentes', () => {",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.issuer).to.be.a('string').and.include('omejdn');",
                   "    pm.expect(json.token_endpoint).to.be.a('string');",
@@ -1195,7 +1195,7 @@
           "response": []
         },
         {
-          "name": "DAPS - 3: JWKS (claves públicas activas)",
+          "name": "DAPS - 3: JWKS (claves pÃºblicas activas)",
           "request": {
             "method": "GET",
             "header": [],
@@ -1213,7 +1213,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('JWKS accesible — 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JWKS accesible â€” 200', () => pm.response.to.have.status(200));",
                   "",
                   "pm.test('JWKS contiene al menos una clave RSA', () => {",
                   "    const json = pm.response.json();",
@@ -1240,7 +1240,7 @@
                 "{{Coordinator_URL}}/ids/self-description"
               ]
             },
-            "description": "Solicita la self-description del coordinator. Internamente app.py llama al DAPS con el certificado del worker y adjunta el token DAT al mensaje IDS. Si el endpoint responde correctamente, el token DAPS es válido. Más fiable que intentar replicar el handshake JWT desde Postman ya que app.py ya gestiona toda la criptografía."
+            "description": "Solicita la self-description del coordinator. Internamente app.py llama al DAPS con el certificado del worker y adjunta el token DAT al mensaje IDS. Si el endpoint responde correctamente, el token DAPS es vÃ¡lido. MÃ¡s fiable que intentar replicar el handshake JWT desde Postman ya que app.py ya gestiona toda la criptografÃ­a."
           },
           "event": [
             {
@@ -1248,7 +1248,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Self-description responde — DAT válido', () => pm.response.to.have.status(200));",
+                  "pm.test('Self-description responde â€” DAT vÃ¡lido', () => pm.response.to.have.status(200));",
                   "",
                   "pm.test('Self-description IDS bien formada', () => {",
                   "    const raw = pm.response.text();",
@@ -1265,7 +1265,7 @@
                   "    const connId = sd['@id'] || '?';",
                   "    pm.environment.set('Coordinator_Connector_URI', connId);",
                   "    console.log('Connector URI:', connId);",
-                  "    console.log('DAPS token activo — self-description IDS devuelta correctamente');",
+                  "    console.log('DAPS token activo â€” self-description IDS devuelta correctamente');",
                   "});"
                 ]
               }
@@ -1274,7 +1274,7 @@
           "response": []
         },
         {
-          "name": "DAPS - 5: DAT del Worker-4 (conector legítimo con FL_OPT_OUT)",
+          "name": "DAPS - 5: DAT del Worker-4 (conector legÃ­timo con FL_OPT_OUT)",
           "request": {
             "method": "GET",
             "header": [],
@@ -1284,7 +1284,7 @@
                 "{{Worker4_URL}}/ids/self-description"
               ]
             },
-            "description": "Verifica que Worker-4, aunque tenga FL_OPT_OUT=true, es un conector IDS legítimo con token DAT válido del DAPS. La exclusión del FL ocurre en app.py, no a nivel de DAPS. Demuestra que soberanía del dato != exclusión del ecosistema IDS."
+            "description": "Verifica que Worker-4, aunque tenga FL_OPT_OUT=true, es un conector IDS legÃ­timo con token DAT vÃ¡lido del DAPS. La exclusiÃ³n del FL ocurre en app.py, no a nivel de DAPS. Demuestra que soberanÃ­a del dato != exclusiÃ³n del ecosistema IDS."
           },
           "event": [
             {
@@ -1292,9 +1292,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Worker-4 responde — DAT válido', () => pm.response.to.have.status(200));",
+                  "pm.test('Worker-4 responde â€” DAT vÃ¡lido', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('Worker-4 es conector IDS legítimo (FL_OPT_OUT no afecta al DAPS)', () => {",
+                  "pm.test('Worker-4 es conector IDS legÃ­timo (FL_OPT_OUT no afecta al DAPS)', () => {",
                   "    const raw = pm.response.text();",
                   "    let sd = null;",
                   "    try { sd = JSON.parse(raw); } catch(e) {}",
@@ -1307,8 +1307,8 @@
                   "    pm.expect(sd).to.exist;",
                   "    const connId = sd['@id'] || '?';",
                   "    console.log('Worker-4 Connector URI:', connId);",
-                  "    console.log('✅ Worker-4 tiene token DAPS válido y es conector IDS legítimo');",
-                  "    console.log('ℹ️  Su exclusión del FL se gestiona en app.py (FL_OPT_OUT=true), no aquí');",
+                  "    console.log('âœ… Worker-4 tiene token DAPS vÃ¡lido y es conector IDS legÃ­timo');",
+                  "    console.log('â„¹ï¸  Su exclusiÃ³n del FL se gestiona en app.py (FL_OPT_OUT=true), no aquÃ­');",
                   "});"
                 ]
               }
@@ -1341,7 +1341,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Broker responde — 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Broker responde â€” 200', () => pm.response.to.have.status(200));",
                   "",
                   "pm.test('Al menos 3 connectors registrados en el broker', () => {",
                   "    const json = pm.response.json();",
@@ -1367,7 +1367,7 @@
                   "        console.log(`    endpoint: ${endpoint}`);",
                   "        console.log(`    ecc_int : ${eccInt}`);",
                   "    });",
-                  "    console.log('✅ Worker1_ECC_Forward_To y Worker3_ECC_Forward_To actualizados');",
+                  "    console.log('âœ… Worker1_ECC_Forward_To y Worker3_ECC_Forward_To actualizados');",
                   "});"
                 ]
               }
@@ -1391,7 +1391,7 @@
                 "http://localhost:3030/connectorData/sparql"
               ]
             },
-            "description": "Consulta SPARQL directa al Fuseki del broker. Cuenta los triples totales del grafo de conectores. Fuseki escucha en el puerto 3030 (mapeado en docker-compose). Si esta consulta falla pero BROKER-1 funciona, el broker está sano pero Fuseki no es accesible desde el host.",
+            "description": "Consulta SPARQL directa al Fuseki del broker. Cuenta los triples totales del grafo de conectores. Fuseki escucha en el puerto 3030 (mapeado en docker-compose). Si esta consulta falla pero BROKER-1 funciona, el broker estÃ¡ sano pero Fuseki no es accesible desde el host.",
             "body": {
               "mode": "urlencoded",
               "urlencoded": [
@@ -1408,13 +1408,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Fuseki responde — 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Fuseki responde â€” 200', () => pm.response.to.have.status(200));",
                   "",
                   "pm.test('Fuseki tiene triples registrados', () => {",
                   "    const json = pm.response.json();",
                   "    const bindings = (json.results || {}).bindings || [];",
                   "    const count = bindings.length > 0 ? parseInt(bindings[0].n?.value || '0') : 0;",
-                  "    pm.expect(count).to.be.above(0, 'El grafo Fuseki está vacío — los workers no se registraron');",
+                  "    pm.expect(count).to.be.above(0, 'El grafo Fuseki estÃ¡ vacÃ­o â€” los workers no se registraron');",
                   "    console.log('Triples totales en Fuseki:', count);",
                   "});"
                 ]
@@ -1456,7 +1456,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('SPARQL responde — 200', () => pm.response.to.have.status(200));",
+                  "pm.test('SPARQL responde â€” 200', () => pm.response.to.have.status(200));",
                   "",
                   "pm.test('SPARQL devuelve connectors registrados', () => {",
                   "    const json = pm.response.json();",
@@ -1491,7 +1491,7 @@
                 "{{Proxy_Endpoint}}"
               ]
             },
-            "description": "Envía un QueryMessage IDS al broker a través del proxy del coordinator. Demuestra que el protocolo IDS completo funciona: proxy → ECC → broker-reverseproxy → broker-core → Fuseki. El mensaje incluye token DAT firmado automáticamente por el ECC.",
+            "description": "EnvÃ­a un QueryMessage IDS al broker a travÃ©s del proxy del coordinator. Demuestra que el protocolo IDS completo funciona: proxy â†’ ECC â†’ broker-reverseproxy â†’ broker-core â†’ Fuseki. El mensaje incluye token DAT firmado automÃ¡ticamente por el ECC.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"multipart\": \"{{multipart_type}}\",\n  \"Forward-To\": \"https://broker-reverseproxy/infrastructure\",\n  \"messageType\": \"QueryMessage\",\n  \"queryLanguage\": \"SPARQL\",\n  \"payload\": \"PREFIX ids: <https://w3id.org/idsa/core/> SELECT ?s WHERE { ?s a ids:BaseConnector }\"\n}"
@@ -1503,14 +1503,14 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('QueryMessage IDS procesado — 200', () => pm.response.to.have.status(200));",
+                  "pm.test('QueryMessage IDS procesado â€” 200', () => pm.response.to.have.status(200));",
                   "",
-                  "pm.test('Broker respondió al QueryMessage IDS', () => {",
+                  "pm.test('Broker respondiÃ³ al QueryMessage IDS', () => {",
                   "    const raw = pm.response.text();",
                   "    // El broker puede responder con ResultMessage multipart o JSON",
                   "    const hasResult = raw.includes('ResultMessage') || raw.includes('BaseConnector') || raw.length > 50;",
                   "    pm.expect(hasResult).to.be.true;",
-                  "    console.log('✅ Flujo IDS completo: proxy → ECC → broker-reverseproxy → Fuseki');",
+                  "    console.log('âœ… Flujo IDS completo: proxy â†’ ECC â†’ broker-reverseproxy â†’ Fuseki');",
                   "    console.log('Respuesta (primeros 300 chars):', raw.substring(0, 300));",
                   "});"
                 ]
@@ -1530,7 +1530,7 @@
                 "{{Coordinator_URL}}/broker/connectors"
               ]
             },
-            "description": "Cruza la lista del broker con los health checks de los dataapps. Para cada worker del broker, verifica que su dataapp responde /health. La URL del dataapp se deriva del ECC endpoint del broker (mismo patrón que _dataapp_url_from_ecc en app.py)."
+            "description": "Cruza la lista del broker con los health checks de los dataapps. Para cada worker del broker, verifica que su dataapp responde /health. La URL del dataapp se deriva del ECC endpoint del broker (mismo patrÃ³n que _dataapp_url_from_ecc en app.py)."
           },
           "event": [
             {
@@ -1539,7 +1539,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "// Pre-request: no hay acciones previas necesarias",
-                  "// Las URLs se derivan dinámicamente en el test script"
+                  "// Las URLs se derivan dinÃ¡micamente en el test script"
                 ]
               }
             },
@@ -1548,7 +1548,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Broker accesible — 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Broker accesible â€” 200', () => pm.response.to.have.status(200));",
                   "",
                   "// Verificar health de cada worker listado en el broker",
                   "const json = pm.response.json();",
@@ -1561,7 +1561,7 @@
                   "    const widMatch  = (c.endpoint || c.connector_uri || '').match(/worker(\\d+)/);",
                   "    const wid       = widMatch ? widMatch[1] : null;",
                   "    // Puerto host del dataapp: convencion 5000 + N (docker-compose)",
-                  "    // Esta es la UNICA derivación necesaria — viene del broker",
+                  "    // Esta es la UNICA derivaciÃ³n necesaria â€” viene del broker",
                   "    const port = wid ? `500${wid}` : null;",
                   "    const healthUrl = port ? `https://localhost:${port}/health` : null;",
                   "    return { wid, uri: c.connector_uri, healthUrl };",
@@ -1572,7 +1572,7 @@
                   "    console.log(`  Worker-${w.wid}: ${w.healthUrl || 'URL no derivable'}`);",
                   "});",
                   "console.log('');",
-                  "console.log('ℹ️  Para verificar /health de cada worker, abre las URLs en el browser');",
+                  "console.log('â„¹ï¸  Para verificar /health de cada worker, abre las URLs en el browser');",
                   "console.log('   o usa los requests de health check en la carpeta FL Algorithm Deployment Flow');",
                   "",
                   "pm.test('Broker lista workers con endpoints derivables', () => {",
@@ -1585,6 +1585,926 @@
             }
           ],
           "response": []
+        }
+      ]
+    },
+    {
+      "name": "Contract Negotiation",
+      "item": [
+        {
+          "name": "Description Request Message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Retrieve offered resource\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "",
+                  "    function asArray(value) {",
+                  "        if (!value) return [];",
+                  "        return Array.isArray(value) ? value : [value];",
+                  "    }",
+                  "",
+                  "    function textValue(value) {",
+                  "        if (!value) return \"\";",
+                  "        if (typeof value === \"string\") return value;",
+                  "        return value[\"@value\"] || value[\"@id\"] || \"\";",
+                  "    }",
+                  "",
+                  "    function titleOf(obj) {",
+                  "        return asArray(obj && obj[\"ids:title\"]).map(textValue).join(\" \");",
+                  "    }",
+                  "",
+                  "    function resourcesFrom(root) {",
+                  "        return asArray(root[\"ids:resourceCatalog\"])",
+                  "            .flatMap(catalog => asArray(catalog[\"ids:offeredResource\"]));",
+                  "    }",
+                  "",
+                  "    function firstContract(resource) {",
+                  "        return asArray(resource && resource[\"ids:contractOffer\"])[0];",
+                  "    }",
+                  "",
+                  "    function trainingArtifact(resource) {",
+                  "        const reps = asArray(resource && resource[\"ids:representation\"]);",
+                  "        const trainingRep = reps.find(rep => titleOf(rep).indexOf(\"Training Artifact\") !== -1 && asArray(rep[\"ids:instance\"]).length > 0)",
+                  "            || reps.find(rep => asArray(rep[\"ids:instance\"]).length > 0);",
+                  "        const instance = asArray(trainingRep && trainingRep[\"ids:instance\"])[0];",
+                  "        return instance && instance[\"@id\"];",
+                  "    }",
+                  "",
+                  "    function permissionArtifact(contract) {",
+                  "        const permission = asArray(contract && contract[\"ids:permission\"])[0];",
+                  "        return permission && permission[\"ids:target\"] && permission[\"ids:target\"][\"@id\"];",
+                  "    }",
+                  "",
+                  "    function setVar(key, value) {",
+                  "        pm.collectionVariables.set(key, value);",
+                  "        pm.environment.set(key, value);",
+                  "    }",
+                  "",
+                  "    const resources = resourcesFrom(jsonData);",
+                  "    const selected = resources.find(resource => titleOf(resource).indexOf(\"Dataset: unsw_nb15_worker_1.csv\") !== -1 && trainingArtifact(resource))",
+                  "        || resources.find(resource => titleOf(resource).indexOf(\"Dataset:\") !== -1 && trainingArtifact(resource))",
+                  "        || resources.find(resource => trainingArtifact(resource))",
+                  "        || resources[0];",
+                  "",
+                  "    pm.expect(selected, \"offered resource\").to.exist;",
+                  "",
+                  "    const contract = firstContract(selected) || {};",
+                  "    const artifact = trainingArtifact(selected) || permissionArtifact(contract);",
+                  "",
+                  "    pm.expect(selected[\"@id\"], \"offered resource id\").to.exist;",
+                  "    pm.expect(artifact, \"training/contract artifact\").to.exist;",
+                  "",
+                  "    setVar(\"offered_resource\", selected[\"@id\"]);",
+                  "    setVar(\"contract_artifact\", artifact);",
+                  "",
+                  "    if (contract[\"@id\"]) {",
+                  "        setVar(\"contract_id\", contract[\"@id\"]);",
+                  "    }",
+                  "",
+                  "    console.log(\"PFG offered_resource = \" + selected[\"@id\"]);",
+                  "    console.log(\"PFG contract_artifact = \" + artifact);",
+                  "});",
+                  "",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"DescriptionRequestMessage\"\n}"
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Description Request Message with offered resource",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Retrieve contract data\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "",
+                  "    function asArray(value) {",
+                  "        if (!value) return [];",
+                  "        return Array.isArray(value) ? value : [value];",
+                  "    }",
+                  "",
+                  "    function textValue(value) {",
+                  "        if (!value) return \"\";",
+                  "        if (typeof value === \"string\") return value;",
+                  "        return value[\"@value\"] || value[\"@id\"] || \"\";",
+                  "    }",
+                  "",
+                  "    function titleOf(obj) {",
+                  "        return asArray(obj && obj[\"ids:title\"]).map(textValue).join(\" \");",
+                  "    }",
+                  "",
+                  "    function resourcesFrom(root) {",
+                  "        return asArray(root[\"ids:resourceCatalog\"])",
+                  "            .flatMap(catalog => asArray(catalog[\"ids:offeredResource\"]));",
+                  "    }",
+                  "",
+                  "    function firstContract(resource) {",
+                  "        return asArray(resource && resource[\"ids:contractOffer\"])[0];",
+                  "    }",
+                  "",
+                  "    function trainingArtifact(resource) {",
+                  "        const reps = asArray(resource && resource[\"ids:representation\"]);",
+                  "        const trainingRep = reps.find(rep => titleOf(rep).indexOf(\"Training Artifact\") !== -1 && asArray(rep[\"ids:instance\"]).length > 0)",
+                  "            || reps.find(rep => asArray(rep[\"ids:instance\"]).length > 0);",
+                  "        const instance = asArray(trainingRep && trainingRep[\"ids:instance\"])[0];",
+                  "        return instance && instance[\"@id\"];",
+                  "    }",
+                  "",
+                  "    function firstPermission(contract) {",
+                  "        return asArray(contract && contract[\"ids:permission\"])[0];",
+                  "    }",
+                  "",
+                  "    function permissionArtifact(contract) {",
+                  "        const permission = firstPermission(contract);",
+                  "        return permission && permission[\"ids:target\"] && permission[\"ids:target\"][\"@id\"];",
+                  "    }",
+                  "",
+                  "    function connectorId(root) {",
+                  "        return root && root[\"@id\"];",
+                  "    }",
+                  "",
+                  "    function setVar(key, value) {",
+                  "        pm.collectionVariables.set(key, value);",
+                  "        pm.environment.set(key, value);",
+                  "    }",
+                  "",
+                  "    const requestedResource = pm.variables.get(\"offered_resource\");",
+                  "    const requestedArtifact = pm.variables.get(\"contract_artifact\");",
+                  "    const resources = resourcesFrom(jsonData);",
+                  "    const resource = resources.find(item => item[\"@id\"] === requestedResource)",
+                  "        || resources.find(item => trainingArtifact(item) === requestedArtifact)",
+                  "        || resources.find(item => titleOf(item).indexOf(\"Dataset: unsw_nb15_worker_1.csv\") !== -1 && trainingArtifact(item))",
+                  "        || resources.find(item => trainingArtifact(item))",
+                  "        || jsonData;",
+                  "",
+                  "    const contract = firstContract(resource) || {};",
+                  "    const artifact = trainingArtifact(resource) || permissionArtifact(contract) || requestedArtifact;",
+                  "    const provider = contract[\"ids:provider\"] && contract[\"ids:provider\"][\"@id\"]",
+                  "        || connectorId(jsonData)",
+                  "        || \"http://w3id.org/engrd/connector/worker1\";",
+                  "    let permission = firstPermission(contract);",
+                  "",
+                  "    if (!permission && artifact) {",
+                  "        permission = {",
+                  "            \"@type\": \"ids:Permission\",",
+                  "            \"@id\": \"https://w3id.org/idsa/autogen/permission/postman-pfg-generated\",",
+                  "            \"ids:action\": [",
+                  "                { \"@id\": \"https://w3id.org/idsa/code/USE\" }",
+                  "            ],",
+                  "            \"ids:target\": {",
+                  "                \"@id\": artifact",
+                  "            }",
+                  "        };",
+                  "    }",
+                  "",
+                  "    pm.expect(artifact, \"contract/training artifact\").to.exist;",
+                  "    pm.expect(contract[\"@id\"], \"contract id\").to.exist;",
+                  "    pm.expect(permission, \"contract permission\").to.exist;",
+                  "    pm.expect(provider, \"contract provider\").to.exist;",
+                  "",
+                  "    setVar(\"contract_artifact\", artifact);",
+                  "    setVar(\"contract_id\", contract[\"@id\"]);",
+                  "    setVar(\"contract_permission\", JSON.stringify(permission));",
+                  "    setVar(\"contract_provider\", provider);",
+                  "",
+                  "    console.log(\"PFG contract_id = \" + contract[\"@id\"]);",
+                  "    console.log(\"PFG contract_provider = \" + provider);",
+                  "    console.log(\"PFG contract_artifact = \" + artifact);",
+                  "});",
+                  "",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"DescriptionRequestMessage\",\n    \"requestedElement\": \"{{offered_resource}}\"\n}"
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ContractRequestMessage",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Retrieve contract agreement\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    const agreement = JSON.stringify(responseData);",
+                  "    const transferContract = responseData[\"@id\"] || responseData[\"ids:contractAgreement\"] && responseData[\"ids:contractAgreement\"][\"@id\"] || \"\";",
+                  "",
+                  "    pm.collectionVariables.set(\"contract_agreement\", agreement);",
+                  "    pm.environment.set(\"contract_agreement\", agreement);",
+                  "    pm.collectionVariables.set(\"transfer_contract\", transferContract);",
+                  "    pm.environment.set(\"transfer_contract\", transferContract);",
+                  "",
+                  "    pm.expect(transferContract, \"transfer contract id\").to.exist;",
+                  "    console.log(\"PFG transfer_contract = \" + transferContract);",
+                  "});",
+                  "",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ContractRequestMessage\",\n    \"requestedElement\": \"{{contract_artifact}}\",\n    \"payload\": {\n        \"@context\": {\n            \"ids\": \"https://w3id.org/idsa/core/\",\n            \"idsc\": \"https://w3id.org/idsa/code/\"\n        },\n        \"@type\": \"ids:ContractRequest\",\n        \"@id\": \"{{contract_id}}\",\n        \"ids:permission\": [\n            {{contract_permission}}\n        ],\n        \"ids:provider\": {\n            \"@id\": \"{{contract_provider}}\"\n        },\n        \"ids:obligation\": [],\n        \"ids:prohibition\": [],\n        \"ids:consumer\": {\n            \"@id\": \"http://w3id.org/engrd/connector/consumer\"\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ContractAgreementMessage",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Contract agreement processed\", function () {",
+                  "    let responseData = null;",
+                  "    const responseText = pm.response.text();",
+                  "",
+                  "    try {",
+                  "        responseData = pm.response.json();",
+                  "    } catch (error) {",
+                  "        responseData = null;",
+                  "    }",
+                  "",
+                  "    const messageType = responseData && (responseData[\"@type\"] || responseData.messageType || responseData.type);",
+                  "    const rawLooksOk = responseText.indexOf(\"MessageProcessedNotificationMessage\") !== -1",
+                  "        || responseText.indexOf(\"ids:MessageProcessedNotificationMessage\") !== -1;",
+                  "",
+                  "    pm.expect(",
+                  "        messageType === \"ids:MessageProcessedNotificationMessage\"",
+                  "            || messageType === \"MessageProcessedNotificationMessage\"",
+                  "            || rawLooksOk,",
+                  "        \"expected MessageProcessedNotificationMessage ack\"",
+                  "    ).to.be.true;",
+                  "",
+                  "    console.log(\"PFG ContractAgreement ACK = \" + (messageType || \"raw multipart/text\"));",
+                  "});",
+                  "",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ContractAgreementMessage\",\n    \"requestedArtifact\": \"{{contract_artifact}}\",\n    \"transferContract\": \"{{transfer_contract}}\",\n    \"payload\": {{contract_agreement}}\n}"
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ArtifactRequestMessage",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"FL artifact received\", function () {",
+                  "    let jsonData = null;",
+                  "    const responseText = pm.response.text();",
+                  "",
+                  "    try {",
+                  "        jsonData = pm.response.json();",
+                  "    } catch (error) {",
+                  "        jsonData = null;",
+                  "    }",
+                  "",
+                  "    pm.expect(jsonData, \"JSON response\").to.exist;",
+                  "",
+                  "    const type = jsonData.type || jsonData.status || jsonData[\"@type\"] || \"\";",
+                  "    const isAlgorithm = jsonData.type === \"fl_algorithm\" && jsonData.filename === \"algorithm.py\" && !!jsonData.content;",
+                  "    const isDockerAck = jsonData.status === \"docker_image_received\" && !!jsonData.docker_image;",
+                  "    const isGenericArtifactResponse = String(type).indexOf(\"ArtifactResponseMessage\") !== -1;",
+                  "    const rawLooksLikeAlgorithm = responseText.indexOf('\"type\":\"fl_algorithm\"') !== -1",
+                  "        || responseText.indexOf('\"filename\":\"algorithm.py\"') !== -1;",
+                  "",
+                  "    pm.expect(",
+                  "        isAlgorithm || isDockerAck || isGenericArtifactResponse || rawLooksLikeAlgorithm,",
+                  "        \"expected FL algorithm artifact or delivery ACK\"",
+                  "    ).to.be.true;",
+                  "",
+                  "    if (isAlgorithm) {",
+                  "        pm.environment.set(\"fl_algorithm_payload\", JSON.stringify(jsonData));",
+                  "        pm.collectionVariables.set(\"fl_algorithm_payload\", JSON.stringify(jsonData));",
+                  "        console.log(\"PFG ArtifactRequest OK: fl_algorithm \" + jsonData.filename + \" from worker \" + (jsonData.source || \"?\"));",
+                  "    } else if (isDockerAck) {",
+                  "        console.log(\"PFG ArtifactRequest OK: docker image \" + jsonData.docker_image);",
+                  "    } else {",
+                  "        console.log(\"PFG ArtifactRequest OK: \" + type);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"{{multipart_type}}\",\n    \"Forward-To\": \"{{Forward-To}}\",\n    \"messageType\": \"ArtifactRequestMessage\",\n    \"requestedArtifact\": \"{{contract_artifact}}\",\n    \"transferContract\": \"{{transfer_contract}}\",\n    \"payload\" : \"\"\n}"
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "auth": {
+        "type": "basic",
+        "basic": [
+          {
+            "key": "username",
+            "value": "idsUser",
+            "type": "string"
+          },
+          {
+            "key": "password",
+            "value": "passwordIdsUser",
+            "type": "string"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contract Negotiation WS",
+      "item": [
+        {
+          "name": "Description Request Message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Retrieve offered resource\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "",
+                  "    function asArray(value) {",
+                  "        if (!value) return [];",
+                  "        return Array.isArray(value) ? value : [value];",
+                  "    }",
+                  "",
+                  "    function textValue(value) {",
+                  "        if (!value) return \"\";",
+                  "        if (typeof value === \"string\") return value;",
+                  "        return value[\"@value\"] || value[\"@id\"] || \"\";",
+                  "    }",
+                  "",
+                  "    function titleOf(obj) {",
+                  "        return asArray(obj && obj[\"ids:title\"]).map(textValue).join(\" \");",
+                  "    }",
+                  "",
+                  "    function resourcesFrom(root) {",
+                  "        return asArray(root[\"ids:resourceCatalog\"])",
+                  "            .flatMap(catalog => asArray(catalog[\"ids:offeredResource\"]));",
+                  "    }",
+                  "",
+                  "    function firstContract(resource) {",
+                  "        return asArray(resource && resource[\"ids:contractOffer\"])[0];",
+                  "    }",
+                  "",
+                  "    function trainingArtifact(resource) {",
+                  "        const reps = asArray(resource && resource[\"ids:representation\"]);",
+                  "        const trainingRep = reps.find(rep => titleOf(rep).indexOf(\"Training Artifact\") !== -1 && asArray(rep[\"ids:instance\"]).length > 0)",
+                  "            || reps.find(rep => asArray(rep[\"ids:instance\"]).length > 0);",
+                  "        const instance = asArray(trainingRep && trainingRep[\"ids:instance\"])[0];",
+                  "        return instance && instance[\"@id\"];",
+                  "    }",
+                  "",
+                  "    function permissionArtifact(contract) {",
+                  "        const permission = asArray(contract && contract[\"ids:permission\"])[0];",
+                  "        return permission && permission[\"ids:target\"] && permission[\"ids:target\"][\"@id\"];",
+                  "    }",
+                  "",
+                  "    function setVar(key, value) {",
+                  "        pm.collectionVariables.set(key, value);",
+                  "        pm.environment.set(key, value);",
+                  "    }",
+                  "",
+                  "    const resources = resourcesFrom(jsonData);",
+                  "    const selected = resources.find(resource => titleOf(resource).indexOf(\"Dataset: unsw_nb15_worker_1.csv\") !== -1 && trainingArtifact(resource))",
+                  "        || resources.find(resource => titleOf(resource).indexOf(\"Dataset:\") !== -1 && trainingArtifact(resource))",
+                  "        || resources.find(resource => trainingArtifact(resource))",
+                  "        || resources[0];",
+                  "",
+                  "    pm.expect(selected, \"offered resource\").to.exist;",
+                  "",
+                  "    const contract = firstContract(selected) || {};",
+                  "    const artifact = trainingArtifact(selected) || permissionArtifact(contract);",
+                  "",
+                  "    pm.expect(selected[\"@id\"], \"offered resource id\").to.exist;",
+                  "    pm.expect(artifact, \"training/contract artifact\").to.exist;",
+                  "",
+                  "    setVar(\"offered_resource\", selected[\"@id\"]);",
+                  "    setVar(\"contract_artifact\", artifact);",
+                  "",
+                  "    if (contract[\"@id\"]) {",
+                  "        setVar(\"contract_id\", contract[\"@id\"]);",
+                  "    }",
+                  "",
+                  "    console.log(\"PFG offered_resource = \" + selected[\"@id\"]);",
+                  "    console.log(\"PFG contract_artifact = \" + artifact);",
+                  "});",
+                  "",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"wss\",\n    \"Forward-To\": \"{{Forward-To-WS}}\",\n    \"Forward-To-Internal\": \"{{Forward-To-Internal}}\",\n    \"messageType\": \"DescriptionRequestMessage\"\n}"
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Description Request Message with offered resource",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Retrieve contract data\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "",
+                  "    function asArray(value) {",
+                  "        if (!value) return [];",
+                  "        return Array.isArray(value) ? value : [value];",
+                  "    }",
+                  "",
+                  "    function textValue(value) {",
+                  "        if (!value) return \"\";",
+                  "        if (typeof value === \"string\") return value;",
+                  "        return value[\"@value\"] || value[\"@id\"] || \"\";",
+                  "    }",
+                  "",
+                  "    function titleOf(obj) {",
+                  "        return asArray(obj && obj[\"ids:title\"]).map(textValue).join(\" \");",
+                  "    }",
+                  "",
+                  "    function resourcesFrom(root) {",
+                  "        return asArray(root[\"ids:resourceCatalog\"])",
+                  "            .flatMap(catalog => asArray(catalog[\"ids:offeredResource\"]));",
+                  "    }",
+                  "",
+                  "    function firstContract(resource) {",
+                  "        return asArray(resource && resource[\"ids:contractOffer\"])[0];",
+                  "    }",
+                  "",
+                  "    function trainingArtifact(resource) {",
+                  "        const reps = asArray(resource && resource[\"ids:representation\"]);",
+                  "        const trainingRep = reps.find(rep => titleOf(rep).indexOf(\"Training Artifact\") !== -1 && asArray(rep[\"ids:instance\"]).length > 0)",
+                  "            || reps.find(rep => asArray(rep[\"ids:instance\"]).length > 0);",
+                  "        const instance = asArray(trainingRep && trainingRep[\"ids:instance\"])[0];",
+                  "        return instance && instance[\"@id\"];",
+                  "    }",
+                  "",
+                  "    function firstPermission(contract) {",
+                  "        return asArray(contract && contract[\"ids:permission\"])[0];",
+                  "    }",
+                  "",
+                  "    function permissionArtifact(contract) {",
+                  "        const permission = firstPermission(contract);",
+                  "        return permission && permission[\"ids:target\"] && permission[\"ids:target\"][\"@id\"];",
+                  "    }",
+                  "",
+                  "    function connectorId(root) {",
+                  "        return root && root[\"@id\"];",
+                  "    }",
+                  "",
+                  "    function setVar(key, value) {",
+                  "        pm.collectionVariables.set(key, value);",
+                  "        pm.environment.set(key, value);",
+                  "    }",
+                  "",
+                  "    const requestedResource = pm.variables.get(\"offered_resource\");",
+                  "    const requestedArtifact = pm.variables.get(\"contract_artifact\");",
+                  "    const resources = resourcesFrom(jsonData);",
+                  "    const resource = resources.find(item => item[\"@id\"] === requestedResource)",
+                  "        || resources.find(item => trainingArtifact(item) === requestedArtifact)",
+                  "        || resources.find(item => titleOf(item).indexOf(\"Dataset: unsw_nb15_worker_1.csv\") !== -1 && trainingArtifact(item))",
+                  "        || resources.find(item => trainingArtifact(item))",
+                  "        || jsonData;",
+                  "",
+                  "    const contract = firstContract(resource) || {};",
+                  "    const artifact = trainingArtifact(resource) || permissionArtifact(contract) || requestedArtifact;",
+                  "    const provider = contract[\"ids:provider\"] && contract[\"ids:provider\"][\"@id\"]",
+                  "        || connectorId(jsonData)",
+                  "        || \"http://w3id.org/engrd/connector/worker1\";",
+                  "    let permission = firstPermission(contract);",
+                  "",
+                  "    if (!permission && artifact) {",
+                  "        permission = {",
+                  "            \"@type\": \"ids:Permission\",",
+                  "            \"@id\": \"https://w3id.org/idsa/autogen/permission/postman-pfg-generated\",",
+                  "            \"ids:action\": [",
+                  "                { \"@id\": \"https://w3id.org/idsa/code/USE\" }",
+                  "            ],",
+                  "            \"ids:target\": {",
+                  "                \"@id\": artifact",
+                  "            }",
+                  "        };",
+                  "    }",
+                  "",
+                  "    pm.expect(artifact, \"contract/training artifact\").to.exist;",
+                  "    pm.expect(contract[\"@id\"], \"contract id\").to.exist;",
+                  "    pm.expect(permission, \"contract permission\").to.exist;",
+                  "    pm.expect(provider, \"contract provider\").to.exist;",
+                  "",
+                  "    setVar(\"contract_artifact\", artifact);",
+                  "    setVar(\"contract_id\", contract[\"@id\"]);",
+                  "    setVar(\"contract_permission\", JSON.stringify(permission));",
+                  "    setVar(\"contract_provider\", provider);",
+                  "",
+                  "    console.log(\"PFG contract_id = \" + contract[\"@id\"]);",
+                  "    console.log(\"PFG contract_provider = \" + provider);",
+                  "    console.log(\"PFG contract_artifact = \" + artifact);",
+                  "});",
+                  "",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"wss\",\n    \"Forward-To\": \"{{Forward-To-WS}}\",\n    \"Forward-To-Internal\": \"{{Forward-To-Internal}}\",\n    \"messageType\": \"DescriptionRequestMessage\",\n    \"requestedElement\": \"{{offered_resource}}\"\n}"
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ContractRequestMessage",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Retrieve contract agreement\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    const agreement = JSON.stringify(responseData);",
+                  "    const transferContract = responseData[\"@id\"] || responseData[\"ids:contractAgreement\"] && responseData[\"ids:contractAgreement\"][\"@id\"] || \"\";",
+                  "",
+                  "    pm.collectionVariables.set(\"contract_agreement\", agreement);",
+                  "    pm.environment.set(\"contract_agreement\", agreement);",
+                  "    pm.collectionVariables.set(\"transfer_contract\", transferContract);",
+                  "    pm.environment.set(\"transfer_contract\", transferContract);",
+                  "",
+                  "    pm.expect(transferContract, \"transfer contract id\").to.exist;",
+                  "    console.log(\"PFG transfer_contract = \" + transferContract);",
+                  "});",
+                  "",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"wss\",\n    \"Forward-To\": \"{{Forward-To-WS}}\",\n    \"Forward-To-Internal\": \"{{Forward-To-Internal}}\",\n    \"messageType\": \"ContractRequestMessage\",\n    \"requestedElement\": \"{{contract_artifact}}\",\n    \"payload\": {\n        \"@context\": {\n            \"ids\": \"https://w3id.org/idsa/core/\",\n            \"idsc\": \"https://w3id.org/idsa/code/\"\n        },\n        \"@type\": \"ids:ContractRequest\",\n        \"@id\": \"{{contract_id}}\",\n        \"ids:permission\": [\n            {{contract_permission}}\n        ],\n        \"ids:provider\": {\n            \"@id\": \"{{contract_provider}}\"\n        },\n        \"ids:obligation\": [],\n        \"ids:prohibition\": [],\n        \"ids:consumer\": {\n            \"@id\": \"http://w3id.org/engrd/connector/consumer\"\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ContractAgreementMessage",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Contract agreement processed\", function () {",
+                  "    let responseData = null;",
+                  "    const responseText = pm.response.text();",
+                  "",
+                  "    try {",
+                  "        responseData = pm.response.json();",
+                  "    } catch (error) {",
+                  "        responseData = null;",
+                  "    }",
+                  "",
+                  "    const messageType = responseData && (responseData[\"@type\"] || responseData.messageType || responseData.type);",
+                  "    const rawLooksOk = responseText.indexOf(\"MessageProcessedNotificationMessage\") !== -1",
+                  "        || responseText.indexOf(\"ids:MessageProcessedNotificationMessage\") !== -1;",
+                  "",
+                  "    pm.expect(",
+                  "        messageType === \"ids:MessageProcessedNotificationMessage\"",
+                  "            || messageType === \"MessageProcessedNotificationMessage\"",
+                  "            || rawLooksOk,",
+                  "        \"expected MessageProcessedNotificationMessage ack\"",
+                  "    ).to.be.true;",
+                  "",
+                  "    console.log(\"PFG ContractAgreement ACK = \" + (messageType || \"raw multipart/text\"));",
+                  "});",
+                  "",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"wss\",\n    \"Forward-To\": \"{{Forward-To-WS}}\",\n    \"Forward-To-Internal\": \"{{Forward-To-Internal}}\",\n    \"messageType\": \"ContractAgreementMessage\",\n    \"requestedArtifact\": \"{{contract_artifact}}\",\n    \"transferContract\": \"{{transfer_contract}}\",\n    \"payload\": {{contract_agreement}}\n}"
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ArtifactRequestMessage",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"FL artifact received\", function () {",
+                  "    let jsonData = null;",
+                  "    const responseText = pm.response.text();",
+                  "",
+                  "    try {",
+                  "        jsonData = pm.response.json();",
+                  "    } catch (error) {",
+                  "        jsonData = null;",
+                  "    }",
+                  "",
+                  "    pm.expect(jsonData, \"JSON response\").to.exist;",
+                  "",
+                  "    const type = jsonData.type || jsonData.status || jsonData[\"@type\"] || \"\";",
+                  "    const isAlgorithm = jsonData.type === \"fl_algorithm\" && jsonData.filename === \"algorithm.py\" && !!jsonData.content;",
+                  "    const isDockerAck = jsonData.status === \"docker_image_received\" && !!jsonData.docker_image;",
+                  "    const isGenericArtifactResponse = String(type).indexOf(\"ArtifactResponseMessage\") !== -1;",
+                  "    const rawLooksLikeAlgorithm = responseText.indexOf('\"type\":\"fl_algorithm\"') !== -1",
+                  "        || responseText.indexOf('\"filename\":\"algorithm.py\"') !== -1;",
+                  "",
+                  "    pm.expect(",
+                  "        isAlgorithm || isDockerAck || isGenericArtifactResponse || rawLooksLikeAlgorithm,",
+                  "        \"expected FL algorithm artifact or delivery ACK\"",
+                  "    ).to.be.true;",
+                  "",
+                  "    if (isAlgorithm) {",
+                  "        pm.environment.set(\"fl_algorithm_payload\", JSON.stringify(jsonData));",
+                  "        pm.collectionVariables.set(\"fl_algorithm_payload\", JSON.stringify(jsonData));",
+                  "        console.log(\"PFG ArtifactRequest OK: fl_algorithm \" + jsonData.filename + \" from worker \" + (jsonData.source || \"?\"));",
+                  "    } else if (isDockerAck) {",
+                  "        console.log(\"PFG ArtifactRequest OK: docker image \" + jsonData.docker_image);",
+                  "    } else {",
+                  "        console.log(\"PFG ArtifactRequest OK: \" + type);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"multipart\": \"wss\",\n    \"Forward-To\": \"{{Forward-To-WS}}\",\n    \"Forward-To-Internal\": \"{{Forward-To-Internal}}\",\n    \"messageType\": \"ArtifactRequestMessage\",\n    \"requestedArtifact\": \"{{contract_artifact}}\",\n    \"transferContract\": \"{{transfer_contract}}\",\n    \"payload\" : \"\"\n}"
+            },
+            "url": {
+              "raw": "{{Proxy_Endpoint}}",
+              "host": [
+                "{{Proxy_Endpoint}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "auth": {
+        "type": "basic",
+        "basic": [
+          {
+            "key": "username",
+            "value": "idsUser",
+            "type": "string"
+          },
+          {
+            "key": "password",
+            "value": "passwordIdsUser",
+            "type": "string"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              ""
+            ]
+          }
         }
       ]
     }

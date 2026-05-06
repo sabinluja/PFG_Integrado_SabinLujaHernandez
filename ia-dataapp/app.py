@@ -951,7 +951,8 @@ def _should_route_via_local_connector(
     forward_to = (forward_to_url or "").strip().lower()
     forward_internal = (forward_to_internal or "").strip().lower()
     return (
-        mode == "wss"
+        mode in ("form", "mixed", "wss")
+        or bool(forward_to)
         or forward_to.startswith("wss://")
         or forward_internal.startswith("wss://")
     )
@@ -961,37 +962,104 @@ def _should_route_via_local_connector(
 # POST /proxy
 # =============================================================================
 
-@app.post("/proxy")
-async def proxy(request: Request):
-    body = await request.json()
+_PROXY_IDS_MESSAGE_TYPES = {
+    "DescriptionRequestMessage",
+    "DescriptionResponseMessage",
+    "ContractRequestMessage",
+    "ContractAgreementMessage",
+    "ArtifactRequestMessage",
+    "ArtifactResponseMessage",
+    "QueryMessage",
+    "NotificationMessage",
+    "ResourceUpdateMessage",
+    "LogMessage",
+    "MessageProcessedNotificationMessage",
+    "RejectionMessage",
+}
 
-    forward_to        = body.get("Forward-To", "")
+
+def _proxy_ids_type(message_type_raw: str) -> tuple[str, str]:
+    short = (message_type_raw or "").strip().replace("ids:", "", 1)
+    return short, f"ids:{short}" if short else ""
+
+
+def _proxy_payload(payload):
+    if payload in (None, ""):
+        return None
+    if isinstance(payload, str):
+        try:
+            return json.loads(payload)
+        except Exception:
+            return payload
+    return payload
+
+
+def _proxy_missing_fields(body: dict, fields: list[str]) -> list[str]:
+    return [field for field in fields if body.get(field) in (None, "")]
+
+
+def _proxy_bad_request(message_type: str, missing: list[str], hint: str = "") -> JSONResponse:
+    content = {
+        "error": "campos requeridos ausentes en /proxy",
+        "messageType": message_type,
+        "missing": missing,
+    }
+    if hint:
+        content["hint"] = hint
+    return JSONResponse(status_code=400, content=content)
+
+
+def _proxy_artifact_extra_header(payload) -> dict:
+    """
+    Codifica en ids:contentVersion el tipo de artefacto FL para que /data pueda
+    recuperar docker image, pesos globales o pesos locales aunque el ECC toque el
+    multipart. El payload completo sigue viajando como parte IDS.
+    """
+    if not isinstance(payload, dict):
+        return {}
+
+    artifact_type = payload.get("type", "")
+    if artifact_type == "fl_algorithm":
+        algo_b64 = payload.get("content", "") or ""
+        config_b64 = payload.get("config", "") or ""
+        combined = f"{algo_b64}||fl_config::{config_b64}" if config_b64 else algo_b64
+        return {"ids:contentVersion": f"fl_algorithm::{combined}"}
+
+    if artifact_type == "fl_algorithm_docker":
+        docker_image = payload.get("docker_image", "") or ""
+        if docker_image:
+            return {"ids:contentVersion": f"fl_algorithm_docker::{docker_image}"}
+        return {}
+
+    if artifact_type in ("fl_global_weights", "fl_weights"):
+        import gzip as _gzip
+        payload_raw = json.dumps(payload).encode("utf-8")
+        payload_b64 = base64.b64encode(_gzip.compress(payload_raw)).decode("utf-8")
+        round_num = payload.get("round", "?")
+        if artifact_type == "fl_global_weights":
+            return {"ids:contentVersion": f"fl_global_weights::{round_num}::gzip::payload::{payload_b64}"}
+        sender = payload.get("from_worker") or payload.get("worker_id") or payload.get("sender") or INSTANCE_ID
+        return {"ids:contentVersion": f"fl_weights::{sender}::{round_num}::gzip::payload::{payload_b64}"}
+
+    return {}
+
+
+def _proxy_send_ids(
+    body: dict,
+    message_type: str,
+    payload=None,
+    requested_artifact: str | None = None,
+    requested_element: str | None = None,
+    transfer_contract: str | None = None,
+    extra_header: dict | None = None,
+    timeout: int = 60,
+) -> dict:
+    forward_to = body.get("Forward-To", "")
     forward_to_internal = body.get("Forward-To-Internal", "")
-    multipart_mode    = body.get("multipart", "")
-    message_type_raw  = body.get("messageType", "")
-    payload_in        = body.get("payload", None)
-    req_artifact      = body.get("requestedArtifact")
-    req_element       = body.get("requestedElement")
-    transfer_contract      = body.get("transferContract")
-    explicit_connector_uri = body.get("connectorUri")   # URI IDS explicita (fase 6, bypass inferencia)
+    multipart_mode = body.get("multipart", "")
 
-    contract_id_field  = body.get("contractId")
-    contract_prov_field = body.get("contractProvider")
-    if (message_type_raw.replace("ids:", "") == "ContractRequestMessage"
-            and contract_id_field and not payload_in):
-        payload_in = {
-            "@context": {"ids": "https://w3id.org/idsa/core/", "idsc": "https://w3id.org/idsa/code/"},
-            "@type"   : "ids:ContractRequest",
-            "@id"     : contract_id_field,
-            "ids:permission" : [],
-            "ids:provider"   : {"@id": contract_prov_field or ""},
-            "ids:obligation" : [],
-            "ids:prohibition": [],
-            "ids:consumer"   : {"@id": CONNECTOR_URI},
-        }
-
-    message_type = message_type_raw if message_type_raw.startswith("ids:") \
-                   else f"ids:{message_type_raw}"
+    if not forward_to:
+        raise ValueError("Forward-To requerido para enviar mensaje IDS desde /proxy")
 
     use_local_connector = _should_route_via_local_connector(
         multipart_mode=multipart_mode,
@@ -1003,52 +1071,413 @@ async def proxy(request: Request):
     if use_local_connector and _looks_like_ecc_data_endpoint(forward_to):
         effective_forward_to = _ecc_forward_url(forward_to)
 
-    dest_conn_uri = explicit_connector_uri or _infer_connector_uri(effective_forward_to)
+    dest_conn_uri = body.get("connectorUri") or _infer_connector_uri(effective_forward_to)
+    corr_msg = body.get("correlationMessage") or transfer_contract or None
 
     log.info(
         f"[/proxy] {message_type} -> {effective_forward_to}"
         + (
             f" via local connector {_local_ecc_incoming_url()} "
-              f"(multipart={multipart_mode or 'auto'}, Forward-To-Internal={forward_to_internal or '(default bridge)'})"
+            f"(multipart={multipart_mode or 'auto'}, Forward-To-Internal={forward_to_internal or '(default bridge)'})"
             if use_local_connector else ""
         )
     )
 
+    return _ids_send(
+        forward_to_url=effective_forward_to,
+        forward_to_connector=dest_conn_uri,
+        message_type=message_type,
+        requested_artifact=requested_artifact,
+        requested_element=requested_element,
+        transfer_contract=transfer_contract,
+        payload=payload,
+        correlation_message=corr_msg,
+        header_content=None,
+        extra_header=extra_header,
+        use_local_ecc=use_local_connector,
+        timeout=timeout,
+    )
+
+
+def _proxy_local_endpoint_request(method: str, path: str, body=None, timeout: int = 240) -> dict:
+    method = (method or "GET").upper()
+    if method not in ("GET", "POST"):
+        return {"ok": False, "status_code": 405, "error": f"method_not_allowed:{method}"}
+    if not path.startswith("/") or path.startswith("/proxy"):
+        return {"ok": False, "status_code": 400, "error": f"path_not_allowed:{path}"}
+
+    kwargs = {
+        "timeout": max(1, int(timeout or 240)),
+        "verify": False,
+        "headers": {"X-Client-Transport": "proxy-artifact-dispatcher"},
+    }
+    if method == "POST":
+        kwargs["json"] = body if body is not None else {}
+
+    resp = requests.request(method, f"https://127.0.0.1:8500{path}", **kwargs)
+    result = {
+        "ok": resp.ok,
+        "status_code": resp.status_code,
+        "content_type": resp.headers.get("Content-Type", ""),
+    }
     try:
-        corr_msg = body.get("correlationMessage") or transfer_contract or None
+        result["body"] = resp.json()
+    except Exception:
+        result["text"] = resp.text
+    return result
 
-        fl_extra = {}
-        if isinstance(payload_in, dict) and payload_in.get("type") == "fl_algorithm":
-            algo_b64   = payload_in.get("content", "") or ""
-            config_b64 = payload_in.get("config",  "") or ""
-            combined   = f"{algo_b64}||fl_config::{config_b64}" if config_b64 else algo_b64
-            fl_extra   = {"ids:contentVersion": combined}
-            log.info(f"[/proxy] fl_algorithm detectado -- content+config -> ids:contentVersion (config={'present' if config_b64 else 'absent'})")
 
-        result = _ids_send(
-            forward_to_url       = effective_forward_to,
-            forward_to_connector = dest_conn_uri,
-            message_type         = message_type,
-            requested_artifact   = req_artifact,
-            requested_element    = req_element,
-            transfer_contract    = transfer_contract,
-            payload              = payload_in,
-            correlation_message  = corr_msg,
-            header_content       = None,
-            extra_header         = fl_extra,
-            use_local_ecc        = use_local_connector,
+def _proxy_artifact_action(payload) -> str:
+    if isinstance(payload, dict):
+        return (
+            payload.get("action")
+            or payload.get("command")
+            or payload.get("message")
+            or ""
         )
-        return JSONResponse(content=result)
+    return ""
+
+
+def _proxy_artifact_action_payload(payload):
+    if isinstance(payload, dict):
+        if "body" in payload:
+            return payload.get("body")
+        if "payload" in payload:
+            return payload.get("payload")
+    return payload
+
+
+def _proxy_forward_points_to_local_connector(forward_to: str | None) -> bool:
+    forward_to = (forward_to or "").strip().lower()
+    if not forward_to:
+        return False
+    local_hosts = {
+        ECC_HOSTNAME.lower(),
+        f"ecc-worker{INSTANCE_ID}".lower(),
+        "localhost",
+        "127.0.0.1",
+    }
+    try:
+        from urllib.parse import urlparse as _urlparse
+        host = (_urlparse(forward_to).hostname or "").lower()
+    except Exception:
+        host = ""
+    return host in local_hosts or any(host.startswith(f"{h}:") for h in local_hosts)
+
+
+def _proxy_execute_message(action: str, payload=None, timeout: int = 240) -> dict:
+    """
+    Dispatcher local opcional: ArtifactRequestMessage + payload.action='fl_start'
+    ejecuta directamente el endpoint interno equivalente sin convertir
+    messageType en un endpoint. El messageType sigue siendo IDS puro.
+    """
+    normalized = (action or "").strip().lower().replace("-", "_")
+    endpoint_body = payload if payload is not None else {}
+    log.info(f"[/proxy dispatcher] payload.action={action} payload_type={type(payload).__name__}")
+
+    if normalized in ("health", "get_health", "/health"):
+        target = ("GET", "/health", None)
+    elif normalized in ("status", "get_status", "/status"):
+        target = ("GET", "/status", None)
+    elif normalized in ("metrics", "get_metrics", "/metrics"):
+        target = ("GET", "/metrics", None)
+    elif normalized in ("transport_status", "get_transport_status", "/transport/status"):
+        target = ("GET", "/transport/status", None)
+    elif normalized in ("ids_self_description", "self_description", "/ids/self_description", "/ids/self-description"):
+        target = ("GET", "/ids/self-description", None)
+    elif normalized in ("ids_contract", "contract", "/ids/contract"):
+        target = ("GET", "/ids/contract", None)
+    elif normalized in ("broker_connectors", "get_broker_connectors", "/broker/connectors"):
+        target = ("GET", "/broker/connectors", None)
+    elif normalized in ("broker_discover", "discover", "/broker/discover"):
+        target = ("POST", "/broker/discover", endpoint_body)
+    elif normalized in ("broker_discover_worker", "discover_worker", "/broker/discover/worker"):
+        target = ("POST", "/broker/discover/worker", endpoint_body)
+    elif normalized in ("dataset_info", "get_dataset_info", "/dataset/info"):
+        target = ("GET", "/dataset/info", None)
+    elif normalized in ("dataset_all_columns", "get_dataset_all_columns", "/dataset/all_columns", "/dataset/all-columns"):
+        target = ("GET", "/dataset/all-columns", None)
+    elif normalized in ("dataset_llm_recommend", "llm_recommend_dataset", "/dataset/llm_recommend", "/dataset/llm-recommend"):
+        target = ("GET", "/dataset/llm-recommend", None)
+    elif normalized in ("catalog_publish_datasets", "publish_datasets", "/catalog/publish_datasets", "/catalog/publish-datasets"):
+        target = ("POST", "/catalog/publish-datasets", endpoint_body)
+    elif normalized in ("fl_fetch_algorithm", "fetch_algorithm", "/fl/fetch_algorithm", "/fl/fetch-algorithm"):
+        target = ("POST", "/fl/fetch-algorithm", endpoint_body)
+    elif normalized in ("fl_start", "start_fl", "/fl/start"):
+        target = ("POST", "/fl/start", endpoint_body)
+    elif normalized in ("fl_status", "get_fl_status", "/fl/status"):
+        target = ("GET", "/fl/status", None)
+    elif normalized in ("fl_results", "get_fl_results", "/fl/results"):
+        target = ("GET", "/fl/results", None)
+    elif normalized in ("fl_model", "get_fl_model", "/fl/model"):
+        target = ("GET", "/fl/model", None)
+    elif normalized in ("fl_docker_image_status", "docker_image_status", "/fl/docker_image_status", "/fl/docker-image-status"):
+        target = ("GET", "/fl/docker-image-status", None)
+    elif normalized in ("fl_negotiate", "negotiate", "/fl/negotiate"):
+        target = ("POST", "/fl/negotiate", endpoint_body)
+    elif normalized in ("fl_accept_negotiation", "accept_negotiation", "/fl/accept_negotiation", "/fl/accept-negotiation"):
+        target = ("POST", "/fl/accept-negotiation", endpoint_body)
+    elif normalized in ("fl_receive_algorithm", "receive_algorithm", "/fl/receive_algorithm", "/fl/receive-algorithm"):
+        target = ("POST", "/fl/receive-algorithm", endpoint_body)
+    elif normalized in ("fl_receive_global_weights", "receive_global_weights", "/fl/receive_global_weights", "/fl/receive-global-weights"):
+        target = ("POST", "/fl/receive-global-weights", endpoint_body)
+    elif normalized in ("fl_receive_local_weights", "receive_local_weights", "/fl/receive_local_weights", "/fl/receive-local-weights"):
+        target = ("POST", "/fl/receive-local-weights", endpoint_body)
+    elif normalized in ("system_reset", "reset", "/system/reset"):
+        target = ("POST", "/system/reset", endpoint_body)
+    elif normalized in ("system_reset_all", "reset_all", "/system/reset_all", "/system/reset-all"):
+        target = ("POST", "/system/reset-all", endpoint_body)
+    else:
+        return {
+            "ok": False,
+            "status_code": 400,
+            "error": "unknown_proxy_action",
+            "action": action,
+        }
+
+    method, path, endpoint_payload = target
+    log.info(f"[/proxy dispatcher] action={action} -> {method} {path}")
+    result = _proxy_local_endpoint_request(method, path, endpoint_payload, timeout=timeout)
+    result.update({
+        "transport": "proxy-artifact-dispatcher",
+        "action": action,
+        "message": action,
+        "target_method": method,
+        "target_path": path,
+    })
+    return result
+
+
+@app.post("/proxy")
+async def proxy(request: Request):
+    body = await request.json()
+    short_type, message_type = _proxy_ids_type(body.get("messageType", ""))
+    payload_in = _proxy_payload(body.get("payload", None))
+    timeout = int(body.get("timeout", 60) or 60)
+
+    if not short_type:
+        return JSONResponse(status_code=400, content={"error": "messageType requerido"})
+    if short_type not in _PROXY_IDS_MESSAGE_TYPES:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "messageType no soportado",
+                "messageType": body.get("messageType"),
+                "supported": sorted(_PROXY_IDS_MESSAGE_TYPES),
+            },
+        )
+
+    try:
+        if short_type == "DescriptionRequestMessage":
+            missing = _proxy_missing_fields(body, ["Forward-To"])
+            if missing:
+                return _proxy_bad_request(message_type, missing)
+            requested_element = body.get("requestedElement")
+            log.info(
+                f"[/proxy DescriptionRequest] Forward-To={body.get('Forward-To')} "
+                f"requestedElement={requested_element or '(catalogo completo)'}"
+            )
+            result = _proxy_send_ids(
+                body,
+                message_type,
+                requested_element=requested_element,
+                timeout=timeout,
+            )
+            return JSONResponse(content=result)
+
+        elif short_type == "ContractRequestMessage":
+            missing = _proxy_missing_fields(body, ["Forward-To"])
+            if missing:
+                return _proxy_bad_request(message_type, missing)
+            requested_element = (
+                body.get("requestedElement")
+                or body.get("requestedArtifact")
+                or body.get("contract_artifact")
+            )
+            if payload_in is None and body.get("contractId"):
+                payload_in = {
+                    "@context": {"ids": "https://w3id.org/idsa/core/", "idsc": "https://w3id.org/idsa/code/"},
+                    "@type": "ids:ContractRequest",
+                    "@id": body.get("contractId"),
+                    "ids:permission": [],
+                    "ids:provider": {"@id": body.get("contractProvider") or ""},
+                    "ids:obligation": [],
+                    "ids:prohibition": [],
+                    "ids:consumer": {"@id": CONNECTOR_URI},
+                }
+            if not requested_element:
+                return _proxy_bad_request(
+                    message_type,
+                    ["requestedElement"],
+                    "Debe contener el artifact/contract target sobre el que se solicita contrato.",
+                )
+            if payload_in is None:
+                return _proxy_bad_request(
+                    message_type,
+                    ["payload"],
+                    "Debe contener el ids:ContractRequest o los campos contractId/contractProvider.",
+                )
+            log.info(
+                f"[/proxy ContractRequest] Forward-To={body.get('Forward-To')} "
+                f"requestedElement={requested_element} payload_type={type(payload_in).__name__}"
+            )
+            result = _proxy_send_ids(
+                body,
+                message_type,
+                payload=payload_in,
+                requested_element=requested_element,
+                timeout=timeout,
+            )
+            return JSONResponse(content=result)
+
+        elif short_type == "ContractAgreementMessage":
+            missing = _proxy_missing_fields(body, ["Forward-To", "requestedArtifact", "transferContract"])
+            if missing:
+                return _proxy_bad_request(message_type, missing)
+            requested_artifact = body.get("requestedArtifact") or body.get("contract_artifact")
+            transfer_contract = (
+                body.get("transferContract")
+                or body.get("contractAgreement")
+                or (payload_in.get("@id") if isinstance(payload_in, dict) else None)
+            )
+            if payload_in is None:
+                return _proxy_bad_request(
+                    message_type,
+                    ["payload"],
+                    "Debe contener el ids:ContractAgreement devuelto por ContractRequestMessage.",
+                )
+            log.info(
+                f"[/proxy ContractAgreement] Forward-To={body.get('Forward-To')} "
+                f"requestedArtifact={requested_artifact} transferContract={transfer_contract} "
+                f"payload_type={type(payload_in).__name__}"
+            )
+            result = _proxy_send_ids(
+                body,
+                message_type,
+                payload=payload_in,
+                requested_artifact=requested_artifact,
+                transfer_contract=transfer_contract,
+                timeout=timeout,
+            )
+            return JSONResponse(content=result)
+
+        elif short_type == "ArtifactRequestMessage":
+            requested_artifact = body.get("requestedArtifact") or body.get("contract_artifact")
+            transfer_contract = body.get("transferContract") or body.get("contractAgreement")
+            artifact_action = _proxy_artifact_action(payload_in) or body.get("message")
+
+            if artifact_action and _proxy_forward_points_to_local_connector(body.get("Forward-To")):
+                missing = _proxy_missing_fields(body, ["Forward-To", "requestedArtifact", "transferContract"])
+                if missing:
+                    return _proxy_bad_request(
+                        message_type,
+                        missing,
+                        "ArtifactRequestMessage de control requiere Forward-To WSS local, artifact tecnico y contrato tecnico; la accion va en payload.action.",
+                    )
+                log.info(
+                    "[/proxy ArtifactRequest CONTROL local] "
+                    f"Forward-To={body.get('Forward-To')} "
+                    f"requestedArtifact={requested_artifact} "
+                    f"transferContract={transfer_contract} "
+                    f"payload.action={artifact_action}"
+                )
+                result = await asyncio.to_thread(
+                    _proxy_execute_message,
+                    artifact_action,
+                    _proxy_artifact_action_payload(payload_in),
+                    timeout,
+                )
+                response_status = 200 if result.get("ok") else result.get("status_code", 400)
+                return JSONResponse(status_code=response_status, content=result)
+
+            missing = _proxy_missing_fields(body, ["Forward-To", "requestedArtifact", "transferContract"])
+            if missing:
+                return _proxy_bad_request(
+                    message_type,
+                    missing,
+                    "Usa el artifact de entrenamiento negociado y el ContractAgreement resultante.",
+                )
+
+            extra_header = _proxy_artifact_extra_header(payload_in)
+            artifact_type = (
+                payload_in.get("type")
+                or payload_in.get("action")
+                if isinstance(payload_in, dict)
+                else "(sin payload)"
+            )
+            log.info(
+                f"[/proxy ArtifactRequest] Forward-To={body.get('Forward-To')} "
+                f"requestedArtifact={requested_artifact} "
+                f"transferContract={transfer_contract} payload_type={artifact_type}"
+            )
+            result = _proxy_send_ids(
+                body,
+                message_type,
+                payload=payload_in,
+                requested_artifact=requested_artifact,
+                transfer_contract=transfer_contract,
+                extra_header=extra_header,
+                timeout=timeout,
+            )
+            return JSONResponse(content=result)
+
+        elif short_type == "QueryMessage":
+            missing = _proxy_missing_fields(body, ["Forward-To"])
+            if missing:
+                return _proxy_bad_request(message_type, missing)
+            log.info(f"[/proxy Query] Forward-To={body.get('Forward-To')} payload_type={type(payload_in).__name__}")
+            result = _proxy_send_ids(body, message_type, payload=payload_in, timeout=timeout)
+            return JSONResponse(content=result)
+
+        elif short_type == "NotificationMessage":
+            missing = _proxy_missing_fields(body, ["Forward-To"])
+            if missing:
+                return _proxy_bad_request(message_type, missing)
+            log.info(f"[/proxy Notification] Forward-To={body.get('Forward-To')} payload_type={type(payload_in).__name__}")
+            result = _proxy_send_ids(body, message_type, payload=payload_in, timeout=timeout)
+            return JSONResponse(content=result)
+
+        elif short_type == "ResourceUpdateMessage":
+            missing = _proxy_missing_fields(body, ["Forward-To"])
+            if missing:
+                return _proxy_bad_request(message_type, missing)
+            log.info(f"[/proxy ResourceUpdate] Forward-To={body.get('Forward-To')} payload_type={type(payload_in).__name__}")
+            result = _proxy_send_ids(body, message_type, payload=payload_in, timeout=timeout)
+            return JSONResponse(content=result)
+
+        elif short_type == "LogMessage":
+            missing = _proxy_missing_fields(body, ["Forward-To"])
+            if missing:
+                return _proxy_bad_request(message_type, missing)
+            log.info(f"[/proxy Log] Forward-To={body.get('Forward-To')} payload_type={type(payload_in).__name__}")
+            result = _proxy_send_ids(body, message_type, payload=payload_in, timeout=timeout)
+            return JSONResponse(content=result)
+
+        elif short_type in (
+            "DescriptionResponseMessage",
+            "ArtifactResponseMessage",
+            "MessageProcessedNotificationMessage",
+            "RejectionMessage",
+        ):
+            missing = _proxy_missing_fields(body, ["Forward-To"])
+            if missing:
+                return _proxy_bad_request(message_type, missing)
+            log.info(f"[/proxy Response] {message_type} Forward-To={body.get('Forward-To')} payload_type={type(payload_in).__name__}")
+            result = _proxy_send_ids(body, message_type, payload=payload_in, timeout=timeout)
+            return JSONResponse(content=result)
+
     except Exception as exc:
         log.error(f"[/proxy] Error: {exc}", exc_info=True)
         return JSONResponse(
             status_code=502,
             content={
                 "error": str(exc),
-                "forward_to": effective_forward_to,
-                "use_local_connector": use_local_connector,
+                "messageType": message_type,
+                "forward_to": body.get("Forward-To", ""),
             }
         )
+
+    return JSONResponse(status_code=500, content={"error": "rama /proxy no alcanzable", "messageType": message_type})
 
 
 def _infer_connector_uri(ecc_url: str) -> str:
@@ -1797,6 +2226,7 @@ def _build_and_push_algo_image() -> str | None:
         log.info(f"[docker-build] Imagen construida OK: {image_tag}")
 
         # docker push
+        log.info(f"[docker-push] Pusheando imagen al registry: {image_tag}")
         result = subprocess.run(
             ["docker", "push", image_tag],
             capture_output=True,
@@ -4267,6 +4697,33 @@ async def ids_data(request: Request):
             {"ids:transferContract": mensaje.get("ids:transferContract", {})}
         )
 
+        artifact_action = _proxy_artifact_action(payload_dict)
+        if artifact_action:
+            requested_artifact = mensaje.get("ids:requestedArtifact", {})
+            transfer_contract = mensaje.get("ids:transferContract", {})
+            requested_artifact_id = (
+                requested_artifact.get("@id", "")
+                if isinstance(requested_artifact, dict)
+                else str(requested_artifact or "")
+            )
+            transfer_contract_id = (
+                transfer_contract.get("@id", "")
+                if isinstance(transfer_contract, dict)
+                else str(transfer_contract or "")
+            )
+            log.info(
+                "[ArtifactRequest CONTROL] "
+                f"requestedArtifact={requested_artifact_id} "
+                f"transferContract={transfer_contract_id} "
+                f"payload.action={artifact_action}"
+            )
+            result = _proxy_execute_message(
+                artifact_action,
+                _proxy_artifact_action_payload(payload_dict),
+                timeout=240,
+            )
+            return _multipart_response(resp_h, json.dumps(result))
+
         # fl_weights -- pesos locales de un worker -> coordinator acumula
         if artifact_type == "fl_weights":
             sender      = payload_dict.get("instance_id", "?")
@@ -4658,7 +5115,7 @@ async def fl_fetch_algorithm(request: Request):
         docker_image_tag = None
         if FL_ALGO_VIA_DOCKER:
             log.info("[/fl/fetch-algorithm] FL_ALGO_VIA_DOCKER=true → construyendo imagen Docker del algoritmo...")
-            docker_image_tag = _build_and_push_algo_image()
+            docker_image_tag = await asyncio.to_thread(_build_and_push_algo_image)
             if docker_image_tag:
                 log.info(f"[/fl/fetch-algorithm] Imagen Docker lista: {docker_image_tag}")
             else:
@@ -4670,7 +5127,6 @@ async def fl_fetch_algorithm(request: Request):
             f"  source_ecc_url       : {source_ecc_url}\n"
             f"  source_connector_uri : {source_connector_uri}"
         )
-        import asyncio
         loop = asyncio.get_event_loop()
         success = await loop.run_in_executor(
             None, _fetch_algorithm_from_ecc, source_ecc_url, source_connector_uri
@@ -4736,7 +5192,7 @@ async def fl_start(request: Request):
             "[/fl/start] FL_ALGO_VIA_DOCKER=true -> reconstruyendo imagen con "
             "fl_config.json ya actualizado"
         )
-        docker_image_tag = _build_and_push_algo_image()
+        docker_image_tag = await asyncio.to_thread(_build_and_push_algo_image)
         if docker_image_tag:
             log.info(f"[/fl/start] Imagen Docker actualizada para esta corrida: {docker_image_tag}")
         else:
