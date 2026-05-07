@@ -37,6 +37,13 @@ import numpy as np
 import requests
 import urllib3
 import uvicorn
+try:
+    import mlflow
+except Exception as exc:
+    mlflow = None
+    _MLFLOW_IMPORT_ERROR = exc
+else:
+    _MLFLOW_IMPORT_ERROR = None
 
 import asyncio
 
@@ -93,6 +100,11 @@ WS_ECC_ENABLED = os.getenv("WS_ECC", "true").lower() == "true"
 # y la pushea al registry. Los workers la descargan (docker pull) via IDS.
 FL_DOCKER_REGISTRY = os.getenv("FL_DOCKER_REGISTRY", "fl-registry:5000")
 FL_ALGO_VIA_DOCKER = os.getenv("FL_ALGO_VIA_DOCKER", "true").lower() == "true"
+
+# MLflow Tracking: experimentos, metricas y artefactos del entrenamiento FL.
+MLFLOW_ENABLED = os.getenv("MLFLOW_ENABLED", "true").lower() == "true"
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+MLFLOW_EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT_NAME", "PFG_IDS_Federated_Learning")
 
 # Credenciales para la API interna del ECC
 API_USER = os.getenv("API_USER", "apiUser")
@@ -374,14 +386,14 @@ def _report_to_ch(
 
 def _load_fl_config() -> dict:
     defaults = {
-        "rounds"       : 18,
-        "round_timeout": 360,
+        "rounds"       : 6,
+        "round_timeout": 240,
         "min_workers"  : 3,
-        "epochs"       : 18,
-        "batch_size"   : 128,
+        "epochs"       : 6,
+        "batch_size"   : 256,
         "learning_rate": 0.001,
         "test_split"   : 0.2,
-        "early_stopping_patience": 3,
+        "early_stopping_patience": 2,
         "focal_gamma"  : 1.5,
         "label_smoothing": 0.005,
         "fedprox_mu"   : 0.001,
@@ -428,6 +440,478 @@ logging.basicConfig(
     ]
 )
 log = logging.getLogger(__name__)
+
+
+# =============================================================================
+# MLflow Tracking
+# =============================================================================
+
+_mlflow_configured = False
+_mlflow_warned = False
+_mlflow_run_lock = threading.Lock()
+
+
+def _mlflow_available() -> bool:
+    return MLFLOW_ENABLED and mlflow is not None
+
+
+def _mlflow_setup() -> bool:
+    global _mlflow_configured, _mlflow_warned
+    if not MLFLOW_ENABLED:
+        return False
+    if mlflow is None:
+        if not _mlflow_warned:
+            log.warning(f"[MLflow] Deshabilitado: dependencia no disponible ({_MLFLOW_IMPORT_ERROR})")
+            _mlflow_warned = True
+        return False
+    if _mlflow_configured:
+        return True
+    try:
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+        mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
+        _mlflow_configured = True
+        log.info(f"[MLflow] Tracking activo: {MLFLOW_TRACKING_URI} / {MLFLOW_EXPERIMENT_NAME}")
+        return True
+    except Exception as exc:
+        if not _mlflow_warned:
+            log.warning(f"[MLflow] No se pudo configurar tracking: {exc}")
+            _mlflow_warned = True
+        return False
+
+
+def _mlflow_clean_key(value: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in "._/-" else "_" for ch in str(value))[:250]
+
+
+def _mlflow_log_params(params: dict):
+    safe_params = {}
+    for key, value in (params or {}).items():
+        if value is None:
+            continue
+        text = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
+        safe_params[_mlflow_clean_key(key)] = text[:500]
+    if safe_params:
+        mlflow.log_params(safe_params)
+
+
+def _mlflow_log_metrics(metrics: dict, prefix: str = "", step: int | None = None):
+    for key, value in (metrics or {}).items():
+        metric_key = _mlflow_clean_key(f"{prefix}{key}")
+        if isinstance(value, dict):
+            _mlflow_log_metrics(value, prefix=f"{metric_key}.", step=step)
+            continue
+        if isinstance(value, bool):
+            value = int(value)
+        if isinstance(value, (int, float, np.integer, np.floating)) and np.isfinite(float(value)):
+            mlflow.log_metric(metric_key, float(value), step=step)
+
+
+def _mlflow_log_json_artifact(name: str, payload: dict | list):
+    artifact_dir = os.path.join(OUTPUT_DIR, "_mlflow_artifacts")
+    os.makedirs(artifact_dir, exist_ok=True)
+    artifact_path = os.path.join(artifact_dir, name)
+    with open(artifact_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+    mlflow.log_artifact(artifact_path)
+
+
+def _mlflow_plotting():
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        return plt
+    except Exception as exc:
+        log.warning(f"[MLflow] Graficos PNG no disponibles: {exc}")
+        return None
+
+
+def _mlflow_log_figure(name: str, fig):
+    artifact_dir = os.path.join(OUTPUT_DIR, "_mlflow_artifacts")
+    os.makedirs(artifact_dir, exist_ok=True)
+    artifact_path = os.path.join(artifact_dir, name)
+    fig.savefig(artifact_path, dpi=160, bbox_inches="tight")
+    mlflow.log_artifact(artifact_path)
+    try:
+        fig.clf()
+    except Exception:
+        pass
+
+
+def _mlflow_metric_color(value: float) -> str:
+    if value >= 0.8:
+        return "#2e7d32"
+    if value >= 0.5:
+        return "#f9a825"
+    return "#c62828"
+
+
+def _mlflow_log_per_class_metrics(per_class: dict, step: int | None = None):
+    for class_name, value in (per_class or {}).items():
+        if isinstance(value, (int, float, np.integer, np.floating)) and np.isfinite(float(value)):
+            mlflow.log_metric(_mlflow_clean_key(f"class_f1.{class_name}"), float(value), step=step)
+
+
+def _mlflow_plot_f1_per_class(round_num: int, worker_id: str, per_class: dict):
+    if not per_class:
+        return
+    plt = _mlflow_plotting()
+    if plt is None:
+        return
+    items = [
+        (str(k), float(v))
+        for k, v in per_class.items()
+        if isinstance(v, (int, float, np.integer, np.floating)) and np.isfinite(float(v))
+    ]
+    if not items:
+        return
+    items.sort(key=lambda item: item[1])
+    labels = [k for k, _ in items]
+    values = [v for _, v in items]
+    fig, ax = plt.subplots(figsize=(9, max(3.5, len(items) * 0.45)))
+    bars = ax.barh(labels, values, color=[_mlflow_metric_color(v) for v in values])
+    ax.set_xlim(0, 1.0)
+    ax.set_xlabel("F1-score")
+    ax.set_title(f"F1-score por clase - worker {worker_id}, ronda {round_num}")
+    ax.grid(axis="x", alpha=0.25)
+    for bar, value in zip(bars, values):
+        ax.text(min(value + 0.015, 0.98), bar.get_y() + bar.get_height() / 2,
+                f"{value:.3f}", va="center", fontsize=8)
+    _mlflow_log_figure(f"f1_per_class_round_{round_num}_worker_{worker_id}.png", fig)
+    plt.close(fig)
+
+
+def _mlflow_plot_confusion_matrix(round_num: int, worker_id: str, cm: list, class_names: list):
+    if not cm:
+        return
+    plt = _mlflow_plotting()
+    if plt is None:
+        return
+    matrix = np.array(cm, dtype=float)
+    if matrix.ndim != 2 or matrix.size == 0:
+        return
+    n = min(matrix.shape[0], matrix.shape[1], len(class_names) if class_names else matrix.shape[0])
+    matrix = matrix[:n, :n]
+    labels = [str(c) for c in (class_names[:n] if class_names else range(n))]
+    fig, ax = plt.subplots(figsize=(max(6, n * 1.2), max(5, n * 1.0)))
+    im = ax.imshow(matrix, cmap="Blues")
+    ax.set_title(f"Matriz de confusion - worker {worker_id}, ronda {round_num}")
+    ax.set_xlabel("Predicho")
+    ax.set_ylabel("Real")
+    ax.set_xticks(range(n), labels=labels, rotation=35, ha="right")
+    ax.set_yticks(range(n), labels=labels)
+    threshold = matrix.max() / 2 if matrix.max() > 0 else 0
+    for i in range(n):
+        for j in range(n):
+            color = "white" if matrix[i, j] > threshold else "black"
+            ax.text(j, i, f"{int(matrix[i, j])}", ha="center", va="center", color=color, fontsize=8)
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    _mlflow_log_figure(f"confusion_matrix_round_{round_num}_worker_{worker_id}.png", fig)
+    plt.close(fig)
+
+
+def _mlflow_plot_feature_importance(round_num: int, worker_id: str, feature_importance: dict):
+    if not feature_importance:
+        return
+    plt = _mlflow_plotting()
+    if plt is None:
+        return
+    items = [
+        (str(k), float(v))
+        for k, v in feature_importance.items()
+        if isinstance(v, (int, float, np.integer, np.floating)) and np.isfinite(float(v))
+    ]
+    if not items:
+        return
+    items = sorted(items, key=lambda item: item[1], reverse=True)[:15]
+    items.sort(key=lambda item: item[1])
+    labels = [k for k, _ in items]
+    values = [v for _, v in items]
+    fig, ax = plt.subplots(figsize=(9, max(4, len(items) * 0.38)))
+    ax.barh(labels, values, color="#1565c0")
+    ax.set_xlabel("Importancia relativa")
+    ax.set_title(f"Top variables del modelo - worker {worker_id}, ronda {round_num}")
+    ax.grid(axis="x", alpha=0.25)
+    _mlflow_log_figure(f"feature_importance_round_{round_num}_worker_{worker_id}.png", fig)
+    plt.close(fig)
+
+
+def _mlflow_plot_worker_comparison(round_num: int, results: list):
+    plt = _mlflow_plotting()
+    if plt is None or not results:
+        return
+    metrics = ["accuracy", "f1_macro", "focus_f1", "mcc"]
+    labels = [f"worker-{r.get('worker', i + 1)}" for i, r in enumerate(results)]
+    x = np.arange(len(labels))
+    width = 0.18
+    fig, ax = plt.subplots(figsize=(10, 5))
+    for idx, metric in enumerate(metrics):
+        values = [
+            float((r.get("metrics") or {}).get(metric, 0.0))
+            if isinstance((r.get("metrics") or {}).get(metric, 0.0), (int, float, np.integer, np.floating))
+            else 0.0
+            for r in results
+        ]
+        ax.bar(x + (idx - 1.5) * width, values, width, label=metric)
+    ax.set_xticks(x, labels=labels)
+    ax.set_ylim(0, 1.0)
+    ax.set_ylabel("Valor")
+    ax.set_title(f"Comparativa local de workers - ronda {round_num}")
+    ax.legend(ncol=2)
+    ax.grid(axis="y", alpha=0.25)
+    _mlflow_log_figure(f"worker_comparison_round_{round_num}.png", fig)
+    plt.close(fig)
+
+
+def _mlflow_plot_global_history(history: list):
+    if not history:
+        return
+    plt = _mlflow_plotting()
+    if plt is None:
+        return
+    rounds = [entry.get("round", idx + 1) for idx, entry in enumerate(history)]
+    metrics = [
+        ("accuracy", "Accuracy"),
+        ("auc", "AUC"),
+        ("f1_macro", "F1 macro"),
+        ("focus_f1", "Focus F1"),
+        ("mcc", "MCC"),
+    ]
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+    for key, label in metrics:
+        values = [
+            (entry.get("global_metrics") or {}).get(key)
+            for entry in history
+        ]
+        if any(isinstance(v, (int, float, np.integer, np.floating)) for v in values):
+            ax.plot(rounds, values, marker="o", linewidth=2, label=label)
+    ax.set_xlabel("Ronda FL")
+    ax.set_ylabel("Valor")
+    ax.set_title("Evolucion global del modelo federado")
+    ax.set_ylim(0, 1.05)
+    ax.grid(alpha=0.25)
+    ax.legend()
+    _mlflow_log_figure("global_metrics_evolution.png", fig)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(10, 4.8))
+    losses = [(entry.get("global_metrics") or {}).get("loss") for entry in history]
+    ax.plot(rounds, losses, marker="o", linewidth=2, color="#c62828")
+    ax.set_xlabel("Ronda FL")
+    ax.set_ylabel("Loss")
+    ax.set_title("Evolucion de la perdida global")
+    ax.grid(alpha=0.25)
+    _mlflow_log_figure("global_loss_evolution.png", fig)
+    plt.close(fig)
+
+    fig, ax1 = plt.subplots(figsize=(10, 4.8))
+    elapsed = [entry.get("elapsed_seconds", 0) for entry in history]
+    workers = [entry.get("workers_ok", 0) for entry in history]
+    ax1.bar(rounds, elapsed, color="#546e7a", alpha=0.75, label="Tiempo")
+    ax1.set_xlabel("Ronda FL")
+    ax1.set_ylabel("Tiempo (s)")
+    ax1.grid(axis="y", alpha=0.25)
+    ax2 = ax1.twinx()
+    ax2.plot(rounds, workers, marker="o", color="#2e7d32", linewidth=2, label="Workers OK")
+    ax2.set_ylabel("Workers OK")
+    ax1.set_title("Tiempo por ronda y quorum de workers")
+    _mlflow_log_figure("round_time_and_workers.png", fig)
+    plt.close(fig)
+
+
+def _mlflow_plot_best_metrics(best_metrics: dict | None):
+    if not best_metrics:
+        return
+    plt = _mlflow_plotting()
+    if plt is None:
+        return
+    keys = ["accuracy", "auc", "precision", "recall", "f1_macro", "focus_f1", "f1_weighted", "mcc"]
+    values = [
+        float(best_metrics[k])
+        for k in keys
+        if isinstance(best_metrics.get(k), (int, float, np.integer, np.floating))
+    ]
+    labels = [k for k in keys if isinstance(best_metrics.get(k), (int, float, np.integer, np.floating))]
+    if not values:
+        return
+    fig, ax = plt.subplots(figsize=(10, 4.8))
+    ax.bar(labels, values, color=[_mlflow_metric_color(v) for v in values])
+    ax.set_ylim(0, 1.05)
+    ax.set_ylabel("Valor")
+    ax.set_title("Metricas del mejor modelo global")
+    ax.tick_params(axis="x", rotation=25)
+    ax.grid(axis="y", alpha=0.25)
+    for idx, value in enumerate(values):
+        ax.text(idx, min(value + 0.02, 1.02), f"{value:.3f}", ha="center", fontsize=8)
+    _mlflow_log_figure("best_global_metrics.png", fig)
+    plt.close(fig)
+
+
+def _mlflow_plot_transport_performance():
+    plt = _mlflow_plotting()
+    if plt is None:
+        return
+    with _ws_perf_lock:
+        history = list(_ws_perf_stats.get("history", []))
+    if not history:
+        return
+    idx = list(range(1, len(history) + 1))
+    elapsed = [entry.get("elapsed_ms", 0) for entry in history]
+    payload = [entry.get("payload_kb", 0) for entry in history]
+    colors = ["#1565c0" if entry.get("channel") == "ids_ecc" else "#ef6c00" for entry in history]
+    fig, ax1 = plt.subplots(figsize=(10, 4.8))
+    ax1.scatter(idx, elapsed, c=colors, s=35)
+    ax1.plot(idx, elapsed, color="#455a64", alpha=0.35)
+    ax1.set_xlabel("Transferencia registrada")
+    ax1.set_ylabel("Latencia (ms)")
+    ax1.grid(alpha=0.25)
+    ax2 = ax1.twinx()
+    ax2.plot(idx, payload, color="#6a1b9a", alpha=0.55, linewidth=1.8)
+    ax2.set_ylabel("Payload (KB)")
+    ax1.set_title("Rendimiento del transporte de pesos FL")
+    _mlflow_log_figure("transport_performance.png", fig)
+    plt.close(fig)
+
+
+def _mlflow_log_local_round(round_num: int, csv_path: str, result: dict):
+    if not _mlflow_setup():
+        return
+    try:
+        cfg = _load_fl_config()
+        tags = {
+            "fl.scope": "local_training",
+            "fl.worker": str(INSTANCE_ID),
+            "fl.round": str(round_num),
+            "ids.connector_uri": CONNECTOR_URI,
+            "ids.ecc_hostname": ECC_HOSTNAME,
+        }
+        run_name = f"worker-{INSTANCE_ID}-round-{round_num}-local"
+        with _mlflow_run_lock:
+            with mlflow.start_run(run_name=run_name, tags=tags):
+                _mlflow_log_params({
+                    "worker": INSTANCE_ID,
+                    "round": round_num,
+                    "dataset_file": os.path.basename(csv_path),
+                    "input_dim": result.get("input_dim"),
+                    "n_samples": result.get("n_samples"),
+                    "model_name": result.get("model_name"),
+                    "num_classes": result.get("num_classes"),
+                    "classification_mode": result.get("classification_mode"),
+                    "epochs": cfg.get("epochs"),
+                    "batch_size": cfg.get("batch_size"),
+                    "learning_rate": cfg.get("learning_rate"),
+                    "fedprox_mu": cfg.get("fedprox_mu"),
+                    "focal_gamma": cfg.get("focal_gamma"),
+                    "feature_selection_strategy": cfg.get("feature_selection_strategy"),
+                })
+                _mlflow_log_metrics(result.get("metrics", {}), step=round_num)
+                _mlflow_log_per_class_metrics(result.get("per_class_report", {}), step=round_num)
+                _mlflow_log_json_artifact(f"local_round_{round_num}_worker_{INSTANCE_ID}.json", {
+                    "round": round_num,
+                    "worker": INSTANCE_ID,
+                    "dataset_file": os.path.basename(csv_path),
+                    "metrics": result.get("metrics", {}),
+                    "class_names": result.get("class_names", []),
+                    "confusion_matrix": result.get("confusion_matrix", []),
+                    "per_class_report": result.get("per_class_report", {}),
+                    "feature_importance": result.get("feature_importance", {}),
+                })
+                _mlflow_plot_f1_per_class(round_num, INSTANCE_ID, result.get("per_class_report", {}))
+                _mlflow_plot_confusion_matrix(
+                    round_num,
+                    INSTANCE_ID,
+                    result.get("confusion_matrix", []),
+                    result.get("class_names", []),
+                )
+                _mlflow_plot_feature_importance(
+                    round_num,
+                    INSTANCE_ID,
+                    result.get("feature_importance", {}),
+                )
+    except Exception as exc:
+        log.warning(f"[MLflow] No se pudo registrar entrenamiento local ronda {round_num}: {exc}")
+
+
+def _mlflow_log_local_round_async(round_num: int, csv_path: str, result: dict):
+    def _log():
+        _mlflow_log_local_round(round_num, csv_path, result)
+
+    threading.Thread(target=_log, daemon=True).start()
+
+
+def _mlflow_log_global_round(round_num: int, results: list, global_metrics: dict,
+                             elapsed: float, total_samples: int,
+                             expected_workers: int, required_workers: int):
+    if not _mlflow_setup():
+        return
+    try:
+        tags = {
+            "fl.scope": "global_aggregation",
+            "fl.coordinator": str(INSTANCE_ID),
+            "fl.round": str(round_num),
+            "ids.connector_uri": CONNECTOR_URI,
+        }
+        run_name = f"coordinator-{INSTANCE_ID}-round-{round_num}-global"
+        with _mlflow_run_lock:
+            with mlflow.start_run(run_name=run_name, tags=tags):
+                _mlflow_log_params({
+                    "coordinator": INSTANCE_ID,
+                    "round": round_num,
+                    "workers_ok": len(results),
+                    "expected_workers": expected_workers,
+                    "required_workers": required_workers,
+                    "total_samples": total_samples,
+                })
+                _mlflow_log_metrics(global_metrics, prefix="global.", step=round_num)
+                _mlflow_log_metrics({
+                    "elapsed_seconds": elapsed,
+                    "workers_ok": len(results),
+                    "total_samples": total_samples,
+                }, prefix="round.", step=round_num)
+                _mlflow_log_json_artifact(f"global_round_{round_num}_coordinator_{INSTANCE_ID}.json", {
+                    "round": round_num,
+                    "coordinator": INSTANCE_ID,
+                    "workers_ok": len(results),
+                    "expected_workers": expected_workers,
+                    "required_workers": required_workers,
+                    "total_samples": total_samples,
+                    "elapsed_seconds": elapsed,
+                    "global_metrics": global_metrics,
+                    "worker_metrics": [r.get("metrics", {}) for r in results],
+                })
+                _mlflow_plot_worker_comparison(round_num, results)
+    except Exception as exc:
+        log.warning(f"[MLflow] No se pudo registrar agregacion global ronda {round_num}: {exc}")
+
+
+def _mlflow_log_fl_summary(n_rounds: int, best_round: int, best_metrics: dict | None,
+                           model_path: str, results_path: str):
+    if not _mlflow_setup():
+        return
+    try:
+        tags = {
+            "fl.scope": "training_summary",
+            "fl.coordinator": str(INSTANCE_ID),
+            "ids.connector_uri": CONNECTOR_URI,
+        }
+        with _mlflow_run_lock:
+            with mlflow.start_run(run_name=f"coordinator-{INSTANCE_ID}-summary", tags=tags):
+                _mlflow_log_params({
+                    "coordinator": INSTANCE_ID,
+                    "n_rounds": n_rounds,
+                    "best_round": best_round,
+                })
+                _mlflow_log_metrics(best_metrics or {}, prefix="best.")
+                if os.path.exists(model_path):
+                    mlflow.log_artifact(model_path)
+                if os.path.exists(results_path):
+                    mlflow.log_artifact(results_path)
+                history = list(fl_state.get("history", []))
+                _mlflow_plot_global_history(history)
+                _mlflow_plot_best_metrics(best_metrics)
+                _mlflow_plot_transport_performance()
+    except Exception as exc:
+        log.warning(f"[MLflow] No se pudo registrar resumen final FL: {exc}")
 
 
 # =============================================================================
@@ -4104,10 +4588,12 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
             }
             with _round_lock:
                 _round_weights[INSTANCE_ID] = {
+                    "worker"     : INSTANCE_ID,
                     "weights_b64": local["weights_b64"],
                     "n_samples"  : local["n_samples"],
                     "metrics"    : local["metrics"],
                 }
+            _mlflow_log_local_round_async(round_num, _my_selected_csv or _csv_path(), local)
         except Exception as exc:
             log.error(f"Error en entrenamiento local ronda {round_num}: {exc}")
 
@@ -4193,6 +4679,16 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
             })
             _round_snapshot = dict(fl_state)
 
+        _mlflow_log_global_round(
+            round_num=round_num,
+            results=results,
+            global_metrics=global_metrics,
+            elapsed=elapsed,
+            total_samples=total_samples,
+            expected_workers=expected,
+            required_workers=required_responses,
+        )
+
         # --- CH: Ronda completada con métricas ---
         _report_to_ch(
             message_type="ids:ArtifactResponseMessage",
@@ -4267,8 +4763,11 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         "best_metrics": best_metrics,
     })
 
-    with open(os.path.join(OUTPUT_DIR, "fl_results.json"), "w") as f:
+    results_path = os.path.join(OUTPUT_DIR, "fl_results.json")
+    with open(results_path, "w") as f:
         json.dump(fl_state["history"], f, indent=2)
+
+    _mlflow_log_fl_summary(n_rounds, best_round, best_metrics, model_path, results_path)
 
     log.info(f"[OK] FL completado -- {n_rounds} rondas. Mejor ronda: {best_round}")
 
@@ -4827,6 +5326,7 @@ async def ids_data(request: Request):
                             return
                     _send_local_weights(result["weights_b64"], result["n_samples"],
                                         result["metrics"], round_num)
+                    _mlflow_log_local_round_async(round_num, _my_selected_csv or _csv_path(), result)
                 except Exception as exc:
                     log.error(f"Error ronda {round_num}: {exc}")
 
@@ -5945,6 +6445,7 @@ async def fl_receive_global_weights(request: Request):
             _send_local_weights(
                 result["weights_b64"], result["n_samples"], result["metrics"], round_num
             )
+            _mlflow_log_local_round_async(round_num, _my_selected_csv or _csv_path(), result)
         except Exception as exc:
             log.error(f"[/fl/receive-global-weights] Error entrenamiento ronda {round_num}: {exc}")
 
@@ -5971,6 +6472,7 @@ async def fl_receive_local_weights(request: Request):
 
     with _round_lock:
         _round_weights[sender] = {
+            "worker"     : sender,
             "weights_b64": weights_b64,
             "n_samples"  : n_samples,
             "metrics"    : metrics,
@@ -6532,6 +7034,17 @@ def get_llm_status():
         }
     except Exception as e:
         return {"status": "offline", "error": str(e)}
+
+
+@app.get("/mlflow/status")
+def mlflow_status():
+    return {
+        "enabled": MLFLOW_ENABLED,
+        "available": _mlflow_available(),
+        "tracking_uri": MLFLOW_TRACKING_URI,
+        "experiment_name": MLFLOW_EXPERIMENT_NAME,
+        "import_error": str(_MLFLOW_IMPORT_ERROR) if _MLFLOW_IMPORT_ERROR else None,
+    }
 
 
 @app.get("/fl/status")

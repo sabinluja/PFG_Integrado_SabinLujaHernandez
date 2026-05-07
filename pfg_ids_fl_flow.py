@@ -1253,7 +1253,7 @@ def _print_handshake_algoritmo(rnd_num, wid, peer_lbl, cid):
     _ids_log("in",  "ids:MessageProcessedNotificationMessage",
              peer_lbl, coord_lbl)
     print(f"      {GRAY}[ronda {rnd_num}] algorithm.py + fl_config.json "
-          f"(Docker/b64) -> {peer_lbl}  {GREEN}{RESET}")
+          f"(Docker) -> {peer_lbl}  {GREEN}{RESET}")
 
 
 def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
@@ -1290,9 +1290,9 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
     except Exception as _te:
         warn(f"No se pudo consultar /transport/status: {_te}")
 
-    _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids)
+    _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids, req_timeout)
 
-def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids):
+def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids, req_timeout):
     """
     Monitorizacion por polling HTTP (GET /fl/status cada 5s).
     """
@@ -1301,10 +1301,12 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
     else:
         info("Monitorizando via POST /proxy payload.action=fl_status cada 5s...")
 
+    poll_timeout = max(30, min(int(req_timeout or 240), 120))
+
     # Esperar a que el FL arranque
     for _ in range(30):
         try:
-            fl = http_get(f"{coordinator_url}/fl/status", timeout=10, quiet=True)
+            fl = http_get(f"{coordinator_url}/fl/status", timeout=poll_timeout, quiet=True)
             if fl.get("status") not in ("idle", ""):
                 ok("FL en marcha"); break
         except Exception:
@@ -1323,7 +1325,7 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
             warn("Timeout de monitorizacion (1h)"); break
 
         try:
-            fl = http_get(f"{coordinator_url}/fl/status", timeout=10, quiet=True)
+            fl = http_get(f"{coordinator_url}/fl/status", timeout=poll_timeout, quiet=True)
         except Exception as e:
             warn(f"Error polling /fl/status: {e}"); time.sleep(poll_interval); continue
 

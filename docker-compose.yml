@@ -224,6 +224,10 @@ services:
       - CLEARING_HOUSE_ECC_URL=${CLEARING_HOUSE_ECC_URL}
       - FL_DOCKER_REGISTRY=${FL_DOCKER_REGISTRY}
       - FL_ALGO_VIA_DOCKER=${FL_ALGO_VIA_DOCKER}
+      - MLFLOW_ENABLED=true
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_EXPERIMENT_NAME=PFG_IDS_Federated_Learning
+      - GIT_PYTHON_REFRESH=quiet
     volumes:
       - ./ia-dataapp/data/worker1:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -237,6 +241,7 @@ services:
       - clearinghouse
       - ecc-clearinghouse
       - fl-registry
+      - mlflow
 
   # ===========================================================================
   # WORKER 2
@@ -338,6 +343,10 @@ services:
       - CLEARING_HOUSE_ECC_URL=${CLEARING_HOUSE_ECC_URL}
       - FL_DOCKER_REGISTRY=${FL_DOCKER_REGISTRY}
       - FL_ALGO_VIA_DOCKER=${FL_ALGO_VIA_DOCKER}
+      - MLFLOW_ENABLED=true
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_EXPERIMENT_NAME=PFG_IDS_Federated_Learning
+      - GIT_PYTHON_REFRESH=quiet
     volumes:
       - ./ia-dataapp/data/worker2:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -351,6 +360,7 @@ services:
       - clearinghouse
       - ecc-clearinghouse
       - fl-registry
+      - mlflow
 
   # ===========================================================================
   # WORKER 3
@@ -452,6 +462,10 @@ services:
       - CLEARING_HOUSE_ECC_URL=${CLEARING_HOUSE_ECC_URL}
       - FL_DOCKER_REGISTRY=${FL_DOCKER_REGISTRY}
       - FL_ALGO_VIA_DOCKER=${FL_ALGO_VIA_DOCKER}
+      - MLFLOW_ENABLED=true
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_EXPERIMENT_NAME=PFG_IDS_Federated_Learning
+      - GIT_PYTHON_REFRESH=quiet
     volumes:
       - ./ia-dataapp/data/worker3:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -465,6 +479,7 @@ services:
       - clearinghouse
       - ecc-clearinghouse
       - fl-registry
+      - mlflow
 
   # ===========================================================================
   # WORKER 4 — Sin acceso al modelo FL (solo intenta acceder, es rechazado)
@@ -573,6 +588,10 @@ services:
       - CLEARING_HOUSE_ECC_URL=${CLEARING_HOUSE_ECC_URL}
       - FL_DOCKER_REGISTRY=${FL_DOCKER_REGISTRY}
       - FL_ALGO_VIA_DOCKER=${FL_ALGO_VIA_DOCKER}
+      - MLFLOW_ENABLED=true
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_EXPERIMENT_NAME=PFG_IDS_Federated_Learning
+      - GIT_PYTHON_REFRESH=quiet
     volumes:
       - ./ia-dataapp/data/worker4:/home/nobody/data/
       - ./ia-dataapp/log:/home/nobody/log
@@ -586,6 +605,7 @@ services:
       - clearinghouse
       - ecc-clearinghouse
       - fl-registry
+      - mlflow
 
   # ===========================================================================
   # FL DOCKER REGISTRY — Distribución de algoritmo FL via imagen Docker
@@ -597,6 +617,60 @@ services:
   #
   # Puerto host 5050 → 5000 (HTTP — uso interno Docker, no expuesto a Internet)
   # ===========================================================================
+  # Base de datos de MLflow. PostgreSQL evita bloqueos de SQLite cuando varios
+  # workers registran metricas y artefactos a la vez.
+  mlflow-db:
+    image: postgres:16-alpine
+    container_name: mlflow-db
+    networks:
+      - idsa
+    environment:
+      - POSTGRES_USER=mlflow
+      - POSTGRES_PASSWORD=mlflow
+      - POSTGRES_DB=mlflow
+    volumes:
+      - mlflow_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U mlflow -d mlflow" ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: always
+
+  # MLflow se coloca junto al stack FL para recoger metricas de cada ronda.
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: mlflow
+    networks:
+      - idsa
+    ports:
+      - "5005:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    command:
+      - mlflow
+      - server
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --workers
+      - "1"
+      - --backend-store-uri
+      - postgresql+psycopg2://mlflow:mlflow@mlflow-db:5432/mlflow
+      - --default-artifact-root
+      - /mlflow/artifacts
+      - --serve-artifacts
+      - --allowed-hosts
+      - mlflow,mlflow:5000,localhost,localhost:5005,127.0.0.1,127.0.0.1:5005
+      - --uvicorn-opts
+      - "--no-access-log"
+    depends_on:
+      mlflow-db:
+        condition: service_healthy
+    restart: always
+
+  # Registry privado usado para distribuir la imagen Docker del algoritmo FL.
   fl-registry:
     image: registry:2
     container_name: fl-registry
@@ -767,3 +841,5 @@ volumes:
   ollama_data: {}
   mongo_ch_data: {}
   fl_registry_data: {}
+  mlflow_data: {}
+  mlflow_db_data: {}
