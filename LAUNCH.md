@@ -1,11 +1,11 @@
-# 🚀 TRUE Connector — Professional Deployment Guide
+#  TRUE Connector — Professional Deployment Guide
 
 > **Architecture Overview:** BYOA (Bring Your Own Algorithm) pattern.
 > The Consumer provides a Python algorithm; the Provider executes it across clustered instances, governed by Usage Control policies.
 
 ---
 
-## 🛠️ Prerequisites & System Requirements
+##  Prerequisites & System Requirements
 
 Before you begin, ensure your environment meets these standards:
 
@@ -18,7 +18,7 @@ Before you begin, ensure your environment meets these standards:
 
 ---
 
-## ⚡ Quick Start Commands
+##  Quick Start Commands
 
 Efficient commands for managing the lifecycle of the connector.
 
@@ -66,7 +66,7 @@ Stops running containers but preserves data volumes and networks.
 docker compose down docker logs be-dataapp-consumer
 ```
 
-### 4. ⚠️ Deep Clean & Reset (Hard Reset)
+### 4.  Deep Clean & Reset (Hard Reset)
 **Caution:** This command removes EVERYTHING: containers, networks, volumes (data loss), and built images. Use this to reset the project to a pristine state.
 
 ```bash
@@ -87,7 +87,7 @@ docker exec be-dataapp-worker3 keytool -importcert -keystore //cert/truststoreEc
 
 ---
 
-## 🔍 Verification & Health Checks
+##  Verification & Health Checks
 
 Verify that the system is operational before proceeding.
 
@@ -98,7 +98,7 @@ Verify that the system is operational before proceeding.
 
 ---
 
-## 🧪 Algorithm Testing (Iris Classifier)
+##  Algorithm Testing (Iris Classifier)
 
 The deployed algorithm is a **k-Nearest Neighbors (KNN) classifier** trained on the Iris dataset.
 
@@ -124,7 +124,7 @@ curl -X POST http://localhost:8183/data \
 
 ---
 
-## 📂 Project Structure Overview
+##  Project Structure Overview
 
 A high-level map of the critical directories:
 

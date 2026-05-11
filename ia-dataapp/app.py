@@ -37,6 +37,14 @@ import numpy as np
 import requests
 import urllib3
 import uvicorn
+
+# MLflow es observabilidad, no parte critica del entrenamiento. Si Docker DNS o
+# el servidor MLflow fallan puntualmente, evitamos reintentos largos que dejen
+# hilos vivos y compitan con el transporte IDS/ECC.
+os.environ.setdefault("MLFLOW_HTTP_REQUEST_TIMEOUT", "5")
+os.environ.setdefault("MLFLOW_HTTP_REQUEST_MAX_RETRIES", "1")
+os.environ.setdefault("MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR", "0")
+
 try:
     import mlflow
 except Exception as exc:
@@ -520,6 +528,22 @@ def _mlflow_plotting():
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+        plt.rcParams.update({
+            "figure.facecolor": "#ffffff",
+            "axes.facecolor": "#ffffff",
+            "axes.edgecolor": "#d0d7de",
+            "axes.labelcolor": "#24292f",
+            "axes.titleweight": "bold",
+            "axes.titlesize": 13,
+            "axes.labelsize": 10,
+            "xtick.color": "#57606a",
+            "ytick.color": "#57606a",
+            "font.size": 9,
+            "legend.frameon": False,
+            "grid.color": "#d8dee4",
+            "grid.linewidth": 0.8,
+            "savefig.facecolor": "#ffffff",
+        })
         return plt
     except Exception as exc:
         log.warning(f"[MLflow] Graficos PNG no disponibles: {exc}")
@@ -530,7 +554,7 @@ def _mlflow_log_figure(name: str, fig):
     artifact_dir = os.path.join(OUTPUT_DIR, "_mlflow_artifacts")
     os.makedirs(artifact_dir, exist_ok=True)
     artifact_path = os.path.join(artifact_dir, name)
-    fig.savefig(artifact_path, dpi=160, bbox_inches="tight")
+    fig.savefig(artifact_path, dpi=180, bbox_inches="tight", facecolor="#ffffff")
     mlflow.log_artifact(artifact_path)
     try:
         fig.clf()
@@ -540,10 +564,32 @@ def _mlflow_log_figure(name: str, fig):
 
 def _mlflow_metric_color(value: float) -> str:
     if value >= 0.8:
-        return "#2e7d32"
+        return "#2da44e"
     if value >= 0.5:
-        return "#f9a825"
-    return "#c62828"
+        return "#bf8700"
+    return "#cf222e"
+
+
+def _mlflow_style_axes(ax, grid_axis: str = "y"):
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("#d0d7de")
+    ax.spines["bottom"].set_color("#d0d7de")
+    ax.grid(axis=grid_axis, alpha=0.65)
+    ax.set_axisbelow(True)
+
+
+def _mlflow_add_bar_labels(ax, bars, fmt: str = "{:.3f}", horizontal: bool = False):
+    for bar in bars:
+        if horizontal:
+            value = bar.get_width()
+            x = min(value + 0.015, ax.get_xlim()[1] * 0.98)
+            ax.text(x, bar.get_y() + bar.get_height() / 2, fmt.format(value),
+                    va="center", ha="left", fontsize=8, color="#57606a")
+        else:
+            value = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width() / 2, value + 0.015, fmt.format(value),
+                    va="bottom", ha="center", fontsize=8, color="#57606a")
 
 
 def _mlflow_log_per_class_metrics(per_class: dict, step: int | None = None):
@@ -568,15 +614,14 @@ def _mlflow_plot_f1_per_class(round_num: int, worker_id: str, per_class: dict):
     items.sort(key=lambda item: item[1])
     labels = [k for k, _ in items]
     values = [v for _, v in items]
-    fig, ax = plt.subplots(figsize=(9, max(3.5, len(items) * 0.45)))
+    fig, ax = plt.subplots(figsize=(9.5, max(3.8, len(items) * 0.52)))
     bars = ax.barh(labels, values, color=[_mlflow_metric_color(v) for v in values])
     ax.set_xlim(0, 1.0)
     ax.set_xlabel("F1-score")
-    ax.set_title(f"F1-score por clase - worker {worker_id}, ronda {round_num}")
-    ax.grid(axis="x", alpha=0.25)
-    for bar, value in zip(bars, values):
-        ax.text(min(value + 0.015, 0.98), bar.get_y() + bar.get_height() / 2,
-                f"{value:.3f}", va="center", fontsize=8)
+    ax.set_title(f"F1-score por clase | Worker {worker_id} | Ronda {round_num}", pad=14)
+    _mlflow_style_axes(ax, grid_axis="x")
+    ax.axvline(0.8, color="#2da44e", linewidth=1, linestyle="--", alpha=0.5)
+    _mlflow_add_bar_labels(ax, bars, horizontal=True)
     _mlflow_log_figure(f"f1_per_class_round_{round_num}_worker_{worker_id}.png", fig)
     plt.close(fig)
 
@@ -593,18 +638,23 @@ def _mlflow_plot_confusion_matrix(round_num: int, worker_id: str, cm: list, clas
     n = min(matrix.shape[0], matrix.shape[1], len(class_names) if class_names else matrix.shape[0])
     matrix = matrix[:n, :n]
     labels = [str(c) for c in (class_names[:n] if class_names else range(n))]
-    fig, ax = plt.subplots(figsize=(max(6, n * 1.2), max(5, n * 1.0)))
-    im = ax.imshow(matrix, cmap="Blues")
-    ax.set_title(f"Matriz de confusion - worker {worker_id}, ronda {round_num}")
+    row_totals = matrix.sum(axis=1, keepdims=True)
+    matrix_pct = np.divide(matrix, row_totals, out=np.zeros_like(matrix), where=row_totals != 0)
+    fig, ax = plt.subplots(figsize=(max(7, n * 1.35), max(5.6, n * 1.08)))
+    im = ax.imshow(matrix_pct, cmap="Blues", vmin=0, vmax=1)
+    ax.set_title(f"Matriz de confusion normalizada | Worker {worker_id} | Ronda {round_num}", pad=14)
     ax.set_xlabel("Predicho")
     ax.set_ylabel("Real")
     ax.set_xticks(range(n), labels=labels, rotation=35, ha="right")
     ax.set_yticks(range(n), labels=labels)
-    threshold = matrix.max() / 2 if matrix.max() > 0 else 0
+    threshold = 0.5
     for i in range(n):
         for j in range(n):
-            color = "white" if matrix[i, j] > threshold else "black"
-            ax.text(j, i, f"{int(matrix[i, j])}", ha="center", va="center", color=color, fontsize=8)
+            color = "white" if matrix_pct[i, j] > threshold else "#24292f"
+            ax.text(
+                j, i, f"{matrix_pct[i, j] * 100:.0f}%\n({int(matrix[i, j])})",
+                ha="center", va="center", color=color, fontsize=8
+            )
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     _mlflow_log_figure(f"confusion_matrix_round_{round_num}_worker_{worker_id}.png", fig)
     plt.close(fig)
@@ -627,11 +677,12 @@ def _mlflow_plot_feature_importance(round_num: int, worker_id: str, feature_impo
     items.sort(key=lambda item: item[1])
     labels = [k for k, _ in items]
     values = [v for _, v in items]
-    fig, ax = plt.subplots(figsize=(9, max(4, len(items) * 0.38)))
-    ax.barh(labels, values, color="#1565c0")
+    fig, ax = plt.subplots(figsize=(9.5, max(4.2, len(items) * 0.42)))
+    bars = ax.barh(labels, values, color="#0969da")
     ax.set_xlabel("Importancia relativa")
-    ax.set_title(f"Top variables del modelo - worker {worker_id}, ronda {round_num}")
-    ax.grid(axis="x", alpha=0.25)
+    ax.set_title(f"Top variables del modelo | Worker {worker_id} | Ronda {round_num}", pad=14)
+    _mlflow_style_axes(ax, grid_axis="x")
+    _mlflow_add_bar_labels(ax, bars, fmt="{:.2f}", horizontal=True)
     _mlflow_log_figure(f"feature_importance_round_{round_num}_worker_{worker_id}.png", fig)
     plt.close(fig)
 
@@ -644,7 +695,8 @@ def _mlflow_plot_worker_comparison(round_num: int, results: list):
     labels = [f"worker-{r.get('worker', i + 1)}" for i, r in enumerate(results)]
     x = np.arange(len(labels))
     width = 0.18
-    fig, ax = plt.subplots(figsize=(10, 5))
+    colors = ["#0969da", "#2da44e", "#bf8700", "#8250df"]
+    fig, ax = plt.subplots(figsize=(10.5, 5.4))
     for idx, metric in enumerate(metrics):
         values = [
             float((r.get("metrics") or {}).get(metric, 0.0))
@@ -652,13 +704,15 @@ def _mlflow_plot_worker_comparison(round_num: int, results: list):
             else 0.0
             for r in results
         ]
-        ax.bar(x + (idx - 1.5) * width, values, width, label=metric)
+        bars = ax.bar(x + (idx - 1.5) * width, values, width, label=metric, color=colors[idx])
+        if len(results) <= 4:
+            _mlflow_add_bar_labels(ax, bars)
     ax.set_xticks(x, labels=labels)
     ax.set_ylim(0, 1.0)
     ax.set_ylabel("Valor")
-    ax.set_title(f"Comparativa local de workers - ronda {round_num}")
+    ax.set_title(f"Comparativa local de workers | Ronda {round_num}", pad=14)
     ax.legend(ncol=2)
-    ax.grid(axis="y", alpha=0.25)
+    _mlflow_style_axes(ax, grid_axis="y")
     _mlflow_log_figure(f"worker_comparison_round_{round_num}.png", fig)
     plt.close(fig)
 
@@ -677,44 +731,54 @@ def _mlflow_plot_global_history(history: list):
         ("focus_f1", "Focus F1"),
         ("mcc", "MCC"),
     ]
-    fig, ax = plt.subplots(figsize=(10, 5.5))
+    colors = {
+        "accuracy": "#0969da",
+        "auc": "#2da44e",
+        "f1_macro": "#bf8700",
+        "focus_f1": "#8250df",
+        "mcc": "#cf222e",
+    }
+    fig, ax = plt.subplots(figsize=(10.5, 5.7))
     for key, label in metrics:
         values = [
             (entry.get("global_metrics") or {}).get(key)
             for entry in history
         ]
         if any(isinstance(v, (int, float, np.integer, np.floating)) for v in values):
-            ax.plot(rounds, values, marker="o", linewidth=2, label=label)
+            ax.plot(rounds, values, marker="o", markersize=4.5, linewidth=2.2,
+                    color=colors.get(key), label=label)
     ax.set_xlabel("Ronda FL")
     ax.set_ylabel("Valor")
-    ax.set_title("Evolucion global del modelo federado")
+    ax.set_title("Evolucion global del modelo federado", pad=14)
     ax.set_ylim(0, 1.05)
-    ax.grid(alpha=0.25)
+    _mlflow_style_axes(ax, grid_axis="y")
     ax.legend()
     _mlflow_log_figure("global_metrics_evolution.png", fig)
     plt.close(fig)
 
-    fig, ax = plt.subplots(figsize=(10, 4.8))
+    fig, ax = plt.subplots(figsize=(10.5, 4.9))
     losses = [(entry.get("global_metrics") or {}).get("loss") for entry in history]
-    ax.plot(rounds, losses, marker="o", linewidth=2, color="#c62828")
+    ax.plot(rounds, losses, marker="o", markersize=4.5, linewidth=2.2, color="#cf222e")
+    ax.fill_between(rounds, losses, color="#cf222e", alpha=0.08)
     ax.set_xlabel("Ronda FL")
     ax.set_ylabel("Loss")
-    ax.set_title("Evolucion de la perdida global")
-    ax.grid(alpha=0.25)
+    ax.set_title("Evolucion de la perdida global", pad=14)
+    _mlflow_style_axes(ax, grid_axis="y")
     _mlflow_log_figure("global_loss_evolution.png", fig)
     plt.close(fig)
 
-    fig, ax1 = plt.subplots(figsize=(10, 4.8))
+    fig, ax1 = plt.subplots(figsize=(10.5, 4.9))
     elapsed = [entry.get("elapsed_seconds", 0) for entry in history]
     workers = [entry.get("workers_ok", 0) for entry in history]
-    ax1.bar(rounds, elapsed, color="#546e7a", alpha=0.75, label="Tiempo")
+    bars = ax1.bar(rounds, elapsed, color="#6e7781", alpha=0.82, label="Tiempo")
     ax1.set_xlabel("Ronda FL")
     ax1.set_ylabel("Tiempo (s)")
-    ax1.grid(axis="y", alpha=0.25)
+    _mlflow_style_axes(ax1, grid_axis="y")
+    _mlflow_add_bar_labels(ax1, bars, fmt="{:.0f}")
     ax2 = ax1.twinx()
-    ax2.plot(rounds, workers, marker="o", color="#2e7d32", linewidth=2, label="Workers OK")
+    ax2.plot(rounds, workers, marker="o", color="#2da44e", linewidth=2.2, label="Workers OK")
     ax2.set_ylabel("Workers OK")
-    ax1.set_title("Tiempo por ronda y quorum de workers")
+    ax1.set_title("Tiempo por ronda y quorum de workers", pad=14)
     _mlflow_log_figure("round_time_and_workers.png", fig)
     plt.close(fig)
 
@@ -734,15 +798,14 @@ def _mlflow_plot_best_metrics(best_metrics: dict | None):
     labels = [k for k in keys if isinstance(best_metrics.get(k), (int, float, np.integer, np.floating))]
     if not values:
         return
-    fig, ax = plt.subplots(figsize=(10, 4.8))
-    ax.bar(labels, values, color=[_mlflow_metric_color(v) for v in values])
+    fig, ax = plt.subplots(figsize=(10.5, 4.9))
+    bars = ax.bar(labels, values, color=[_mlflow_metric_color(v) for v in values])
     ax.set_ylim(0, 1.05)
     ax.set_ylabel("Valor")
-    ax.set_title("Metricas del mejor modelo global")
+    ax.set_title("Metricas del mejor modelo global", pad=14)
     ax.tick_params(axis="x", rotation=25)
-    ax.grid(axis="y", alpha=0.25)
-    for idx, value in enumerate(values):
-        ax.text(idx, min(value + 0.02, 1.02), f"{value:.3f}", ha="center", fontsize=8)
+    _mlflow_style_axes(ax, grid_axis="y")
+    _mlflow_add_bar_labels(ax, bars)
     _mlflow_log_figure("best_global_metrics.png", fig)
     plt.close(fig)
 
@@ -758,17 +821,18 @@ def _mlflow_plot_transport_performance():
     idx = list(range(1, len(history) + 1))
     elapsed = [entry.get("elapsed_ms", 0) for entry in history]
     payload = [entry.get("payload_kb", 0) for entry in history]
-    colors = ["#1565c0" if entry.get("channel") == "ids_ecc" else "#ef6c00" for entry in history]
-    fig, ax1 = plt.subplots(figsize=(10, 4.8))
-    ax1.scatter(idx, elapsed, c=colors, s=35)
-    ax1.plot(idx, elapsed, color="#455a64", alpha=0.35)
+    colors = ["#0969da" if entry.get("channel") == "ids_ecc" else "#bf8700" for entry in history]
+    fig, ax1 = plt.subplots(figsize=(10.5, 4.9))
+    ax1.scatter(idx, elapsed, c=colors, s=44, edgecolor="#ffffff", linewidth=0.8, zorder=3)
+    ax1.plot(idx, elapsed, color="#57606a", alpha=0.35)
     ax1.set_xlabel("Transferencia registrada")
     ax1.set_ylabel("Latencia (ms)")
-    ax1.grid(alpha=0.25)
+    _mlflow_style_axes(ax1, grid_axis="y")
     ax2 = ax1.twinx()
-    ax2.plot(idx, payload, color="#6a1b9a", alpha=0.55, linewidth=1.8)
+    ax2.plot(idx, payload, color="#8250df", alpha=0.65, linewidth=2.0)
+    ax2.fill_between(idx, payload, color="#8250df", alpha=0.07)
     ax2.set_ylabel("Payload (KB)")
-    ax1.set_title("Rendimiento del transporte de pesos FL")
+    ax1.set_title("Rendimiento del transporte de pesos FL", pad=14)
     _mlflow_log_figure("transport_performance.png", fig)
     plt.close(fig)
 

@@ -1457,8 +1457,12 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
     # --- Mejor modelo global ---
     last = history[-1] if history else {}
     best_gm = model_data.get("metrics") or last.get("global_metrics", {})
+    best_round = model_data.get("round") or fl_data.get("best_round") or last.get("round")
 
     step("Metricas Globales del Mejor Modelo")
+    if best_round:
+        field("Mejor ronda", best_round)
+    field("Criterio de seleccion", "F1-macro -> Focus F1 -> Accuracy")
     metrics_order = [
         ("accuracy",    "Accuracy"),
         ("auc",         "AUC (macro)"),
@@ -1635,16 +1639,12 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
             continue
 
         w_url = f"https://localhost:{5000 + int(target_wid)}"
-        # ECC :8889 no es accesible desde DataApps -- redirigir al DataApp coordinator
-        # que implementa la logica del contrato IDS directamente en su endpoint /data.
-        _m_f6 = re.search(r"ecc-(worker\d+)", coord_ecc)
-        _fwd_dataapp = (
-            f"https://be-dataapp-{_m_f6.group(1)}:8500/data"
-            if _m_f6 else coord_ecc
-        )
+        # Mantener la ruta IDS completa: Worker -> ECC local -> ECC coordinator -> DataApp.
+        # Enviar aqui al /data interno saltaba el ECC remoto y podia devolver un
+        # RejectionMessage antes de que la DataApp del coordinator evaluase el contrato.
         payload = {
-            "Forward-To"      : _fwd_dataapp,
-            "connectorUri"    : coord_uri,   # URI IDS explicita -- evita inferencia incorrecta
+            "Forward-To"      : coord_ecc,
+            "connectorUri"    : coord_uri,   # URI IDS destino explicita -- evita inferencia incorrecta
             "messageType"     : "ContractRequestMessage",
             "requestedElement" : fl_res.get("@id", ""),
             "contractId"      : cid_val,
@@ -1691,9 +1691,10 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
                 else:
                     step("Resultado: Rejection Message (INESPERADO)")
                     _ids_log("in", "ids:RejectionMessage", f"coordinator-{cid}", f"worker-{target_wid}")
-                    reason = parsed.get("ids:rejectionReason", "?")
+                    reason = parsed.get("reason") or parsed.get("ids:rejectionReason", "?")
                     fail(f"Worker-{target_wid} -- acceso DENEGADO al modelo (sorprendente, era participante)")
                     field("Rejection Reason", str(reason), indent=8)
+                    field("raw_response", (raw[:200] + "...") if len(raw) > 200 else raw, indent=8)
 
             else:
                 step("Resultado: Respuesta IDS no reconocida")
@@ -2072,15 +2073,6 @@ def main():
         except:
             pass
 
-        try:
-            r_stats = requests.get("http://localhost:8100/api/stats/system", timeout=req_timeout)
-            if r_stats.ok:
-                s_data = r_stats.json().get("data", {}) if "data" in r_stats.json() else r_stats.json()
-                total = s_data.get("total_transactions", "?")
-                print(f"    {BOLD}Muestreo Auditado (Nº Logs){RESET}    : {total} transacciones IDS")
-        except:
-            pass
-
         print()
         print(f"  ► Explora el historial completo del notario digital en:")
         print(f"      {MAGENTA}http://localhost:8100/api/transactions?page_size=1000&sort_order=asc{RESET}")
@@ -2111,6 +2103,15 @@ def main():
             with open(export_path, "w", encoding="utf-8") as f:
                 f.write(r_export.text)
             print(f"    {GREEN}OK  Reporte oficial guardado en: {export_path}{RESET}")
+            try:
+                export_data = r_export.json()
+                total_exported = export_data.get("total_records")
+                if total_exported is None:
+                    exported_rows = export_data.get("data", [])
+                    total_exported = len(exported_rows) if isinstance(exported_rows, list) else "?"
+                print(f"    {BOLD}Muestreo Auditado (Nº Logs){RESET}    : {total_exported} transacciones IDS")
+            except Exception:
+                pass
         else:
             print(f"    {YELLOW}WARN No se pudo descargar el reporte (HTTP {r_export.status_code}){RESET}")
     except Exception as e:

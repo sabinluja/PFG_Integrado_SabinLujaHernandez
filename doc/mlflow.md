@@ -35,6 +35,15 @@ MLflow se anade como un servicio mas:
 - Volumen persistente de artefactos: `mlflow_data`.
 - Volumen persistente de base de datos: `mlflow_db_data`.
 
+Se desactiva `MLFLOW_SERVER_ENABLE_JOB_EXECUTION`, porque este PFG solo usa
+MLflow Tracking. Los jobs internos de MLflow 3.x arrancan Huey para tareas
+GenAI/online scoring y Huey usa una cola SQLite separada; al no necesitarse,
+desactivarlos evita mensajes `sqlite3.OperationalError: database is locked`.
+
+Las DataApps tratan MLflow como observabilidad no critica: si el servidor de
+tracking no responde o Docker tiene un fallo temporal de resolucion DNS, el
+registro falla rapido y el entrenamiento federado continua por IDS/ECC.
+
 Los DataApps registran runs automaticamente cuando hacen entrenamiento:
 
 - Run local: `worker-N-round-R-local`.
