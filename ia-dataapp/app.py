@@ -1657,7 +1657,7 @@ def _proxy_local_endpoint_request(method: str, path: str, body=None, timeout: in
     kwargs = {
         "timeout": max(1, int(timeout or 240)),
         "verify": False,
-        "headers": {"X-Client-Transport": "proxy-artifact-dispatcher"},
+        "headers": {"X-Client-Transport": "proxy-message-dispatcher"},
     }
     if method == "POST":
         kwargs["json"] = body if body is not None else {}
@@ -1679,6 +1679,7 @@ def _proxy_artifact_action(payload) -> str:
     if isinstance(payload, dict):
         return (
             payload.get("action")
+            or payload.get("operation")
             or payload.get("command")
             or payload.get("message")
             or ""
@@ -1693,6 +1694,21 @@ def _proxy_artifact_action_payload(payload):
         if "payload" in payload:
             return payload.get("payload")
     return payload
+
+
+def _proxy_control_action(body: dict, payload) -> str:
+    """
+    Operacion local del proxy. No sustituye a messageType: messageType sigue
+    siendo el tipo IDS y esta clave solo indica que el Forward-To apunta al
+    propio conector y debe despacharse al handler interno equivalente.
+    """
+    return (
+        body.get("proxyAction")
+        or body.get("proxyOperation")
+        or _proxy_artifact_action(payload)
+        or body.get("message")
+        or ""
+    )
 
 
 def _proxy_forward_points_to_local_connector(forward_to: str | None) -> bool:
@@ -1715,13 +1731,13 @@ def _proxy_forward_points_to_local_connector(forward_to: str | None) -> bool:
 
 def _proxy_execute_message(action: str, payload=None, timeout: int = 240) -> dict:
     """
-    Dispatcher local opcional: ArtifactRequestMessage + payload.action='fl_start'
-    ejecuta directamente el endpoint interno equivalente sin convertir
-    messageType en un endpoint. El messageType sigue siendo IDS puro.
+    Dispatcher local opcional: messageType conserva el tipo IDS y proxyAction
+    selecciona el handler interno equivalente cuando Forward-To apunta al
+    propio conector.
     """
     normalized = (action or "").strip().lower().replace("-", "_")
     endpoint_body = payload if payload is not None else {}
-    log.info(f"[/proxy dispatcher] payload.action={action} payload_type={type(payload).__name__}")
+    log.info(f"[/proxy dispatcher] operation={action} payload_type={type(payload).__name__}")
 
     if normalized in ("health", "get_health", "/health"):
         target = ("GET", "/health", None)
@@ -1787,7 +1803,7 @@ def _proxy_execute_message(action: str, payload=None, timeout: int = 240) -> dic
     log.info(f"[/proxy dispatcher] action={action} -> {method} {path}")
     result = _proxy_local_endpoint_request(method, path, endpoint_payload, timeout=timeout)
     result.update({
-        "transport": "proxy-artifact-dispatcher",
+        "transport": "proxy-message-dispatcher",
         "action": action,
         "message": action,
         "target_method": method,
@@ -1814,6 +1830,23 @@ async def proxy(request: Request):
                 "supported": sorted(_PROXY_IDS_MESSAGE_TYPES),
             },
         )
+
+    local_action = _proxy_control_action(body, payload_in)
+    if local_action and _proxy_forward_points_to_local_connector(body.get("Forward-To")):
+        log.info(
+            "[/proxy LOCAL DISPATCH] "
+            f"messageType={message_type} Forward-To={body.get('Forward-To')} "
+            f"operation={local_action}"
+        )
+        result = await asyncio.to_thread(
+            _proxy_execute_message,
+            local_action,
+            _proxy_artifact_action_payload(payload_in),
+            timeout,
+        )
+        result["messageType"] = message_type
+        response_status = 200 if result.get("ok") else result.get("status_code", 400)
+        return JSONResponse(status_code=response_status, content=result)
 
     try:
         if short_type == "DescriptionRequestMessage":
@@ -1920,14 +1953,14 @@ async def proxy(request: Request):
                     return _proxy_bad_request(
                         message_type,
                         missing,
-                        "ArtifactRequestMessage de control requiere Forward-To WSS local, artifact tecnico y contrato tecnico; la accion va en payload.action.",
+                        "ArtifactRequestMessage local requiere Forward-To WSS local, artifact, contrato y proxyAction/payload.operation.",
                     )
                 log.info(
                     "[/proxy ArtifactRequest CONTROL local] "
                     f"Forward-To={body.get('Forward-To')} "
                     f"requestedArtifact={requested_artifact} "
                     f"transferContract={transfer_contract} "
-                    f"payload.action={artifact_action}"
+                    f"operation={artifact_action}"
                 )
                 result = await asyncio.to_thread(
                     _proxy_execute_message,
@@ -5278,7 +5311,7 @@ async def ids_data(request: Request):
                 "[ArtifactRequest CONTROL] "
                 f"requestedArtifact={requested_artifact_id} "
                 f"transferContract={transfer_contract_id} "
-                f"payload.action={artifact_action}"
+                f"operation={artifact_action}"
             )
             result = _proxy_execute_message(
                 artifact_action,
@@ -7268,7 +7301,7 @@ def _client_ws_local_request(method: str, path: str, body, timeout: int) -> dict
     """
     Puente WS cliente->DataApp hacia la capa IDS /proxy.
     El cliente no ejecuta endpoints funcionales directamente por WebSocket:
-    siempre envia POST /proxy y /proxy interpreta messageType/payload.action.
+    siempre envia POST /proxy y /proxy interpreta messageType + proxyAction.
     """
     method = (method or "GET").upper()
     if method != "POST":
@@ -7314,8 +7347,8 @@ async def ws_client_control(websocket: WebSocket):
 
     La DataApp responde con el mismo id y el resultado de /proxy.
     /proxy conserva la semantica IDS: messageType es el tipo IDS real y
-    payload.action indica la accion local cuando se solicita un artifact
-    de control del propio conector.
+    proxyAction indica la operacion local cuando el Forward-To apunta al
+    propio conector.
     """
     client_id = websocket.query_params.get("client_id") or f"client-{uuid.uuid4()}"
     await websocket.accept()

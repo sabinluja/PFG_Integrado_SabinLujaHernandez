@@ -315,44 +315,53 @@ def _url_parts_for_ws(url):
     return base_url, path
 
 
-def _proxy_message_for_ws_request(method, path):
+def _proxy_spec_for_ws_request(method, path):
     """
-    Traduce la URL logica a una accion de artifact para /proxy.
-    El transporte externo sigue siendo /ws/client, pero la DataApp registra
-    despacho_interno=POST /proxy y /proxy decide el endpoint final a partir
-    de messageType=ArtifactRequestMessage + payload.action.
+    Traduce la URL logica a una peticion IDS/proxy semantica.
+    messageType conserva el tipo IDS real; la operacion local viaja aparte
+    como proxyAction/payload.operation para que no se codifiquen endpoints
+    dentro de messageType.
     """
     method = (method or "GET").upper()
     clean_path = (path or "/").split("?", 1)[0]
     mapping = {
-        ("GET", "/health"): "health",
-        ("GET", "/status"): "status",
-        ("GET", "/metrics"): "metrics",
-        ("GET", "/transport/status"): "transport_status",
-        ("GET", "/ids/self-description"): "ids_self_description",
-        ("GET", "/ids/contract"): "ids_contract",
-        ("GET", "/broker/connectors"): "broker_connectors",
-        ("POST", "/broker/discover"): "broker_discover",
-        ("POST", "/broker/discover/worker"): "broker_discover_worker",
-        ("GET", "/dataset/info"): "dataset_info",
-        ("GET", "/dataset/all-columns"): "dataset_all_columns",
-        ("GET", "/dataset/llm-recommend"): "dataset_llm_recommend",
-        ("POST", "/catalog/publish-datasets"): "catalog_publish_datasets",
-        ("POST", "/fl/fetch-algorithm"): "fl_fetch_algorithm",
-        ("POST", "/fl/start"): "fl_start",
-        ("GET", "/fl/status"): "fl_status",
-        ("GET", "/fl/docker-image-status"): "fl_docker_image_status",
-        ("GET", "/fl/results"): "fl_results",
-        ("GET", "/fl/model"): "fl_model",
-        ("POST", "/fl/negotiate"): "fl_negotiate",
-        ("POST", "/fl/accept-negotiation"): "fl_accept_negotiation",
-        ("POST", "/fl/receive-algorithm"): "fl_receive_algorithm",
-        ("POST", "/fl/receive-global-weights"): "fl_receive_global_weights",
-        ("POST", "/fl/receive-local-weights"): "fl_receive_local_weights",
-        ("POST", "/system/reset"): "system_reset",
-        ("POST", "/system/reset-all"): "system_reset_all",
+        ("GET", "/health"): ("QueryMessage", "health"),
+        ("GET", "/status"): ("QueryMessage", "status"),
+        ("GET", "/metrics"): ("QueryMessage", "metrics"),
+        ("GET", "/transport/status"): ("QueryMessage", "transport_status"),
+        ("GET", "/ids/self-description"): ("DescriptionRequestMessage", "ids_self_description"),
+        ("GET", "/ids/contract"): ("ContractRequestMessage", "ids_contract"),
+        ("GET", "/broker/connectors"): ("QueryMessage", "broker_connectors"),
+        ("POST", "/broker/discover"): ("DescriptionRequestMessage", "broker_discover"),
+        ("POST", "/broker/discover/worker"): ("DescriptionRequestMessage", "broker_discover_worker"),
+        ("GET", "/dataset/info"): ("DescriptionRequestMessage", "dataset_info"),
+        ("GET", "/dataset/all-columns"): ("DescriptionRequestMessage", "dataset_all_columns"),
+        ("GET", "/dataset/llm-recommend"): ("DescriptionRequestMessage", "dataset_llm_recommend"),
+        ("POST", "/catalog/publish-datasets"): ("ResourceUpdateMessage", "catalog_publish_datasets"),
+        ("POST", "/fl/fetch-algorithm"): ("ArtifactRequestMessage", "fl_fetch_algorithm"),
+        ("POST", "/fl/start"): ("ArtifactRequestMessage", "fl_start"),
+        ("GET", "/fl/status"): ("QueryMessage", "fl_status"),
+        ("GET", "/fl/docker-image-status"): ("QueryMessage", "fl_docker_image_status"),
+        ("GET", "/fl/results"): ("QueryMessage", "fl_results"),
+        ("GET", "/fl/model"): ("ArtifactRequestMessage", "fl_model"),
+        ("POST", "/fl/negotiate"): ("ContractRequestMessage", "fl_negotiate"),
+        ("POST", "/fl/accept-negotiation"): ("ContractAgreementMessage", "fl_accept_negotiation"),
+        ("POST", "/fl/receive-algorithm"): ("ArtifactRequestMessage", "fl_receive_algorithm"),
+        ("POST", "/fl/receive-global-weights"): ("ArtifactRequestMessage", "fl_receive_global_weights"),
+        ("POST", "/fl/receive-local-weights"): ("ArtifactRequestMessage", "fl_receive_local_weights"),
+        ("POST", "/system/reset"): ("NotificationMessage", "system_reset"),
+        ("POST", "/system/reset-all"): ("NotificationMessage", "system_reset_all"),
     }
-    return mapping.get((method, clean_path))
+    spec = mapping.get((method, clean_path))
+    if not spec:
+        return None
+    message_type, operation = spec
+    return {"messageType": message_type, "operation": operation}
+
+
+def _proxy_message_for_ws_request(method, path):
+    spec = _proxy_spec_for_ws_request(method, path)
+    return spec.get("operation") if spec else None
 
 
 def _safe_uri_segment(value):
@@ -383,27 +392,38 @@ def _proxy_wss_forward_for_base_url(base_url):
 
 
 def _proxy_body_for_local_request(method, path, body=None, timeout=240, base_url=None):
-    proxy_action = _proxy_message_for_ws_request(method, path)
-    if not proxy_action:
+    proxy_spec = _proxy_spec_for_ws_request(method, path)
+    if not proxy_spec:
         return None
+    proxy_action = proxy_spec["operation"]
+    message_type = proxy_spec["messageType"]
     forward_to = os.getenv("PFG_PROXY_FORWARD_TO") or _proxy_wss_forward_for_base_url(base_url)
     forward_to_internal = os.getenv("PFG_PROXY_FORWARD_TO_INTERNAL") or forward_to
     requested_artifact, transfer_contract = _proxy_control_ids_refs(proxy_action)
-    return {
+    proxy_body = {
         "multipart": "wss",
         "Forward-To": forward_to,
         "Forward-To-Internal": forward_to_internal,
-        "messageType": "ArtifactRequestMessage",
-        "requestedArtifact": requested_artifact,
-        "transferContract": transfer_contract,
+        "messageType": message_type,
+        "proxyAction": proxy_action,
         "payload": {
-            "action": proxy_action,
+            "type": "local_proxy_request",
+            "operation": proxy_action,
             "body": body if body is not None else {},
             "logicalMethod": method,
             "logicalPath": path,
         },
         "timeout": timeout,
     }
+    if message_type == "ArtifactRequestMessage":
+        proxy_body["requestedArtifact"] = requested_artifact
+        proxy_body["transferContract"] = transfer_contract
+    elif message_type == "ContractRequestMessage":
+        proxy_body["requestedElement"] = requested_artifact
+    elif message_type == "ContractAgreementMessage":
+        proxy_body["requestedArtifact"] = requested_artifact
+        proxy_body["transferContract"] = transfer_contract
+    return proxy_body
 
 
 def _unwrap_proxy_body(parsed):
@@ -457,7 +477,7 @@ def _ws_rpc(method, url, body=None, timeout=240):
         proxy_body = _proxy_body_for_local_request(method, path, body=body, timeout=timeout, base_url=base_url)
         if proxy_body:
             payload = proxy_body.get("payload") if isinstance(proxy_body.get("payload"), dict) else {}
-            proxy_action = payload.get("action")
+            proxy_action = proxy_body.get("proxyAction") or payload.get("operation") or payload.get("action")
             body = proxy_body
             method = "POST"
             path = "/proxy"
@@ -491,7 +511,7 @@ def http_get(url, timeout=240, quiet=False):
             ws_resp = _ws_rpc("GET", url, timeout=timeout)
             if ws_resp is not None:
                 proxy_hop = " -> /proxy" if ws_resp.get("proxy_action") else ""
-                proxy_msg = f" payload.action={ws_resp.get('proxy_action')}" if ws_resp.get("proxy_action") else ""
+                proxy_msg = f" proxyAction={ws_resp.get('proxy_action')}" if ws_resp.get("proxy_action") else ""
                 if not quiet:
                     info(
                         "[WS cliente->DataApp] OK "
@@ -534,7 +554,7 @@ def http_post(url, body, timeout=240):
             ws_resp = _ws_rpc("POST", url, body=body, timeout=timeout)
             if ws_resp is not None:
                 proxy_hop = " -> /proxy" if ws_resp.get("proxy_action") else ""
-                proxy_msg = f" payload.action={ws_resp.get('proxy_action')}" if ws_resp.get("proxy_action") else ""
+                proxy_msg = f" proxyAction={ws_resp.get('proxy_action')}" if ws_resp.get("proxy_action") else ""
                 info(
                     "[WS cliente->DataApp] OK "
                     f"transporte=WSS metodo=POST url_rest_logica={url} "
@@ -585,7 +605,7 @@ def http_post_raw(url, body, timeout=240):
             ws_resp = _ws_rpc("POST", url, body=body, timeout=timeout)
             if ws_resp is not None:
                 proxy_hop = " -> /proxy" if ws_resp.get("proxy_action") else ""
-                proxy_msg = f" payload.action={ws_resp.get('proxy_action')}" if ws_resp.get("proxy_action") else ""
+                proxy_msg = f" proxyAction={ws_resp.get('proxy_action')}" if ws_resp.get("proxy_action") else ""
                 info(
                     "[WS cliente->DataApp] OK "
                     f"transporte=WSS metodo=POST url_rest_logica={url} "
@@ -1272,9 +1292,9 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
     if CLIENT_WS_ENABLED and _WS_AVAILABLE:
         ws_url = coordinator_url.replace("https://", "wss://").replace("http://", "ws://")
         print(f"      {GRAY}Entrada real : WebSocket {ws_url}/ws/client{RESET}")
-        print(f"      {GRAY}Despacho    : POST /proxy  (messageType=ArtifactRequestMessage; payload.action=fl_status){RESET}")
+        print(f"      {GRAY}Despacho    : POST /proxy  (messageType=QueryMessage; proxyAction=fl_status){RESET}")
     else:
-        print(f"      {GRAY}Endpoint    : POST {coordinator_url}/proxy  (messageType=ArtifactRequestMessage; payload.action=fl_status){RESET}")
+        print(f"      {GRAY}Endpoint    : POST {coordinator_url}/proxy  (messageType=QueryMessage; proxyAction=fl_status){RESET}")
     print(f"      {GRAY}Workers participantes: {', '.join('worker-' + w for w in accepted_wids)}{RESET}")
 
     step("Verificacion de transporte conservado (GET /transport/status)")
@@ -1297,9 +1317,9 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
     Monitorizacion por polling HTTP (GET /fl/status cada 5s).
     """
     if CLIENT_WS_ENABLED and _WS_AVAILABLE:
-        info("Monitorizando via WebSocket /ws/client -> POST /proxy payload.action=fl_status cada 5s...")
+        info("Monitorizando via WebSocket /ws/client -> POST /proxy proxyAction=fl_status cada 5s...")
     else:
-        info("Monitorizando via POST /proxy payload.action=fl_status cada 5s...")
+        info("Monitorizando via POST /proxy proxyAction=fl_status cada 5s...")
 
     poll_timeout = max(30, min(int(req_timeout or 240), 120))
 
