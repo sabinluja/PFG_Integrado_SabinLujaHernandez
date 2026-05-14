@@ -39,6 +39,7 @@ import re
 import os
 import threading
 import ssl
+import textwrap
 from urllib.parse import urlparse
 try:
     import msvcrt
@@ -115,9 +116,24 @@ BLUE    = "\033[94m"
 MAGENTA = "\033[95m"
 WHITE   = "\033[97m"
 
+LOG_WIDTH = 78
 
-def _sep(char="=", width=72, color=CYAN):
+
+def _sep(char="=", width=LOG_WIDTH, color=CYAN):
     print(f"{color}{char * width}{RESET}")
+
+
+def _wrap_log_text(text, indent=4, width=LOG_WIDTH, color=GRAY):
+    pad = " " * indent
+    body_width = max(30, width - indent)
+    normalized = textwrap.dedent(str(text)).strip()
+    paragraphs = re.split(r"\n\s*\n", normalized)
+    for p_idx, paragraph in enumerate(paragraphs):
+        line = " ".join(part.strip() for part in paragraph.splitlines() if part.strip())
+        if p_idx:
+            print()
+        for wrapped in textwrap.wrap(line, width=body_width, break_on_hyphens=False):
+            print(f"{pad}{color}{wrapped}{RESET}")
 
 
 def banner(title, subtitle=""):
@@ -131,37 +147,37 @@ def banner(title, subtitle=""):
 
 def phase(num, title, description=""):
     print()
-    _sep("-", color=BLUE)
-    print(f"{BOLD}{BLUE}  FASE {num}  --  {title}{RESET}")
+    _sep("=", color=BLUE)
+    print(f"{BOLD}{BLUE}  PHASE {str(num).zfill(2)}{RESET}  {BOLD}{WHITE}{title}{RESET}")
     if description:
-        for line in description.splitlines():
-            print(f"{GRAY}  {line}{RESET}")
-    _sep("-", color=BLUE)
+        _sep("-", color=GRAY)
+        _wrap_log_text(description, indent=2, color=GRAY)
+    _sep("=", color=BLUE)
 
 
 def step(label):
-    print(f"\n  {BOLD}{WHITE}▸ {label}{RESET}")
+    print(f"\n  {BOLD}{WHITE}STEP  {label}{RESET}")
 
 
 def substep(msg):
-    print(f"    {GRAY}-> {msg}{RESET}")
+    print(f"    {GRAY}[CALL] {msg}{RESET}")
 
 
 def ok(msg):
-    print(f"    {GREEN}OK  {msg}{RESET}")
+    print(f"    {GREEN}[OK]   {msg}{RESET}")
 
 
 def fail(msg):
-    print(f"    {RED}ERR {msg}{RESET}")
+    print(f"    {RED}[ERR]  {msg}{RESET}")
     sys.exit(1)
 
 
 def warn(msg):
-    print(f"    {YELLOW}WARN {msg}{RESET}")
+    print(f"    {YELLOW}[WARN] {msg}{RESET}")
 
 
 def info(msg):
-    print(f"    {GRAY}INFO {msg}{RESET}")
+    print(f"    {GRAY}[INFO] {msg}{RESET}")
 
 
 def field(label, value, indent=4):
@@ -170,6 +186,33 @@ def field(label, value, indent=4):
     if len(val) > 110:
         val = val[:107] + "..."
     print(f"{pad}{MAGENTA}{label:<28}{RESET} {val}")
+
+
+def _log_rule(indent=4, char="-", width=64, color=GRAY):
+    print(f"{' ' * indent}{color}{char * width}{RESET}")
+
+
+def _log_event(tag, title, detail="", status="", tag_color=WHITE,
+               status_color=GREEN, indent=4):
+    pad = " " * indent
+    tag_txt = f"[{tag}]"
+    title_txt = str(title)
+    if len(title_txt) > 44:
+        title_txt = title_txt[:41] + "..."
+    status_txt = f" {status_color}{status:>9}{RESET}" if status else ""
+    print(f"{pad}{tag_color}{tag_txt:<10}{RESET}"
+          f"{BOLD}{WHITE}{title_txt:<44}{RESET}{status_txt}")
+    if detail:
+        for line in str(detail).splitlines():
+            print(f"{pad}  {GRAY}{line}{RESET}")
+
+
+def _log_kv(label, value, indent=6, label_width=28):
+    pad = " " * indent
+    val = str(value)
+    if len(val) > 92:
+        val = val[:89] + "..."
+    print(f"{pad}{GRAY}{label:<{label_width}}{RESET}{WHITE}{val}{RESET}")
 
 
 def ids_arrow(direction, msg_type, src, dst):
@@ -203,6 +246,7 @@ SESSION.verify = False
 CLIENT_WS_ENABLED = os.getenv("PFG_CLIENT_DATAAPP_WS", "true").lower() not in ("0", "false", "no")
 CLIENT_WS_OPEN_TIMEOUT = float(os.getenv("PFG_CLIENT_WS_OPEN_TIMEOUT", "8"))
 CLIENT_WS_CONNECT_RETRIES = int(os.getenv("PFG_CLIENT_WS_CONNECT_RETRIES", "2"))
+PRESENTATION_VERBOSE = os.getenv("PFG_PRESENTATION_VERBOSE", "false").lower() in ("1", "true", "yes")
 PROXY_CONTROL_ARTIFACT_BASE = os.getenv(
     "PFG_PROXY_CONTROL_ARTIFACT_BASE",
     "http://w3id.org/engrd/connector/artifact/fl-control",
@@ -268,11 +312,12 @@ class DataAppWebSocketClient:
                     time.sleep(0.5)
         else:
             raise last_exc
-        info(
-            "[WS cliente->DataApp] CONEXION ABIERTA "
-            f"transporte=WSS url={ws_url} "
-            f"dataapp_worker={hello.get('instance', '?')}"
-        )
+        if PRESENTATION_VERBOSE:
+            info(
+                "[client->DataApp WS] connection open "
+                f"transport=WSS url={ws_url} "
+                f"dataapp_worker={hello.get('instance', '?')}"
+            )
 
     def request(self, method, path, body=None, timeout=240):
         self._connect(timeout)
@@ -291,7 +336,7 @@ class DataAppWebSocketClient:
             if response.get("id") == request_id:
                 if not response.get("ok"):
                     raise RuntimeError(
-                        f"WS {method} {path} devolvio "
+                        f"WS {method} {path} returned "
                         f"{response.get('status_code')}: {response.get('error') or response.get('body')}"
                     )
                 return response
@@ -433,7 +478,7 @@ def _unwrap_proxy_body(parsed):
         return parsed
     if not parsed.get("ok"):
         raise RuntimeError(
-            f"/proxy {parsed.get('action') or parsed.get('message') or parsed.get('messageType')} devolvio "
+            f"/proxy {parsed.get('action') or parsed.get('message') or parsed.get('messageType')} returned "
             f"{parsed.get('status_code')}: {parsed.get('error') or parsed.get('body') or parsed.get('text')}"
         )
     if "body" in parsed:
@@ -451,7 +496,7 @@ def _unwrap_proxy_dispatch_response(ws_resp):
         return ws_resp
     if not body.get("ok"):
         raise RuntimeError(
-            f"/proxy {body.get('action') or body.get('message') or body.get('messageType')} devolvio "
+            f"/proxy {body.get('action') or body.get('message') or body.get('messageType')} returned "
             f"{body.get('status_code')}: {body.get('error') or body.get('body') or body.get('text')}"
         )
     ws_resp["proxy_action"] = body.get("action") or body.get("message")
@@ -502,9 +547,33 @@ def _close_ws_rpc_clients():
     _WS_RPC_CLIENTS.clear()
 
 
+def _call_description(method, url):
+    _, path = _url_parts_for_ws(url)
+    path = (path or "").split("?", 1)[0]
+    labels = {
+        ("GET", "/health"): "Check DataApp health",
+        ("GET", "/status"): "Inspect coordinator status",
+        ("GET", "/metrics"): "Collect transport performance metrics",
+        ("GET", "/transport/status"): "Verify active transport channel",
+        ("GET", "/ids/self-description"): "Inspect the IDS self-description catalog",
+        ("GET", "/ids/contract"): "Inspect IDS contract metadata",
+        ("GET", "/broker/connectors"): "Read connector topology from the Metadata Broker",
+        ("POST", "/broker/discover"): "Evaluate peer dataset catalogs",
+        ("POST", "/broker/discover/worker"): "Evaluate peer dataset catalog",
+        ("POST", "/fl/fetch-algorithm"): "Prepare the federated learning algorithm artifact",
+        ("POST", "/fl/negotiate"): "Negotiate IDS contracts with compatible peers",
+        ("POST", "/fl/start"): "Start federated learning execution",
+        ("GET", "/fl/status"): "Read federated learning status",
+        ("GET", "/fl/results"): "Collect final training results",
+        ("GET", "/fl/model"): "Fetch final global model artifact",
+        ("POST", "/proxy"): "Send an IDS control request through the DataApp proxy",
+    }
+    return labels.get((method, path), f"{method} request through the DataApp")
+
+
 def http_get(url, timeout=240, quiet=False):
     if not quiet:
-        substep(f"GET  {url}")
+        substep(_call_description("GET", url))
     ws_exc = None
     if CLIENT_WS_ENABLED and _WS_AVAILABLE:
         try:
@@ -512,11 +581,11 @@ def http_get(url, timeout=240, quiet=False):
             if ws_resp is not None:
                 proxy_hop = " -> /proxy" if ws_resp.get("proxy_action") else ""
                 proxy_msg = f" proxyAction={ws_resp.get('proxy_action')}" if ws_resp.get("proxy_action") else ""
-                if not quiet:
+                if PRESENTATION_VERBOSE and not quiet:
                     info(
-                        "[WS cliente->DataApp] OK "
-                        f"transporte=WSS metodo=GET url_rest_logica={url} "
-                        f"despachado_por=/ws/client{proxy_hop}{proxy_msg} "
+                        "[client->DataApp WS] OK "
+                        f"transport=WSS method=GET logical_url={url} "
+                        f"dispatched_by=/ws/client{proxy_hop}{proxy_msg} "
                         f"elapsed_ms={ws_resp.get('elapsed_ms', '?')}"
                     )
                 body = ws_resp.get("body")
@@ -535,19 +604,20 @@ def http_get(url, timeout=240, quiet=False):
             result = _unwrap_proxy_body(r.json())
         except Exception:
             result = {"_raw": r.text}
-        if ws_exc and not quiet:
-            info(f"[WS cliente->DataApp] handshake no disponible; fallback REST /proxy OK ({ws_exc})")
+        if ws_exc and PRESENTATION_VERBOSE and not quiet:
+            info(f"[client->DataApp WS] unavailable; REST /proxy fallback OK ({ws_exc})")
         return result
     except requests.exceptions.ConnectionError:
-        fail(f"Conexion rechazada en {url} -- el container no esta levantado?")
+        fail(f"Connection refused at {url} -- is the container running?")
     except requests.exceptions.ReadTimeout:
-        fail(f"Timeout ({timeout}s) esperando {url}")
+        fail(f"Timeout ({timeout}s) waiting for {url}")
     except requests.exceptions.HTTPError as exc:
-        fail(f"HTTP {exc.response.status_code} en {url}")
+        fail(f"HTTP {exc.response.status_code} at {url}")
 
 
-def http_post(url, body, timeout=240):
-    substep(f"POST {url}")
+def http_post(url, body, timeout=240, quiet=False):
+    if not quiet:
+        substep(_call_description("POST", url))
     ws_exc = None
     if CLIENT_WS_ENABLED and _WS_AVAILABLE:
         try:
@@ -555,12 +625,13 @@ def http_post(url, body, timeout=240):
             if ws_resp is not None:
                 proxy_hop = " -> /proxy" if ws_resp.get("proxy_action") else ""
                 proxy_msg = f" proxyAction={ws_resp.get('proxy_action')}" if ws_resp.get("proxy_action") else ""
-                info(
-                    "[WS cliente->DataApp] OK "
-                    f"transporte=WSS metodo=POST url_rest_logica={url} "
-                    f"despachado_por=/ws/client{proxy_hop}{proxy_msg} "
-                    f"elapsed_ms={ws_resp.get('elapsed_ms', '?')}"
-                )
+                if PRESENTATION_VERBOSE and not quiet:
+                    info(
+                        "[client->DataApp WS] OK "
+                        f"transport=WSS method=POST logical_url={url} "
+                        f"dispatched_by=/ws/client{proxy_hop}{proxy_msg} "
+                        f"elapsed_ms={ws_resp.get('elapsed_ms', '?')}"
+                    )
                 parsed_body = ws_resp.get("body")
                 return parsed_body if parsed_body is not None else {"_raw": ws_resp.get("text", "")}
         except Exception as exc:
@@ -577,16 +648,16 @@ def http_post(url, body, timeout=240):
             result = _unwrap_proxy_body(r.json())
         except Exception:
             result = {"_raw": r.text}
-        if ws_exc:
-            info(f"[WS cliente->DataApp] handshake no disponible; fallback REST /proxy OK ({ws_exc})")
+        if ws_exc and PRESENTATION_VERBOSE and not quiet:
+            info(f"[client->DataApp WS] unavailable; REST /proxy fallback OK ({ws_exc})")
         return result
     except requests.exceptions.ConnectionError:
-        fail(f"Conexion rechazada en {url}")
+        fail(f"Connection refused at {url}")
     except requests.exceptions.ReadTimeout:
         fail(
-            f"Timeout ({timeout}s) esperando respuesta de {url}\n"
-            f"      El ECC TRUE Connector puede tardar en la primera llamada (token DAPS).\n"
-            f"      Usa --timeout N para subir el limite."
+            f"Timeout ({timeout}s) waiting for {url}\n"
+            f"      The ECC TRUE Connector can take longer on the first request (DAPS token).\n"
+            f"      Use --timeout N to increase the limit."
         )
     except requests.exceptions.HTTPError as exc:
         body_txt = ""
@@ -594,11 +665,11 @@ def http_post(url, body, timeout=240):
             body_txt = exc.response.text[:400]
         except Exception:
             pass
-        fail(f"HTTP {exc.response.status_code} en {url}\n      {body_txt}")
+        fail(f"HTTP {exc.response.status_code} at {url}\n      {body_txt}")
 
 
 def http_post_raw(url, body, timeout=240):
-    substep(f"POST {url}")
+    substep(_call_description("POST", url))
     ws_exc = None
     if CLIENT_WS_ENABLED and _WS_AVAILABLE:
         try:
@@ -606,12 +677,13 @@ def http_post_raw(url, body, timeout=240):
             if ws_resp is not None:
                 proxy_hop = " -> /proxy" if ws_resp.get("proxy_action") else ""
                 proxy_msg = f" proxyAction={ws_resp.get('proxy_action')}" if ws_resp.get("proxy_action") else ""
-                info(
-                    "[WS cliente->DataApp] OK "
-                    f"transporte=WSS metodo=POST url_rest_logica={url} "
-                    f"despachado_por=/ws/client{proxy_hop}{proxy_msg} "
-                    f"elapsed_ms={ws_resp.get('elapsed_ms', '?')}"
-                )
+                if PRESENTATION_VERBOSE:
+                    info(
+                        "[client->DataApp WS] OK "
+                        f"transport=WSS method=POST logical_url={url} "
+                        f"dispatched_by=/ws/client{proxy_hop}{proxy_msg} "
+                        f"elapsed_ms={ws_resp.get('elapsed_ms', '?')}"
+                    )
                 if "text" in ws_resp:
                     return ws_resp.get("text", "")
                 return json.dumps(ws_resp.get("body", {}), ensure_ascii=False)
@@ -628,21 +700,21 @@ def http_post_raw(url, body, timeout=240):
         if proxy_body:
             try:
                 result = json.dumps(_unwrap_proxy_body(r.json()), ensure_ascii=False)
-                if ws_exc:
-                    info(f"[WS cliente->DataApp] handshake no disponible; fallback REST /proxy OK ({ws_exc})")
+                if ws_exc and PRESENTATION_VERBOSE:
+                    info(f"[client->DataApp WS] unavailable; REST /proxy fallback OK ({ws_exc})")
                 return result
             except Exception:
                 pass
-        if ws_exc:
-            info(f"[WS cliente->DataApp] handshake no disponible; fallback REST /proxy OK ({ws_exc})")
+        if ws_exc and PRESENTATION_VERBOSE:
+            info(f"[client->DataApp WS] unavailable; REST /proxy fallback OK ({ws_exc})")
         return r.text
     except requests.exceptions.ConnectionError:
-        fail(f"Conexion rechazada en {url}")
+        fail(f"Connection refused at {url}")
     except requests.exceptions.ReadTimeout:
         fail(
-            f"Timeout ({timeout}s) esperando respuesta de {url}\n"
-            f"      El ECC TRUE Connector puede tardar en la primera llamada (token DAPS).\n"
-            f"      Usa --timeout N para subir el limite."
+            f"Timeout ({timeout}s) waiting for {url}\n"
+            f"      The ECC TRUE Connector can take longer on the first request (DAPS token).\n"
+            f"      Use --timeout N to increase the limit."
         )
     except requests.exceptions.HTTPError as exc:
         body_txt = ""
@@ -650,7 +722,7 @@ def http_post_raw(url, body, timeout=240):
             body_txt = exc.response.text[:400]
         except Exception:
             pass
-        fail(f"HTTP {exc.response.status_code} en {url}\n      {body_txt}")
+        fail(f"HTTP {exc.response.status_code} at {url}\n      {body_txt}")
 
 
 # =============================================================================
@@ -726,27 +798,27 @@ def _ecc_label(ecc_url):
 def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
     phase(
         0,
-        "Conectividad y Topología de Red",
-        "Verificamos que el coordinador responde y consultamos al Metadata Broker (Fuseki)\n"
-        "para obtener el mapa completo de todos los conectores IDS registrados en la red."
+        "Network readiness and connector topology",
+        "In this phase, the script verifies that the selected worker is reachable and ready to "
+        "act as the coordinator. It then queries the Metadata Broker, discovers the IDS "
+        "connectors currently registered in the federation, and builds the live topology used "
+        "by the rest of the demonstration."
     )
 
-    # -- health check del DataApp coordinator -----------------------------------
-    step(f"Health-check del Worker-{cid} (GET /status)")
+    step(f"Check Worker-{cid} readiness")
     status = http_get(f"{coordinator_url}/status", timeout=req_timeout)
-    ok(f"Worker-{cid} responde correctamente en {coordinator_url}")
+    ok(f"Worker-{cid} is reachable and ready")
     field("instance",        status.get("instance", "?"))
-    field("role (actual)",   status.get("role",     "worker"))
+    field("current role",    status.get("role",     "worker"))
     print()
-    print(f"    {BOLD}{GREEN}** Worker-{cid} asumio el rol de COORDINATOR **{RESET}")
+    print(f"    {BOLD}{GREEN}** Worker-{cid} is now the FL coordinator **{RESET}")
 
-    # -- TODOS los conectores desde el broker (incluido el coordinator) ----------
-    step("Descubrimiento de topología via Broker Fuseki (GET /broker/connectors)")
+    step("Discover registered IDS connectors")
     bd    = http_get(f"{coordinator_url}/broker/connectors", timeout=req_timeout)
     raw_p = bd.get("connectors", [])
     count = bd.get("count", len(raw_p))
 
-    ok(f"{count} conectores en el broker")
+    ok(f"{count} connectors found in the Metadata Broker")
     print()
 
     all_entries      = {}   # wid -> entry (todos, incluyendo coordinator)
@@ -773,8 +845,8 @@ def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
         tag = f"  {CYAN}<- coordinator{RESET}" if is_coord else ""
         print(f"    {GRAY}*  Worker-{wid}{RESET}{tag}")
         field("  connector_uri",     uri,    indent=8)
-        field("  endpoint (broker)", ep_raw, indent=8)
-        field("  ecc_url (interno)", ecc_url, indent=8)
+        field("  broker endpoint",   ep_raw, indent=8)
+        field("  internal ECC URL",  ecc_url, indent=8)
         print()
 
         if not is_coord:
@@ -783,9 +855,9 @@ def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
 
     if not all_entries:
         fail(
-            "El broker no devolvio ningun conector.\n"
-            "      Comprueba que broker-core, broker-fuseki y broker-reverseproxy estan levantados\n"
-            "      y que los workers se han auto-registrado."
+            "The broker did not return any connector.\n"
+            "      Check that broker-core, broker-fuseki and broker-reverseproxy are running,\n"
+            "      and that the workers have registered themselves."
         )
 
     # -- 0c: Datos del Worker-{cid} extraidos del Broker (Silencioso) -----------
@@ -802,8 +874,8 @@ def fase0_resolver_endpoints(coordinator_url, cid, req_timeout):
 
     if not all_peers:
         fail(
-            "El broker no devolvio ningun peer (aparte del coordinator).\n"
-            "      Comprueba que los demas workers estan levantados y registrados."
+            "The broker did not return any peer besides the coordinator.\n"
+            "      Check that the other workers are running and registered."
         )
 
     print()
@@ -825,13 +897,14 @@ def helper_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
     """
     phase(
         2,
-        "Preparación de Artefactos FL (Imagen Docker)",
-        "El coordinador localiza el algoritmo de IA (algorithm.py), su configuración\n"
-        "(fl_config.json) y sus dependencias (requirements_algo.txt). Con estos ficheros\n"
-        "construye una imagen Docker inmutable y la registra en el Registry privado\n"
-        "para que los nodos autorizados puedan descargarla tras la negociación."
+        "Federated learning artifact preparation",
+        "In this phase, the coordinator prepares the federated learning artifact that every "
+        "accepted worker will execute. It packages the training code, the FL configuration "
+        "and the Python dependencies into a versioned Docker image, publishes it in the "
+        "private registry, and leaves it ready for IDS-controlled distribution after contract "
+        "negotiation."
     )
-    step("Compilación del algoritmo en imagen Docker (POST /fl/fetch-algorithm)")
+    step("Build and register training artifact")
 
     try:
         data = http_post(f"{coordinator_url}/fl/fetch-algorithm", {}, timeout=req_timeout)
@@ -840,15 +913,32 @@ def helper_solicitar_algoritmo(coordinator_url, cid, endpoints, req_timeout):
         image = data.get("docker_image")
 
         if mode == "docker_image":
-            print(f"      {GREEN}Imagen Docker compilada y registrada:{RESET}")
-            print(f"        {BOLD}{image}{RESET}")
-            print(f"      {GRAY}↳ Contiene: algorithm.py + fl_config.json + dependencias Python{RESET}")
-            print(f"      {GRAY}↳ Los nodos autorizados la descargarán del Registry tras firmar contrato{RESET}")
+            section("Artifact build result")
+            _log_event(
+                "IMAGE",
+                "Docker training artifact registered",
+                "The coordinator published a reproducible FL runtime in the private registry.",
+                "PUSHED",
+                tag_color=GREEN,
+                indent=6,
+            )
+            print()
+            _log_kv("Immutable image", image or "(not reported)", indent=8)
+            _log_kv("Bundled files", "algorithm.py, fl_config.json, Python dependencies", indent=8)
+            _log_kv("Distribution policy", "Only IDS-authorized workers after contract agreement", indent=8)
         else:
-            print(f"      {GRAY}Algoritmo cargado en memoria (modo legacy base64){RESET}")
-        print()
+            section("Artifact build result")
+            _log_event(
+                "BASE64",
+                "Legacy in-memory algorithm loaded",
+                "The coordinator did not report a Docker image for this execution.",
+                "READY",
+                tag_color=YELLOW,
+                status_color=YELLOW,
+                indent=6,
+            )
     except Exception as exc:
-        fail(f"El coordinator no pudo obtener el algoritmo internamente: {exc}")
+        fail(f"The coordinator could not prepare the algorithm artifact: {exc}")
         
 # =============================================================================
 # FASE 2 -- Descubrimiento de peers compatibles
@@ -868,57 +958,57 @@ def _mostrar_resultado_worker(w, endpoints, coord_label):
     m        = re.search(r"worker(\d+)", uri)
     wid      = m.group(1) if m else "?"
     peer     = endpoints["peers"].get(f"worker{wid}", {})
-    ecc      = peer.get("ecc_url") or w.get("ecc_url", "(desconocido)")
+    ecc      = peer.get("ecc_url") or w.get("ecc_url", "(unknown)")
     pl       = peer.get("ecc_label") or f"ecc-worker{wid}:8889"
     compatible = w.get("compatible", match >= 0.80)
 
     color = GREEN if compatible else YELLOW
-    tag   = "OK " if compatible else "--- (descartado)"
+    tag   = "OK " if compatible else "--- (filtered out)"
     print(f"    {color}{tag}{RESET}  Worker-{wid}  {GRAY}{uri}{RESET}")
-    field("  ECC (broker)", ecc, indent=8)
+    print()
 
     # Handshake de metadatos (IDS Catalog fetch)
     ids_arrow("out", "ids:DescriptionRequestMessage",  coord_label, pl)
     ids_arrow("in",  "ids:DescriptionResponseMessage", pl, coord_label)
 
-    print(f"\n        {GRAY}Descubrimiento dinamico -- Consultando Catalogo IDS del peer (Self-Description):{RESET}")
+    print(f"\n        {GRAY}Dynamic discovery -- reading the peer IDS catalog:{RESET}")
     for ev in w.get("all_evaluated", []):
         fname_ev = ev["filename"]
         ratio_ev = ev["ratio"]
         common_c = ev.get("common_cols_count", 0)
         total_c  = ev.get("total_cols", 0)
-        print(f"          - Recurso en catalogo: {fname_ev:<30} (match: {ratio_ev:.0%} - {common_c}/{total_c} cols)")
+        print(f"          - Catalog resource: {fname_ev:<30}")
 
     llm_rec = w.get("llm_recommended")
 
     if llm_rec:
         llm_conf = w.get("llm_confidence", 0)
         llm_mod  = w.get("llm_model", "Ollama")
-        llm_rsn  = w.get("llm_reasoning", "Decision basada en esquema semantico.")
+        llm_rsn  = w.get("llm_reasoning", "Decision based on semantic schema compatibility.")
 
-        print(f"\n        {MAGENTA}-> IA Local ({llm_mod}) -- razonamiento:{RESET}")
+        print(f"\n        {MAGENTA}-> Local AI ({llm_mod}) -- reasoning:{RESET}")
         print(f"          {GRAY}", end="", flush=True)
         for _ch in llm_rsn:
             print(_ch, end="", flush=True)
             _time.sleep(0.008)
         print(f"{RESET}\n")
 
-        field(f"  IA ({llm_mod}) Sugerencia", f"{CYAN}{llm_rec} (confianza: {llm_conf:.0%}){RESET}", indent=8)
+        field(f"  AI ({llm_mod}) suggestion", f"{CYAN}{llm_rec} (confidence: {llm_conf:.0%}){RESET}", indent=8)
 
         if llm_conf >= 0.80:
-            field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
+            field("  Selected CSV", f"{GREEN}{sel_csv}{RESET}", indent=8)
         else:
-            print(f"        {YELLOW} Confianza de IA < 80%. Fallback a emparejamiento matematico.{RESET}")
-            field("  CSV (Seleccionado por columnas)", math_csv, indent=8)
-            field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
+            print(f"        {YELLOW}AI confidence below 80%. Falling back to column-based matching.{RESET}")
+            field("  Column-based CSV", math_csv, indent=8)
+            field("  Selected CSV", f"{GREEN}{sel_csv}{RESET}", indent=8)
     else:
-        print(f"\n        {YELLOW}LLM Fallback:{RESET} La validacion por IA no devolvio un formato valido o dio Timeout.")
-        print(f"        {YELLOW}Activando plan de rescate: se aplicara la delegacion 100% matematica.{RESET}")
-        field("  CSV (Seleccionado por columnas)", math_csv, indent=8)
-        field("  CSV (Seleccionado)", f"{GREEN}{sel_csv}{RESET}", indent=8)
+        print(f"\n        {YELLOW}LLM fallback:{RESET} AI validation timed out or returned an invalid format.")
+        print(f"        {YELLOW}Using the deterministic column-matching strategy instead.{RESET}")
+        field("  Column-based CSV", math_csv, indent=8)
+        field("  Selected CSV", f"{GREEN}{sel_csv}{RESET}", indent=8)
 
     if compatible:
-        info(f"     El coordinator usara {sel_csv!r} en worker-{wid} para el entrenamiento FL")
+        info(f"The coordinator will use {sel_csv!r} on worker-{wid} for FL training")
     print()
 
 
@@ -929,17 +1019,16 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
 
     phase(
         3,
-        "Búsqueda de Nodos y Filtro de Compatibilidad (IA Local)",
-        "El coordinador pregunta al Metadata Broker (Fuseki) por otros nodos disponibles en la red.\n"
-        "A cada nodo encontrado le pide su Catálogo IDS. Utilizando un modelo generativo\n"
-        "local (LLAMA) y algoritmos matemáticos, evalúa si los datos de los demás nodos\n"
-        "son compatibles con los suyos (umbral ≥ 80% de similitud de columnas)."
+        "Peer discovery and dataset compatibility analysis",
+        "In this phase, the coordinator discovers the available peers and reads each peer's IDS "
+        "catalog. For every candidate dataset, it compares the schema with the coordinator's "
+        "reference data and uses the local LLM recommendation as additional support before "
+        "selecting the most suitable training resource."
     )
 
-    step("Análisis de compatibilidad peer a peer (POST /broker/discover/worker)")
+    step("Evaluate candidate peer datasets")
 
-    # Obtener lista de todos los conectores del broker
-    bd       = http_get(f"{coordinator_url}/broker/connectors", timeout=req_timeout)
+    bd       = http_get(f"{coordinator_url}/broker/connectors", timeout=req_timeout, quiet=True)
     all_conn = bd.get("connectors", [])
 
     my_cols_count = "?"
@@ -964,10 +1053,12 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
             continue
 
         try:
+            substep("Evaluate peer dataset catalog")
             w = http_post(
                 f"{coordinator_url}/broker/discover/worker",
                 {"ecc_url": ecc_url, "connector_uri": uri},
                 timeout=req_timeout,
+                quiet=True,
             )
         except Exception as exc:
             m_w = re.search(r"ecc-worker(\d+)", ecc_url)
@@ -984,14 +1075,13 @@ def fase2_descubrir_peers(coordinator_url, cid, endpoints, req_timeout):
             incompatible.append(w)
 
     total = len(compatible)
-    ok(f"{total} workers compatibles de {len(compatible) + len(incompatible)} analizados")
-    field("Columnas del coordinator", my_cols_count)
+    ok(f"{total} compatible workers out of {len(compatible) + len(incompatible)} analyzed")
+    field("Coordinator columns", my_cols_count)
 
     if not compatible:
         warn(
-            "Ningun worker supero el umbral del 80% de coincidencia de columnas.\n"
-            "      Verifica que los workers tienen al menos un CSV con las mismas "
-            "columnas que el coordinator."
+            "No worker reached the 80% schema compatibility threshold.\n"
+            "      Check that the workers expose at least one CSV with the same columns as the coordinator."
         )
 
     return compatible
@@ -1006,18 +1096,20 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
 
     phase(
         4,
-        "Negociación Estricta de Contratos IDS",
-        "Se inician los protocolos de confianza GAIA-X. El coordinador envía un 'Contract Request'\n"
-        "a los nodos compatibles. Si aceptan los términos de soberanía, se firma un 'Contract Agreement'\n"
-        "y se les otorga acceso a la URL y Token para descargar la imagen Docker del Algoritmo."
+        "IDS contract negotiation",
+        "In this phase, dataset compatibility is converted into an explicit IDS permission. The "
+        "coordinator requests a contract from each compatible peer, records the Contract "
+        "Agreement for accepted workers, and leaves rejected peers outside the federated "
+        "training execution."
     )
 
-    step("Negociación de contratos con peers (POST /fl/negotiate)")
-    data     = http_post(f"{coordinator_url}/fl/negotiate", {}, timeout=req_timeout)
+    step("Negotiate participation contracts")
+    substep("Negotiate IDS contracts with compatible peers")
+    data     = http_post(f"{coordinator_url}/fl/negotiate", {}, timeout=req_timeout, quiet=True)
     accepted = data.get("accepted", [])
     rejected = data.get("rejected", [])
 
-    print(f"\n  {BOLD}Detalle de cada negociacion IDS:{RESET}\n")
+    print(f"\n  {BOLD}IDS negotiation detail:{RESET}\n")
 
     for w in accepted:
         uri  = w.get("connector_uri", "?")
@@ -1029,14 +1121,12 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
         pe   = peer.get("ecc_url")   or f"https://ecc-worker{wid}:8889/data"
 
         print(f"  {BOLD}Worker-{wid}{RESET}  {GRAY}{uri}{RESET}")
-        field("  ECC (broker)", pe, indent=6)
         ids_arrow("out", "ids:DescriptionRequestMessage",        coord_label, pl)
         ids_arrow("in",  "ids:DescriptionResponseMessage",       pl, coord_label)
         ids_arrow("out", "ids:ContractRequestMessage",           coord_label, pl)
         ids_arrow("in",  "ids:ContractAgreementMessage",         pl, coord_label)
-        ids_arrow("out", "ids:ContractAgreementMessage (confirm)", coord_label, pl)
-        ids_arrow("in",  "ids:MessageProcessedNotificationMsg",  pl, coord_label)
-        print(f"    {GREEN}ACEPTA -- contrato IDS establecido{RESET}")
+        print(f"    {GREEN}ACCEPTED -- IDS contract established{RESET}")
+        print()
         if tc:
             field("transfer_contract", tc[:72] + ("..." if len(tc) > 72 else ""))
         print()
@@ -1063,37 +1153,41 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
                 pass
 
         reason_labels = {
-            "fl_opt_out"             : "FL_OPT_OUT=true (soberania del dato) -- IDS RejectionMessage",
-            "fl_participation_denied": "FL_AUTHORIZED_URIS vacio (no autorizado a participar)",
-            "unauthorized_consumer"  : "consumer URI no autorizada",
-            "error"                  : "error de comunicacion",
+            "fl_opt_out"             : "(data sovereignty) -- IDS RejectionMessage",
+            "fl_participation_denied": "FL_AUTHORIZED_URIS is empty (not authorized to participate)",
+            "unauthorized_consumer"  : "consumer URI is not authorized",
+            "error"                  : "communication error",
+        }
+        reason_explanations = {
+            "fl_opt_out"             : f"Worker-{wid} has decided not to participate in the FL training.",
+            "fl_participation_denied": f"Worker-{wid} is not authorized to participate in this federation.",
+            "unauthorized_consumer"  : f"Worker-{wid} is not allowed by the connector policy.",
         }
         reason_text = reason_labels.get(actual_reason, actual_reason)
+        reason_explanation = reason_explanations.get(actual_reason)
+        print()
 
         print(f"  {BOLD}Worker-{wid}{RESET}  {GRAY}{uri}{RESET}")
-        field("  ECC (broker)", pe, indent=6)
         ids_arrow("out", "ids:DescriptionRequestMessage",  coord_label, pl)
         ids_arrow("in",  "ids:DescriptionResponseMessage", pl, coord_label)
         ids_arrow("out", "ids:ContractRequestMessage",     coord_label, pl)
         ids_arrow("in",  "ids:RejectionMessage",           pl, coord_label)
-        print(f"    {RED}RECHAZA -- {reason_text}{RESET}")
+        print(f"    {RED}REJECTED -- {reason_text}{RESET}")
+        if reason_explanation:
+            print(f"      {GRAY}{reason_explanation}{RESET}")
         if actual_reason != reason:
-            field("reason (API)", f"{actual_reason}  (detectado en mensaje IDS)")
-        else:
-            field("reason (API)", reason)
-        if msg:
-            field("mensaje",     msg[:100])
+            field("reason (API)", f"{actual_reason}  (detected in IDS message)")
         print()
 
     # -- Resumen ---------------------------------------------------------------
     _sep("-", color=BLUE)
-    print(f"  {BOLD}Resumen de participacion FL:{RESET}\n")
+    print(f"  {BOLD}FL participation summary:{RESET}\n")
 
     for w in accepted:
         uri = w.get("connector_uri", "?")
         m   = re.search(r"worker(\d+)", uri)
         wid = m.group(1) if m else "?"
-        print(f"    {GREEN}PARTICIPA   Worker-{wid}   {GRAY}{uri}{RESET}")
+        print(f"    {GREEN}PARTICIPATES   Worker-{wid}   {GRAY}{uri}{RESET}")
 
     for w in rejected:
         uri    = w.get("connector_uri", "?")
@@ -1110,10 +1204,10 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
             except Exception:
                 pass
         reason_label = {
-            "fl_opt_out": "fl_opt_out (IDS soberania)",
+            "fl_opt_out": "(IDS sovereignty)",
             "unauthorized_consumer": "unauthorized (IDS)",
         }.get(reason, reason)
-        print(f"    {RED}RECHAZADO   Worker-{wid}   {GRAY}{uri}  --  {reason_label}{RESET}")
+        print(f"    {RED}REJECTED      Worker-{wid}   {GRAY}{uri}  --  {reason_label}{RESET}")
 
     print()
 
@@ -1127,10 +1221,10 @@ def fase3_negociar(coordinator_url, cid, endpoints, req_timeout):
 def verificar_coordinator(coordinator_url, cid, endpoints, req_timeout):
     print()
     _sep("-", color=BLUE)
-    print(f"{BOLD}{BLUE}  Estado del coordinator tras la negociacion{RESET}")
+    print(f"{BOLD}{BLUE}  Coordinator state after negotiation{RESET}")
     _sep("-", color=BLUE)
 
-    step("Verificación del estado del coordinador (GET /status)")
+    step("Verify coordinator state")
     data = http_get(f"{coordinator_url}/status", timeout=req_timeout)
 
     role      = data.get("role", "?")
@@ -1142,9 +1236,9 @@ def verificar_coordinator(coordinator_url, cid, endpoints, req_timeout):
 
     field("instance",         data.get("instance", "?"))
     field("role",             role)
-    field("algorithm_loaded", "SI" if algo_ok  else "NO")
-    field("config_loaded",    "SI" if config_ok else "NO")
-    field("fl_status",        fl_status)
+    field("algorithm_loaded", "YES" if algo_ok  else "NO")
+    field("config_loaded",    "YES" if config_ok else "NO")
+    field("fl_status",        "ready")
 
     if fl_cfg:
         section("FL Config")
@@ -1152,7 +1246,7 @@ def verificar_coordinator(coordinator_url, cid, endpoints, req_timeout):
             field(f"  {k}", v, indent=6)
 
     if peers:
-        section("Peer ECCs activos (workers aceptados)")
+        section("Active peer ECCs (accepted workers)")
         for p in peers:
             m   = re.search(r"worker(\d+)", p)
             wid = m.group(1) if m else "?"
@@ -1164,9 +1258,9 @@ def verificar_coordinator(coordinator_url, cid, endpoints, req_timeout):
 
     print()
     if role == "coordinator" and algo_ok and config_ok:
-        ok("Coordinator listo para /fl/start")
+        ok("Coordinator is ready to start federated training")
     else:
-        warn(f"Estado inesperado: role={role}  algo={algo_ok}  config={config_ok}")
+        warn(f"Unexpected coordinator state: role={role}  algorithm={algo_ok}  config={config_ok}")
 
 
 # =============================================================================
@@ -1176,19 +1270,14 @@ def verificar_coordinator(coordinator_url, cid, endpoints, req_timeout):
 def fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout):
     phase(
         5,
-        "Entrenamiento Federado (Federated Learning)",
-        "Arranca la primera ronda de entrenamiento. El coordinador notifica a los trabajadores\n"
-        "autorizados que comiencen a entrenar de forma distribuida y monitoriza el progreso\n"
-        "mediante polling HTTP."
+        "Federated training startup",
+        "In this phase, the coordinator starts the controlled federated learning execution. It "
+        "confirms the shared feature selection, activates only the workers that accepted the IDS "
+        "contract, and then monitors each round as artifacts, model weights and aggregated "
+        "metrics move through the federation."
     )
 
-    step("Arranque del entrenamiento (POST /fl/start)")
-    print(f"    -> Inicializando la configuracion federada del coordinator")
-    print(f"       Preparando un espacio de entrada comun para todos los workers")
-    print()
-    print(f"    -> Ejecutando la seleccion compartida de variables numericas")
-    print(f"       Analizando el dataset de referencia definido para el coordinator")
-    print()
+    step("Start the federated learning run")
     data   = http_post(f"{coordinator_url}/fl/start", {}, timeout=req_timeout)
     status = data.get("status", "?")
     peers  = data.get("peers", [])
@@ -1196,37 +1285,43 @@ def fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout):
     fs     = data.get("feature_selection", {}) or {}
 
     if status == "started":
-        print()
-        ok("Entrenamiento FL arrancado correctamente")
+        ok("Federated training process accepted by the coordinator")
     else:
-        warn(f"Respuesta inesperada: status={status}")
+        warn(f"Unexpected start response: status={status}")
+
+    section("Execution summary")
+    _log_kv("Coordinator", f"worker-{cid}")
+    _log_kv("Rounds", cfg.get("rounds", "?"))
+    _log_kv("Round timeout", f"{cfg.get('round_timeout', '?')}s")
+    _log_kv("Minimum workers", cfg.get("min_workers", "?"))
+    _log_kv("Accepted peers", len(peers))
 
     if fs.get("enabled"):
-        source = fs.get("source") or "dataset de referencia del coordinator"
+        source = fs.get("source") or "coordinator reference dataset"
         source = os.path.basename(str(source))
         count = fs.get("selected_count", "?")
-        print()
-        print(f"    -> Seleccion de variables completada")
-        print(f"       Dataset de referencia: {source}")
-        print(f"       Variables numericas compartidas: {count}")
-        print()
-        print(f"    -> Mascara numerica persistida y distribuida")
-        print(f"       Todos los workers entrenaran con la misma seleccion de entrada")
+        section("Shared feature selection")
+        _log_kv("Reference dataset", source)
+        strategy = fs.get("strategy", "unknown")
+        method = "VarianceThreshold + SelectKBest(mutual_info_classif)"
+        if strategy and strategy != "shared_runtime_coordinator":
+            method = strategy
+        _log_kv("Strategy", method)
+        _log_kv("Shared numerical features", count)
 
-    section("Workers entrenando")
-    for p in peers:
-        m   = re.search(r"worker(\d+)", p)
-        wid = m.group(1) if m else "?"
-        b   = endpoints["peers"].get(f"worker{wid}", {})
-        b_ecc = b.get("ecc_url", "")
-        note  = f"  {GREEN}(broker){RESET}" if b_ecc == p else (
-                f"  {YELLOW}(broker: {b_ecc}){RESET}" if b_ecc else "")
-        print(f"      {GREEN}Worker-{wid}: {GRAY}{p}{RESET}{note}")
-
-    print()
-    info(f"Monitoriza:  GET {coordinator_url}/fl/status")
-    info(f"Resultados:  GET {coordinator_url}/fl/results  (cuando status=completed)")
-    info(f"Modelo:      GET {coordinator_url}/fl/model")
+    section("Participating workers")
+    if peers:
+        for p in peers:
+            m   = re.search(r"worker(\d+)", p)
+            wid = m.group(1) if m else "?"
+            b   = endpoints["peers"].get(f"worker{wid}", {})
+            b_ecc = b.get("ecc_url", "")
+            status_note = "broker match" if b_ecc == p else (
+                f"broker: {b_ecc}" if b_ecc else "registered")
+            print(f"      {GREEN}[W{wid:<2}]{RESET} {WHITE}Worker-{wid:<3}{RESET}"
+                  f"{GREEN}ACTIVE{RESET}  {GRAY}{p}  ({status_note}){RESET}")
+    else:
+        warn("No training peers were returned by /fl/start")
 
 
 # =============================================================================
@@ -1234,10 +1329,12 @@ def fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout):
 # =============================================================================
 
 def _ids_log(direction, msg_type, src, dst):
-    arrow = "--" if direction == "out" else "--"
-    color = CYAN   if direction == "out" else GREEN
+    arrow = "->" if direction == "out" else "<-"
+    tag = "->" if direction == "out" else "<-"
+    color = CYAN if direction == "out" else GREEN
     short = msg_type.replace("ids:", "").replace("Message", "Msg")
-    print(f"      {color}[IDS {arrow}]  {short:<44}{GRAY}{src}    {dst}{RESET}")
+    print(f"      {color}[IDS {tag}]{RESET}  {WHITE}{short:<40}{RESET}"
+          f"{GRAY}{src} {arrow} {dst}{RESET}")
 
 
 def _coord_ecc_label(cid):
@@ -1245,21 +1342,29 @@ def _coord_ecc_label(cid):
 
 
 def _print_ronda_header(rnd_num, total_rounds, cid):
+    total = total_rounds or "?"
     print()
-    print(f"    {CYAN}{'' * 54}{RESET}")
-    print(f"    {BOLD}{CYAN}  RONDA {rnd_num}/{total_rounds or '?'}  "
-          f"[coordinator-{cid}]{RESET}")
-    print(f"    {CYAN}{'' * 54}{RESET}")
+    _log_rule(indent=4, char="-", width=64, color=CYAN)
+    print(f"    {BOLD}{CYAN}ROUND {rnd_num}/{total:<5}{RESET}"
+          f"{GRAY}coordinator-{cid:<8} IDS/ECC training cycle{RESET}")
+    _log_rule(indent=4, char="-", width=64, color=CYAN)
 
 
 def _print_handshake_algoritmo(rnd_num, wid, peer_lbl, cid):
     """
-    Handshake IDS completo para distribucion de algorithm.py + fl_config.json.
-    En app.py esto ocurre en _negotiate_and_send_algorithm, que se llama
-    en CADA ronda (el coordinator lo reenvia para asegurar sincronia).
+    Visual IDS contract negotiation trace and artifact delivery for a round.
     """
     coord_lbl = _coord_ecc_label(cid)
-    print(f"\n      {BOLD}-> Worker-{wid}{RESET}")
+    print()
+    _log_event(
+        f"W{wid}",
+        f"Worker-{wid} round contract and artifact delivery",
+        f"Peer ECC: {peer_lbl}",
+        "IDS",
+        tag_color=WHITE,
+        status_color=CYAN,
+        indent=6,
+    )
     _ids_log("out", "ids:DescriptionRequestMessage",
              coord_lbl, peer_lbl)
     _ids_log("in",  "ids:DescriptionResponseMessage",
@@ -1268,12 +1373,22 @@ def _print_handshake_algoritmo(rnd_num, wid, peer_lbl, cid):
              coord_lbl, peer_lbl)
     _ids_log("in",  "ids:ContractAgreementMessage",
              peer_lbl, coord_lbl)
-    _ids_log("out", "ids:ContractAgreementMessage (confirmacion)",
+    _ids_log("out", "ids:ContractAgreementMessage (confirmation)",
              coord_lbl, peer_lbl)
     _ids_log("in",  "ids:MessageProcessedNotificationMessage",
              peer_lbl, coord_lbl)
-    print(f"      {GRAY}[ronda {rnd_num}] algorithm.py + fl_config.json "
-          f"(Docker) -> {peer_lbl}  {GREEN}{RESET}")
+    _ids_log("out", "ids:ArtifactRequestMessage",
+             coord_lbl, peer_lbl)
+    _ids_log("in",  "ids:ArtifactResponseMessage",
+             peer_lbl, coord_lbl)
+    _log_event(
+        "ARTIFACT",
+        " Docker image reference delivered",
+        f"Round {rnd_num} Docker artifact received by {peer_lbl}.",
+        "DONE",
+        tag_color=GREEN,
+        indent=6,
+    )
 
 
 def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
@@ -1288,27 +1403,33 @@ def fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout):
         for m in [re.search(r"worker(\d+)", w.get("connector_uri", ""))] if m
     )
 
-    step("Monitorizacion del entrenamiento via /proxy")
+    step("Monitor federated rounds")
+    monitor_channel = "DataApp WebSocket control channel"
     if CLIENT_WS_ENABLED and _WS_AVAILABLE:
         ws_url = coordinator_url.replace("https://", "wss://").replace("http://", "ws://")
-        print(f"      {GRAY}Entrada real : WebSocket {ws_url}/ws/client{RESET}")
-        print(f"      {GRAY}Despacho    : POST /proxy  (messageType=QueryMessage; proxyAction=fl_status){RESET}")
+        if PRESENTATION_VERBOSE:
+            print(f"      {GRAY}Control channel: WebSocket {ws_url}/ws/client{RESET}")
+            print(f"      {GRAY}Internal RPC  : /proxy with QueryMessage + fl_status{RESET}")
     else:
-        print(f"      {GRAY}Endpoint    : POST {coordinator_url}/proxy  (messageType=QueryMessage; proxyAction=fl_status){RESET}")
-    print(f"      {GRAY}Workers participantes: {', '.join('worker-' + w for w in accepted_wids)}{RESET}")
+        monitor_channel = "DataApp REST proxy"
+        if PRESENTATION_VERBOSE:
+            print(f"      {GRAY}Control channel: REST proxy at {coordinator_url}/proxy{RESET}")
 
-    step("Verificacion de transporte conservado (GET /transport/status)")
+    section("Monitoring context")
+    _log_kv("Status channel", monitor_channel)
+    _log_kv("Participating workers",
+            ", ".join("worker-" + w for w in accepted_wids) or "(none)")
     try:
-        td = http_get(f"{coordinator_url}/transport/status", timeout=10)
-        client_ws = td.get("client_dataapp_ws", {})
+        td = http_get(f"{coordinator_url}/transport/status", timeout=10, quiet=True)
         ecc_wss_enabled = td.get("ecc_wss_enabled", False)
         ids_ecc_only = td.get("ids_ecc_only", False)
         weights_via_ecc = td.get("weights_via_ecc", False)
-        info(f"[WS] /ws/client      -> {client_ws.get('requests', 0)} peticion(es) cliente->DataApp")
-        if ids_ecc_only or weights_via_ecc:
-            info(f"[ECC] Transporte de pesos FL: IDS via ECC<->ECC sobre {'WSS' if ecc_wss_enabled else 'HTTPS'}")
+        transport = f"IDS ECC-to-ECC over {'WSS' if ecc_wss_enabled else 'HTTPS'}"
+        if not (ids_ecc_only or weights_via_ecc):
+            transport = "not reported as ECC-only"
+        _log_kv("Weights transport", transport)
     except Exception as _te:
-        warn(f"No se pudo consultar /transport/status: {_te}")
+        warn(f"Could not read transport status: {_te}")
 
     _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids, req_timeout)
 
@@ -1316,11 +1437,6 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
     """
     Monitorizacion por polling HTTP (GET /fl/status cada 5s).
     """
-    if CLIENT_WS_ENABLED and _WS_AVAILABLE:
-        info("Monitorizando via WebSocket /ws/client -> POST /proxy proxyAction=fl_status cada 5s...")
-    else:
-        info("Monitorizando via POST /proxy proxyAction=fl_status cada 5s...")
-
     poll_timeout = max(30, min(int(req_timeout or 240), 120))
 
     # Esperar a que el FL arranque
@@ -1328,7 +1444,8 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
         try:
             fl = http_get(f"{coordinator_url}/fl/status", timeout=poll_timeout, quiet=True)
             if fl.get("status") not in ("idle", ""):
-                ok("FL en marcha"); break
+                print()
+                ok("Federated learning is running"); break
         except Exception:
             pass
         time.sleep(2)
@@ -1342,12 +1459,12 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
 
     while True:
         if time.time() - t_start > 3600:
-            warn("Timeout de monitorizacion (1h)"); break
+            warn("Monitoring timeout reached (1h)"); break
 
         try:
             fl = http_get(f"{coordinator_url}/fl/status", timeout=poll_timeout, quiet=True)
         except Exception as e:
-            warn(f"Error polling /fl/status: {e}"); time.sleep(poll_interval); continue
+            warn(f"Could not read FL status: {e}"); time.sleep(poll_interval); continue
 
         status       = fl.get("status", "?")
         history      = fl.get("history", [])
@@ -1367,23 +1484,39 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
                 return f"{v:.4f}" if isinstance(v, float) else (str(v) if v is not None else "--")
 
             already = weights_shown.get(rnd_num, set())
-            for wid in accepted_wids:
-                if wid not in already:
-                    already.add(wid)
-                    n_exp = len(accepted_wids) + 1
-                    total_so_far = 1 + len(already)
-                    pe   = endpoints["peers"].get(f"worker{wid}", {})
-                    pl   = pe.get("ecc_label", f"ecc-worker{wid}:8889")
-                    print()
-                    print(f"    {BOLD}[ronda {rnd_num}]  Pesos recibidos de worker-{wid} (ECC-WSS):{RESET}")
-                    print(f"      {GREEN}[ECC-WSS]  fl_weights::worker{wid}::round{rnd_num}  {GRAY}{pl}  --  {_coord_ecc_label(cid)}{RESET}")
-                    print(f"    {GRAY} Pesos acumulados ({total_so_far}/{n_exp}){RESET}")
+            pending_wids = [wid for wid in accepted_wids if wid not in already]
+            if pending_wids:
+                section("Weight collection")
+            for wid in pending_wids:
+                already.add(wid)
+                n_exp = len(accepted_wids) + 1
+                total_so_far = 1 + len(already)
+                pe   = endpoints["peers"].get(f"worker{wid}", {})
+                pl   = pe.get("ecc_label", f"ecc-worker{wid}:8889")
+                print()
+                _log_event(
+                    "WEIGHTS",
+                    f"worker-{wid} weights received",
+                    f"Weights payload: fl_weights::worker{wid}::round{rnd_num}\n"
+                    f"Route: {pl} -> {_coord_ecc_label(cid)}",
+                    "RECEIVED",
+                    tag_color=GREEN,
+                )
+                _log_kv("Accumulated weights", f"{total_so_far}/{n_exp}", indent=6)
             weights_shown[rnd_num] = already
 
-            print()
-            print(f"    {GRAY}[ronda {rnd_num}] FedAvg -- {workers} workers, {samples:,} muestras{RESET}")
-            print(f"    {GREEN}Ronda {rnd_num} OK en {elapsed}s  "
-                  f"acc={_fv('accuracy')}  auc={_fv('auc')}  loss={_fv('loss')}{RESET}")
+            section("Aggregation result")
+            _log_event(
+                "FEDAVG",
+                f"Round {rnd_num} aggregation",
+                f"{workers} workers contributed {samples:,} samples.",
+                "DONE",
+                tag_color=CYAN,
+            )
+            _log_kv("Elapsed", f"{elapsed}s")
+            _log_kv("Accuracy", _fv("accuracy"))
+            _log_kv("AUC", _fv("auc"))
+            _log_kv("Loss", _fv("loss"))
             seen_rounds += 1
             next_rnd_to_announce = seen_rounds + 1
 
@@ -1395,6 +1528,7 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
                 weights_shown.setdefault(rnd_num, set())
                 next_rnd_to_announce = rnd_num + 1
                 _print_ronda_header(rnd_num, total_rounds, cid)
+                section("IDS contract negotiation and artifact delivery")
                 for w in nego.get("accepted", []):
                     uri = w.get("connector_uri", "")
                     m   = re.search(r"worker(\d+)", uri)
@@ -1404,25 +1538,23 @@ def _fase5_polling_fallback(coordinator_url, cid, nego, endpoints, accepted_wids
                     _print_handshake_algoritmo(rnd_num, wid, pl, cid)
 
         if status == "completed" and seen_rounds >= (total_rounds or 0):
-            ok(f" FL completado -- {seen_rounds} rondas"); break
+            ok(f"Federated learning completed -- {seen_rounds} rounds"); break
         elif status == "failed":
-            warn(" FL termino con status=failed"); break
+            warn("Federated learning finished with status=failed"); break
 
         time.sleep(poll_interval)
 
 # =============================================================================
-# RESULTADOS DEL ENTRENAMIENTO FL
+# FL training results.
 # =============================================================================
 
 def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
     """
-    Muestra un resumen completo de resultados tras finalizar el entrenamiento FL.
-    Consulta /fl/status y /fl/results para obtener metricas globales,
-    per-class F1, confusion matrix y evolucion por ronda.
+    Show a complete summary after FL training finishes.
     """
     print()
     _sep("=", color=BOLD + GREEN)
-    print(f"{BOLD}{GREEN}  RESULTADOS DEL ENTRENAMIENTO FEDERADO{RESET}")
+    print(f"{BOLD}{GREEN}  FEDERATED TRAINING RESULTS{RESET}")
     _sep("=", color=BOLD + GREEN)
 
     # --- Obtener datos del coordinator ---
@@ -1431,7 +1563,7 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
     try:
         fl_data = http_get(f"{coordinator_url}/fl/status", timeout=req_timeout)
     except Exception as e:
-        warn(f"No se pudo obtener /fl/status: {e}")
+        warn(f"Could not read FL status: {e}")
 
     try:
         fl_results = http_get(f"{coordinator_url}/fl/results", timeout=req_timeout)
@@ -1440,7 +1572,7 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
 
     history = fl_data.get("history", fl_results if isinstance(fl_results, list) else [])
     if not history:
-        warn("No hay historial de rondas disponible")
+        warn("No round history is available")
         return
 
     model_data = {}
@@ -1451,9 +1583,9 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
     except Exception:
         r_model = None
 
-    # --- Evolucion por ronda ---
-    step("Evolucion por Ronda")
-    header = f"  {'Ronda':>6}  {'Workers':>8}  {'Muestras':>10}  {'Accuracy':>10}  {'AUC':>8}  {'F1-macro':>9}  {'MCC':>8}  {'Loss':>8}  {'Tiempo':>8}"
+    # Round evolution.
+    step("Round-by-round evolution")
+    header = f"  {'Round':>6}  {'Workers':>8}  {'Samples':>10}  {'Accuracy':>10}  {'AUC':>8}  {'F1-macro':>9}  {'MCC':>8}  {'Loss':>8}  {'Time':>8}"
     print(f"  {CYAN}{header}{RESET}")
     print(f"  {CYAN}{'-' * len(header)}{RESET}")
 
@@ -1474,15 +1606,15 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
               f"{_v('loss'):>8}  {elapsed:>7.1f}s")
     print()
 
-    # --- Mejor modelo global ---
+    # Best global model.
     last = history[-1] if history else {}
     best_gm = model_data.get("metrics") or last.get("global_metrics", {})
     best_round = model_data.get("round") or fl_data.get("best_round") or last.get("round")
 
-    step("Metricas Globales del Mejor Modelo")
+    step("Best global model metrics")
     if best_round:
-        field("Mejor ronda", best_round)
-    field("Criterio de seleccion", "F1-macro -> Focus F1 -> Accuracy")
+        field("Best round", best_round)
+    field("Selection criterion", "F1-macro -> Focus F1 -> Accuracy")
     metrics_order = [
         ("accuracy",    "Accuracy"),
         ("auc",         "AUC (macro)"),
@@ -1512,31 +1644,31 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
     if not mode and n_classes:
         mode = "multiclass" if int(n_classes) > 2 else "binary"
     if mode:
-        field("Modo", f"{mode} ({n_classes} clases)" if n_classes else mode)
+        field("Mode", f"{mode} ({n_classes} classes)" if n_classes else mode)
     print()
 
-    # --- Distribucion de datos ---
-    step("Distribucion de Datos entre Workers")
+    # Data distribution.
+    step("Data distribution across workers")
     total_samples = sum(e.get("total_samples", 0) for e in history)
     if total_samples > 0 and history:
         last_entry = history[-1]
         n_workers = last_entry.get("workers_ok", "?")
-        field("Workers participantes", n_workers)
-        field("Total muestras (ultima ronda)", f"{last_entry.get('total_samples', 0):,}")
-        field("Rondas completadas", len(history))
+        field("Participating workers", n_workers)
+        field("Total samples (last round)", f"{last_entry.get('total_samples', 0):,}")
+        field("Completed rounds", len(history))
     print()
 
-    # --- Distribucion de clases (UNSW-NB15) ---
+    # Class distribution (UNSW-NB15).
     try:
         class_names = model_data.get("class_names", [])
         per_class = model_data.get("per_class_report", {})
 
         if class_names:
-            step("Distribucion de aciertos de cada clase (UNSW-NB15)")
+            step("Per-class performance (UNSW-NB15)")
             n_classes = len(class_names)
-            field("Modo de clasificacion", f"Multiclase ({n_classes} clases)" if n_classes > 2 else "Binario")
+            field("Classification mode", f"Multiclass ({n_classes} classes)" if n_classes > 2 else "Binary")
             print()
-            print(f"    {'Clase':<20} {'F1-Score':>10}  {'Rendimiento':>32}")
+            print(f"    {'Class':<20} {'F1-Score':>10}  {'Performance':>32}")
             print(f"    {'-'*20} {'-'*10}  {'-'*32}")
             sorted_classes = sorted(
                 [(c, per_class.get(c, 0.0)) for c in class_names],
@@ -1584,15 +1716,16 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
 def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout):
     phase(
         6,
-        "Auditoría Final y Soberanía de Datos",
-        "El modelo global resultante se ensambla y se registra en el Catálogo IDS como un nuevo\n"
-        "Activo Digital. Su contrato dictamina que SOLO los trabajadores que participaron en\n"
-        "su entrenamiento tienen derecho a descargarlo. A continuación comprobamos este bloqueo."
+        "Final audit and data sovereignty",
+        "In this phase, the final global model is treated as a protected IDS artifact. The script "
+        "checks that workers which participated in the training can request the model, while "
+        "non-participants are rejected by the connector policy, proving the data-sovereignty "
+        "control at the end of the run."
     )
 
     try:
         fl_res = None
-        info("Esperando a que el recurso del modelo FL se publique en el catalogo IDS...")
+        info("Waiting for the global model resource to appear in the IDS catalog...")
         for _ in range(15):
             sd = http_get(f"{coordinator_url}/ids/self-description", timeout=10)
             cat = (sd.get("ids:resourceCatalog") or [{}])[0]
@@ -1609,16 +1742,16 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
             time.sleep(1)
 
         if not fl_res:
-            warn("No se encontro el recurso del modelo FL en el catalogo tras la espera")
+            warn("The global model resource was not found in the IDS catalog after waiting")
             return
 
         cid_val = ((fl_res.get("ids:contractOffer") or [{}])[0]).get("@id", "")
         if not cid_val:
-            warn("No se encontro ContractOffer en el modelo")
+            warn("No ContractOffer was found for the model resource")
             return
 
     except Exception as e:
-        warn(f"Error parseando IDs para la fase 6: {e}")
+        warn(f"Could not prepare IDs for phase 6: {e}")
         return
 
     # Obtenemos las URLs directamente del broker sin hardcodear
@@ -1626,38 +1759,63 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
     coord_uri = endpoints["coordinator"].get("connector_uri")
 
     if not coord_ecc or not coord_uri:
-        warn("No se pudo extraer la URL del coordinator desde el Broker para realizar la prueba.")
+        warn("Could not extract the coordinator URL from the Broker for the access test.")
         return
 
     # -- Extraer TODOS los peers descubiertos (aceptados, rechazados Y descartados) --
     # De este modo worker-4 (schema incompatible -> descartado en discovery) tambien
     # se prueba y recibe un RejectionMessage real del coordinator porque su URI
     # no esta en la lista de autorizados del contrato FL.
-    accepted_uris = {re.search(r"worker(\d+)", w.get("connector_uri", "")).group(1)
-                     for w in nego.get("accepted", [])
-                     if re.search(r"worker(\d+)", w.get("connector_uri", ""))}
+    def _worker_id_from(*values):
+        for value in values:
+            m = re.search(r"worker(\d+)", str(value or ""))
+            if m:
+                return m.group(1)
+        return None
 
-    workers_to_test = []
-    for wid_key in sorted(endpoints["peers"].keys()):   # worker1, worker2, ...
-        m = re.search(r"worker(\d+)", wid_key)
-        if m:
-            workers_to_test.append(m.group(1))
-    # Anadir los que puedan venir de nego pero no esten en endpoints["peers"]
-    for w in nego.get("accepted", []) + nego.get("rejected", []):
-        m = re.search(r"worker(\d+)", w.get("connector_uri", ""))
-        if m and m.group(1) not in workers_to_test:
-            workers_to_test.append(m.group(1))
-    workers_to_test = list(dict.fromkeys(workers_to_test))
+    accepted_uris = set()
+    workers_to_test = {}
+
+    for w in nego.get("accepted", []):
+        wid = _worker_id_from(
+            w.get("connector_uri"),
+            w.get("ecc_url"),
+            w.get("endpoint"),
+            w.get("endpoint_raw"),
+        )
+        if wid:
+            accepted_uris.add(wid)
+            workers_to_test.setdefault(wid, {}).update(w)
+
+    for wid_key, peer in endpoints.get("peers", {}).items():   # worker1, worker2, ...
+        wid = _worker_id_from(
+            wid_key,
+            peer.get("connector_uri"),
+            peer.get("ecc_url"),
+            peer.get("endpoint_raw"),
+        )
+        if wid:
+            workers_to_test.setdefault(wid, {}).update(peer)
+
+    # Anadir los rechazados aunque no esten en el snapshot inicial del broker.
+    # Es importante para worker-4: su identidad puede venir como /connectors/<id>
+    # en fase 0 y como URI IDS real en negociacion.
+    for w in nego.get("rejected", []):
+        wid = _worker_id_from(
+            w.get("connector_uri"),
+            w.get("ecc_url"),
+            w.get("endpoint"),
+            w.get("endpoint_raw"),
+        )
+        if wid:
+            workers_to_test.setdefault(wid, {}).update(w)
 
     if not workers_to_test:
-        warn("No hay peers descubiertos para probar en la Fase 6.")
+        warn("No discovered peers are available for the phase 6 access test.")
         return
 
     # -- Ejecutar el test de acceso global --
-    for target_wid in workers_to_test:
-        if f"worker{target_wid}" not in endpoints["peers"]:
-            continue
-
+    for target_wid in sorted(workers_to_test, key=lambda x: int(x)):
         w_url = f"https://localhost:{5000 + int(target_wid)}"
         # Mantener la ruta IDS completa: Worker -> ECC local -> ECC coordinator -> DataApp.
         # Enviar aqui al /data interno saltaba el ECC remoto y podia devolver un
@@ -1671,8 +1829,7 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
             "contractProvider": coord_uri,
         }
 
-        print()
-        step(f"Test de acceso: Worker-{target_wid} solicita el modelo al Coordinador")
+        step(f"Access test: Worker-{target_wid} requests the global model")
         _ids_log("out", "ids:ContractRequestMessage", f"worker-{target_wid}", f"coordinator-{cid}")
 
         try:
@@ -1684,12 +1841,12 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
             ids_type = parsed.get("@type", "")
 
             if "ContractAgreement" in ids_type:
-                step("Resultado: Acceso PERMITIDO (Contract Agreement)")
+                step("Result: ACCESS GRANTED (Contract Agreement)")
                 _ids_log("in", "ids:ContractAgreementMessage", f"coordinator-{cid}", f"worker-{target_wid}")
 
                 transfer_contract = parsed.get("@id", "?")
-                ok(f"Worker-{target_wid} -- acceso PERMITIDO al modelo (Contract Agreement)")
-                field("Recurso Target", fl_res.get("@id", "?"), indent=8)
+                ok(f"Worker-{target_wid} -- model access granted")
+                field("Target resource", fl_res.get("@id", "?"), indent=8)
                 field("transferContract id", transfer_contract, indent=8)
 
             elif ("Rejection" in ids_type or "ContractRejection" in ids_type
@@ -1699,31 +1856,31 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
                 _is_expected_rejection = target_wid not in accepted_uris
 
                 if _is_expected_rejection:
-                    step("Resultado: Acceso DENEGADO (Soberanía de Datos aplicada)")
+                    step("Result: ACCESS DENIED (data sovereignty enforced)")
                     _ids_log("in", "ids:RejectionMessage", f"coordinator-{cid}", f"worker-{target_wid}")
-                    ok(
-                        f"Worker-{target_wid} -- acceso DENEGADO   "
-                        f"(no participo en el FL -- Soberania IDS aplicada correctamente)"
+                    print(
+                        f"    {RED}REJECTED  Worker-{target_wid} -- model access denied "
+                        f"(non-participant; IDS sovereignty policy enforced){RESET}"
                     )
                     _reason = parsed.get("reason") or parsed.get("ids:rejectionReason", "policy_enforcement")
-                    field("Motivo de rechazo", str(_reason), indent=8)
-                    field("Politica aplicada", "connector-restricted-policy (ids:rightOperand)", indent=8)
+                    field("Rejection reason", str(_reason), indent=8)
+                    field("Applied policy", "connector-restricted-policy (ids:rightOperand)", indent=8)
                 else:
-                    step("Resultado: Rejection Message (INESPERADO)")
+                    step("Result: UNEXPECTED RejectionMessage")
                     _ids_log("in", "ids:RejectionMessage", f"coordinator-{cid}", f"worker-{target_wid}")
                     reason = parsed.get("reason") or parsed.get("ids:rejectionReason", "?")
-                    fail(f"Worker-{target_wid} -- acceso DENEGADO al modelo (sorprendente, era participante)")
+                    fail(f"Worker-{target_wid} -- model access denied, but this worker was a participant")
                     field("Rejection Reason", str(reason), indent=8)
                     field("raw_response", (raw[:200] + "...") if len(raw) > 200 else raw, indent=8)
 
             else:
-                step("Resultado: Respuesta IDS no reconocida")
+                step("Result: Unrecognized IDS response")
                 _ids_log("in", "PolicyRejection", f"coordinator-{cid}", f"worker-{target_wid}")
-                warn(f"Worker-{target_wid} -- respuesta IDS no reconocida: {ids_type!r}")
+                warn(f"Worker-{target_wid} -- unrecognized IDS response: {ids_type!r}")
                 field("raw_response", (raw[:200] + "...") if len(raw) > 200 else raw, indent=8)
 
         except Exception as e:
-            warn(f"Error proxy Worker-{target_wid}: {e}")
+            warn(f"Worker-{target_wid} proxy access test failed: {e}")
 
         print()
 
@@ -1734,22 +1891,22 @@ def fase6_test_acceso_modelo(coordinator_url, cid, nego, endpoints, req_timeout)
 
 def parse_args():
     p = argparse.ArgumentParser(
-        description="PFG -- Demostracion IDS + Federated Learning",
+        description="PFG -- IDS + Federated Learning demonstration",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--coordinator", default="2", metavar="N",
-                   help="Numero del worker coordinator (default: 2)")
+                   help="Coordinator worker number (default: 2)")
     p.add_argument("--coordinator-port", type=int, default=0, metavar="PORT",
                    help=(
-                       "Puerto localhost del dataapp coordinator "
-                       "(default: 5000 + --coordinator, e.g. 5002 para coordinator=2)"
+                       "Coordinator DataApp localhost port "
+                       "(default: 5000 + --coordinator, e.g. 5002 for coordinator=2)"
                    ))
     p.add_argument("--skip-fl", action="store_true",
-                   help="No arrancar el entrenamiento (solo fases 0-3)")
-    p.add_argument("--timeout", type=int, default=240, metavar="SEG",
-                   help="Timeout HTTP en segundos (default: 240)")
+                   help="Do not start federated training; run only the IDS preparation phases")
+    p.add_argument("--timeout", type=int, default=240, metavar="SEC",
+                   help="HTTP timeout in seconds (default: 240)")
     p.add_argument("--no-client-ws", action="store_true",
-                   help="Desactiva el canal WebSocket cliente->DataApp y usa REST directo")
+                   help="Disable the client-to-DataApp WebSocket channel and use direct REST")
     return p.parse_args()
 
 
@@ -1775,11 +1932,11 @@ def _cleanup_workers(coordinator_url, endpoints, req_timeout):
         try:
             r = SESSION.post(f"{url}/system/reset", timeout=req_timeout, verify=TLS_CERT)
             if r.ok:
-                print(f"  {GREEN}[OK]{RESET} {name} restaurado.")
+                print(f"  {GREEN}[OK]{RESET} {name} reset.")
             else:
-                print(f"  {RED}[FAIL]{RESET} {name} devolvio {r.status_code}")
+                print(f"  {RED}[FAIL]{RESET} {name} returned HTTP {r.status_code}")
         except Exception as exc:
-            print(f"  {RED}[ERR ]{RESET} No se pudo contactar a {name}: {exc}")
+            print(f"  {RED}[ERR ]{RESET} Could not contact {name}: {exc}")
 
     # -- Limpieza COMPLETA de artefactos Docker FL ------------------------------
     try:
@@ -1799,9 +1956,9 @@ def _cleanup_workers(coordinator_url, endpoints, req_timeout):
                 capture_output=True, text=True, timeout=15
             )
             if rm.returncode == 0:
-                print(f"  {GREEN}[OK]{RESET} Imagen Docker eliminada: {img}")
+                print(f"  {GREEN}[OK]{RESET} Docker image removed: {img}")
             else:
-                print(f"  {YELLOW}[WARN]{RESET} No se pudo eliminar {img}: {rm.stderr.strip()}")
+                print(f"  {YELLOW}[WARN]{RESET} Could not remove {img}: {rm.stderr.strip()}")
 
         # 2. Purgar el Registry privado (fl-registry) -- borrar catalogo de tags
         try:
@@ -1824,15 +1981,15 @@ def _cleanup_workers(coordinator_url, endpoints, req_timeout):
                             timeout=5
                         )
                         if r_del.status_code in (200, 202):
-                            print(f"  {GREEN}[OK]{RESET} Registry: tag fl-algo:{tag} purgado")
+                            print(f"  {GREEN}[OK]{RESET} Registry: fl-algo:{tag} tag purged")
                         else:
-                            print(f"  {YELLOW}[WARN]{RESET} Registry: no se pudo purgar fl-algo:{tag} (HTTP {r_del.status_code})")
+                            print(f"  {YELLOW}[WARN]{RESET} Registry: could not purge fl-algo:{tag} (HTTP {r_del.status_code})")
                 if not tags:
-                    print(f"  {GRAY}[--]{RESET} Registry: no hay tags fl-algo pendientes.")
+                    print(f"  {GRAY}[--]{RESET} Registry: no pending fl-algo tags.")
             else:
-                print(f"  {GRAY}[--]{RESET} Registry: repositorio fl-algo no existe (limpio).")
+                print(f"  {GRAY}[--]{RESET} Registry: fl-algo repository does not exist.")
         except Exception:
-            print(f"  {GRAY}[--]{RESET} Registry fl-registry no accesible (puede estar parado).")
+            print(f"  {GRAY}[--]{RESET} Registry fl-registry is not reachable.")
 
         # 3. Limpiar directorio _docker_build temporal dentro de cada worker
         worker_containers = ["be-dataapp-worker1", "be-dataapp-worker2",
@@ -1843,12 +2000,12 @@ def _cleanup_workers(coordinator_url, endpoints, req_timeout):
                 capture_output=True, text=True, timeout=10
             )
             if rm_build.returncode == 0:
-                print(f"  {GREEN}[OK]{RESET} {cname}: _docker_build limpiado")
+                print(f"  {GREEN}[OK]{RESET} {cname}: _docker_build cleaned")
 
         if not fl_images:
-            print(f"  {GRAY}[--]{RESET} No se encontraron imagenes Docker FL locales.")
+            print(f"  {GRAY}[--]{RESET} No local FL Docker images were found.")
     except Exception as exc:
-        print(f"  {YELLOW}[WARN]{RESET} No se pudo limpiar artefactos Docker: {exc}")
+        print(f"  {YELLOW}[WARN]{RESET} Could not clean Docker artifacts: {exc}")
 
 
 def _start_keyboard_listener(coordinator_url_ref, endpoints_ref, req_timeout):
@@ -1868,17 +2025,17 @@ def _start_keyboard_listener(coordinator_url_ref, endpoints_ref, req_timeout):
             if ch.lower() == 'p':
                 _cancel_requested = True
                 print()
-                print(f"  {RED}{BOLD}╔══════════════════════════════════════════════╗{RESET}")
-                print(f"  {RED}{BOLD}║  [P] CANCELACION MANUAL SOLICITADA           ║{RESET}")
-                print(f"  {RED}{BOLD}║  Limpiando todos los Workers y Coordinator   ║{RESET}")
-                print(f"  {RED}{BOLD}╚══════════════════════════════════════════════╝{RESET}")
+                print(f"  {RED}{BOLD}+------------------------------------------------+{RESET}")
+                print(f"  {RED}{BOLD}|  [P] MANUAL CANCELLATION REQUESTED            |{RESET}")
+                print(f"  {RED}{BOLD}|  Resetting all workers and the coordinator    |{RESET}")
+                print(f"  {RED}{BOLD}+------------------------------------------------+{RESET}")
                 print()
                 _cleanup_workers(
                     coordinator_url_ref[0],
                     endpoints_ref[0],
                     req_timeout,
                 )
-                print(f"  {GREEN}Sistema restaurado. Puedes volver a ejecutar pfg_ids_fl_flow.py.{RESET}")
+                print(f"  {GREEN}System reset. You can run pfg_ids_fl_flow.py again.{RESET}")
                 print()
                 os._exit(0)
         time.sleep(0.1)
@@ -1891,17 +2048,18 @@ def fase1_verificar_catalogo_coordinator(coordinator_url, cid, req_timeout):
     """
     phase(
         1,
-        "Catálogo IDS del Coordinador (Datasets Publicados)",
-        "Antes de buscar nodos externos, el coordinador inspecciona su propio Catálogo\n"
-        "Federado (IDS Self-Description) para verificar que dispone de Datasets publicados.\n"
-        "Solo un nodo que tenga datos registrados puede actuar como orquestador legítimo."
+        "Coordinator IDS catalog and sovereign datasets",
+        "In this phase, the coordinator reads its own IDS Self-Description before contacting "
+        "any external peer. The goal is to verify that it exposes sovereign CSV resources in "
+        "its catalog and can therefore act as a valid coordinator for the federated learning "
+        "run."
     )
-    step("Inspección del Catálogo local (GET /ids/self-description)")
+    step("Inspect local IDS catalog")
 
     ecc_port = 8090 if int(cid) == 1 else 8090 + int(cid)
-    # Mostramos rutas para debugging pero de forma mas limpia
-    print(f"      {GRAY}[Ruta DAPS/ECC] https://localhost:{ecc_port}/api/selfDescription/{RESET}")
-    print(f"      {GRAY}[Ruta DataApp]  https://localhost:5002/ids/self-description/{RESET}")
+    if PRESENTATION_VERBOSE:
+        print(f"      {GRAY}[DAPS/ECC route] https://localhost:{ecc_port}/api/selfDescription/{RESET}")
+        print(f"      {GRAY}[DataApp route]  https://localhost:5002/ids/self-description/{RESET}")
 
     try:
         sd  = http_get(f"{coordinator_url}/ids/self-description", timeout=req_timeout)
@@ -1914,15 +2072,27 @@ def fase1_verificar_catalogo_coordinator(coordinator_url, cid, req_timeout):
             if "Dataset:" in title:
                 datasets.append(title.replace("Dataset: ", "").strip())
         if datasets:
-            print("\n")
-            print(f"      {GREEN}Catálogo IDS auto-descubierto localmente.{RESET}")
-            print(f"      {GRAY}↳ Se encontraron {len(datasets)} Dataset(s) soberanos en el nodo coordinador:{RESET}")
-            for d in datasets:
-                print(f"         {CYAN}[CSV]{RESET} {BOLD}{d}{RESET}")
+            section("Catalog evidence")
+            _log_event(
+                "CATALOG",
+                "Coordinator self-description resolved",
+                " ",
+                "OK",
+                tag_color=GREEN,
+                indent=6,
+            )
+            _log_kv("Endpoint", f"{coordinator_url}/ids/self-description", indent=8)
+            _log_kv("Sovereign datasets", len(datasets), indent=8)
+            _log_kv("Resource type", "CSV training datasets", indent=8)
+
+            section("Published CSV resources")
+            for idx, d in enumerate(datasets, 1):
+                print(f"      {CYAN}[CSV {idx:02d}]{RESET} {BOLD}{d:<42}{RESET}"
+                      f"{GRAY}IDS offeredResource{RESET}")
         else:
-            warn("No se detectaron Datasets CSV en el catalogo IDS.")
+            warn("No CSV datasets were detected in the IDS catalog.")
     except Exception as exc:
-        warn(f"No se pudo parsear el catalogo IDS: {exc}")
+        warn(f"Could not parse the IDS catalog: {exc}")
 
 
 def main():
@@ -1935,7 +2105,7 @@ def main():
     try:
         cid_int = int(cid)
     except ValueError:
-        print(f"{RED}Coordinator ID invalido: {cid!r}. Debe ser un numero entero (p.ej. 2).{RESET}")
+        print(f"{RED}Invalid coordinator ID: {cid!r}. It must be an integer, e.g. 2.{RESET}")
         sys.exit(1)
 
     # Puerto del coordinator: argumento explicito o convencion 5000+N
@@ -1944,25 +2114,25 @@ def main():
     req_timeout      = args.timeout
 
     banner(
-        "PFG -- Demostracion Federated Learning sobre IDS",
-        f"Worker-{cid} como coordinator  .  Broker Fuseki + DAPS omejdn  .  multi-CSV discovery"
+        "PFG IDS + Federated Learning Demonstration",
+        f"Coordinator Worker-{cid}  |  Fuseki Broker  |  DAPS/Omejdn  |  multi-CSV discovery"
     )
-    print()
-    field("Coordinator",     f"Worker-{cid}  ({coordinator_url})")
-    field("coordinator_port", coordinator_port)
-    field("Arrancar FL",     "No (--skip-fl)" if args.skip_fl else "Si")
-    field("Timeout HTTP",    f"{req_timeout}s")
-    field(
-        "Cliente -> DataApp",
-        "WebSocket /ws/client -> POST /proxy" if CLIENT_WS_ENABLED and _WS_AVAILABLE else "REST POST /proxy",
+    section("Execution profile")
+    _log_kv("Coordinator", f"Worker-{cid}")
+    _log_kv("DataApp endpoint", coordinator_url)
+    _log_kv("FL execution", "disabled (--skip-fl)" if args.skip_fl else "enabled")
+    _log_kv("HTTP timeout", f"{req_timeout}s")
+    _log_kv(
+        "Control channel",
+        "WebSocket /ws/client" if CLIENT_WS_ENABLED and _WS_AVAILABLE else "REST proxy",
     )
+    _log_kv("Cancellation", "Press [P] to reset coordinator and workers")
 
     # Referencias mutables para que el listener las actualice en caliente
     _coord_ref     = [coordinator_url]
     _endpoints_ref = [None]
 
     # Arrancar el hilo de escucha del teclado (daemon => muere con el proceso)
-    info("Pulsa [P] en cualquier momento para cancelar y resetear todos los Workers.")
     _listener = threading.Thread(
         target=_start_keyboard_listener,
         args=(_coord_ref, _endpoints_ref, req_timeout),
@@ -1988,7 +2158,7 @@ def main():
 
         if not args.skip_fl:
             if not nego.get("accepted"):
-                warn("No hay workers aceptados -- no se arranca el FL")
+                warn("No workers accepted the contract; federated training will not start")
             else:
                 fase4_arrancar_fl(coordinator_url, cid, endpoints, req_timeout)
                 fase5_monitorizar_fl(coordinator_url, cid, nego, endpoints, req_timeout)
@@ -1997,16 +2167,16 @@ def main():
 
     except KeyboardInterrupt:
         print()
-        print(f"  {RED}{BOLD}[CTRL+C] Ejecucion interrumpida. Limpiando Workers...{RESET}")
+        print(f"  {RED}{BOLD}[CTRL+C] Execution interrupted. Resetting workers...{RESET}")
         _cleanup_workers(coordinator_url, _endpoints_ref[0], req_timeout)
         _close_ws_rpc_clients()
-        print(f"  {GREEN}Sistema restaurado.{RESET}")
+        print(f"  {GREEN}System reset.{RESET}")
         sys.exit(0)
 
     # Resumen final
     print()
     _sep("=", color=BOLD + CYAN)
-    print(f"{BOLD}{GREEN}  Demostracion completada{RESET}")
+    print(f"{BOLD}{WHITE}  Demonstration completed{RESET}")
     _sep("=", color=BOLD + CYAN)
     print()
 
@@ -2015,8 +2185,8 @@ def main():
         m    = re.search(r"worker(\d+)", uri)
         wid  = m.group(1) if m else "?"
         peer = endpoints["peers"].get(f"worker{wid}", {})
-        ecc  = peer.get("ecc_url", "(desconocido)")
-        print(f"  {GREEN}PARTICIPA   Worker-{wid}   {GRAY}{ecc}{RESET}")
+        ecc  = peer.get("ecc_url", "(unknown)")
+        print(f"  {GREEN}PARTICIPATES   Worker-{wid}   {GRAY}{ecc}{RESET}")
 
     for w in nego.get("rejected", []):
         uri    = w.get("connector_uri", "?")
@@ -2024,8 +2194,8 @@ def main():
         m      = re.search(r"worker(\d+)", uri)
         wid    = m.group(1) if m else "?"
         peer   = endpoints["peers"].get(f"worker{wid}", {})
-        ecc    = peer.get("ecc_url", "(desconocido)")
-        print(f"  {RED}RECHAZADO   Worker-{wid}   {GRAY}{ecc}  --  {reason}{RESET}")
+        ecc    = peer.get("ecc_url", "(unknown)")
+        print(f"  {RED}REJECTED      Worker-{wid}   {GRAY}{ecc}  --  {reason}{RESET}")
 
     print()
 
@@ -2033,9 +2203,10 @@ def main():
     if not args.skip_fl:
         try:
             import json
-            perf = http_get(f"{coordinator_url}/metrics", timeout=req_timeout)
+            perf = http_get(f"{coordinator_url}/metrics", timeout=req_timeout, quiet=True)
 
-            print(f"  {CYAN}[RENDIMIENTO] DE TRANSFERENCIAS (WS directo - IDS por ECC){RESET}")
+            print()
+            print(f"  {CYAN}[PERFORMANCE] TRANSFER SUMMARY{RESET}")
             print(f"  {CYAN}----------------------------------------------------------------------{RESET}")
 
             ws_sends  = perf.get("ws_sends", 0)
@@ -2054,32 +2225,32 @@ def main():
             http_fails = perf.get("http_failures", 0)
 
             print()
-            print(f"  {BOLD}IDS vía ECC↔ECC (tramo externo WSS si está activo){RESET}")
-            print(f"    Envíos exitosos : {ids_ecc_sends}   (Fallos: {ids_ecc_fails})")
+            print(f"  {BOLD}IDS via ECC-to-ECC transport{RESET}")
+            print(f"    Successful sends : {ids_ecc_sends}   (Failures: {ids_ecc_fails})")
             if ids_ecc_sends > 0:
-                print(f"    Latencia Media  : {ids_ecc_ms / ids_ecc_sends:.1f} ms")
-                print(f"    Volumen total   : {ids_ecc_bytes / 1024:.1f} KB")
+                print(f"    Average latency : {ids_ecc_ms / ids_ecc_sends:.1f} ms")
+                print(f"    Total volume    : {ids_ecc_bytes / 1024:.1f} KB")
 
             print()
-            print(f"  {BOLD}HTTP fallback real{RESET}")
-            print(f"    Envíos exitosos : {http_sends}   (Fallos: {http_fails})")
+            print(f"  {BOLD}HTTP fallback{RESET}")
+            print(f"    Successful sends : {http_sends}   (Failures: {http_fails})")
             if http_sends > 0:
-                print(f"    Latencia Media  : {http_ms / http_sends:.1f} ms")
-                print(f"    Volumen total   : {http_bytes / 1024:.1f} KB")
+                print(f"    Average latency : {http_ms / http_sends:.1f} ms")
+                print(f"    Total volume    : {http_bytes / 1024:.1f} KB")
 
             print()
             if ids_ecc_sends > 0 and http_sends == 0 and ws_sends == 0:
-                print(f"  {GREEN}► CONCLUSIÓN: El entrenamiento FL fue realizado 100% sobre IDS usando ECC↔ECC.{RESET}")
+                print(f"  {GREEN}> CONCLUSION: FL training was performed 100% over IDS using ECC-to-ECC transport.{RESET}")
             elif ids_ecc_sends > 0 and http_sends > 0:
-                print(f"  {YELLOW}► CONCLUSIÓN: El flujo principal usó IDS vía ECC, con algo de HTTP fallback real.{RESET}")
+                print(f"  {YELLOW}> CONCLUSION: The main flow used IDS via ECC, with some HTTP fallback.{RESET}")
             print()
         except Exception as e:
-            warn(f"No se pudieron cargar las métricas de rendimiento: {e}")
+            warn(f"Could not load performance metrics: {e}")
 
     # --- CLEARING HOUSE AUDIT ---
     try:
         import requests
-        print(f"  {CYAN}[AUDITORÍA] CLEARING HOUSE (Notario IDS){RESET}")
+        print(f"  {CYAN}[AUDIT] CLEARING HOUSE IDS NOTARY{RESET}")
         print(f"  {CYAN}----------------------------------------------------------------------{RESET}")
 
         try:
@@ -2089,20 +2260,20 @@ def main():
                 status = data.get("status", "?")
                 c = GREEN if status == "INTEGRITY_OK" else \
                    (YELLOW if status == "CORRUPTED" else RED)
-                print(f"    {BOLD}Estado Cadena Hash (Integridad){RESET}: {c}{status}{RESET}")
+                print(f"    {BOLD}Hash-chain integrity status{RESET}: {c}{status}{RESET}")
         except:
             pass
 
         print()
-        print(f"  ► Explora el historial completo del notario digital en:")
+        print(f"  > Full digital-notary history:")
         print(f"      {MAGENTA}http://localhost:8100/api/transactions?page_size=1000&sort_order=asc{RESET}")
-        print(f"  ► Explora las métricas de uso aquí:")
+        print(f"  > System usage metrics:")
         print(f"      {MAGENTA}http://localhost:8100/api/stats/system{RESET}")
-        print(f"  ► Exportar base de datos a archivo:")
+        print(f"  > JSON export endpoint:")
         print(f"      {MAGENTA}http://localhost:8100/api/export/json{RESET}")
         print()
     except Exception as e:
-        warn(f"No se pudo consultar el Clearing House: {e}")
+        warn(f"Could not query the Clearing House: {e}")
 
     # =============================================================================
     # DESCARGA AUTOMATIZADA DEL REGISTRO IDS (CLEARING HOUSE EXPORT)
@@ -2116,26 +2287,26 @@ def main():
         export_filename = f"fl_ids_audit_report_{timestamp_str}.json"
         export_path = os.path.join(exports_dir, export_filename)
 
-        print(f"  {CYAN}[REPORTE] DESCARGANDO REPORTE DE AUDITORÍA (Notario IDS)...{RESET}")
+        print(f"  {CYAN}[REPORT] DOWNLOADING IDS AUDIT REPORT...{RESET}")
 
         r_export = requests.get("http://localhost:8100/api/export/json", timeout=10)
         if r_export.ok:
             with open(export_path, "w", encoding="utf-8") as f:
                 f.write(r_export.text)
-            print(f"    {GREEN}OK  Reporte oficial guardado en: {export_path}{RESET}")
+            print(f"    {GREEN}OK  Official audit report saved to: {export_path}{RESET}")
             try:
                 export_data = r_export.json()
                 total_exported = export_data.get("total_records")
                 if total_exported is None:
                     exported_rows = export_data.get("data", [])
                     total_exported = len(exported_rows) if isinstance(exported_rows, list) else "?"
-                print(f"    {BOLD}Muestreo Auditado (Nº Logs){RESET}    : {total_exported} transacciones IDS")
+                print(f"    {BOLD}Audited sample size{RESET}    : {total_exported} IDS transactions")
             except Exception:
                 pass
         else:
-            print(f"    {YELLOW}WARN No se pudo descargar el reporte (HTTP {r_export.status_code}){RESET}")
+            print(f"    {YELLOW}WARN Could not download the report (HTTP {r_export.status_code}){RESET}")
     except Exception as e:
-        print(f"    {YELLOW}WARN Error al automatizar la descarga del Clearing House: {e}{RESET}")
+        print(f"    {YELLOW}WARN Could not automate the Clearing House export: {e}{RESET}")
     print()
 
     info(f"GET {coordinator_url}/fl/status")
