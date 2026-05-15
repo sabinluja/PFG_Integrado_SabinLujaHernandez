@@ -4531,7 +4531,7 @@ def _discover_compatible_workers(my_columns: list) -> list:
 
 def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
              algo_bytes: bytes = None, config_bytes: bytes = None):
-    global fl_state
+    global fl_state, _accepted_workers
     # Evita race condition si PEER_CONNECTOR_URIS cambia durante el entrenamiento.
     _peers_snapshot = list(PEER_CONNECTOR_URIS)
 
@@ -4609,18 +4609,106 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
         _round_weights.clear()
         t0 = time.time()
 
-        active_peer_targets = list(zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS))
+        # =====================================================================
+        # Negociación IDS completa por ronda
+        # =====================================================================
+        # Al inicio de cada ronda se re-negocia el contrato IDS con cada peer:
+        #   DescriptionRequest → ContractRequest → ContractAgreement
+        # Esto garantiza que cada ronda tenga un contrato fresco y auditado.
+        # Un peer que rechace la re-negociación queda excluido solo de esta ronda.
+        # =====================================================================
+        _peer_csvs_snapshot = list(PEER_SELECTED_CSVS) if PEER_SELECTED_CSVS else [None] * len(PEER_ECC_URLS)
+        round_negotiated_peers = []
+        round_rejected_peers = []
+
+        log.info(
+            f"[ronda {round_num}] === NEGOCIACIÓN IDS POR RONDA ===\n"
+            f"  Peers objetivo: {len(PEER_ECC_URLS)}"
+        )
+
+        for p, u, csv in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS, _peer_csvs_snapshot):
+            try:
+                # Obtener match_ratio de _accepted_workers si existe
+                _match = next(
+                    (w.get("match_ratio", 0.0) for w in _accepted_workers if w.get("connector_uri") == u),
+                    0.0,
+                )
+                nego_result = _negotiate_peer_contract(
+                    peer_ecc_url   = p,
+                    peer_conn_uri  = u,
+                    selected_csv   = csv,
+                    match_ratio    = _match,
+                    context_label  = f"ronda_{round_num}_negotiate",
+                )
+                if nego_result is not None:
+                    round_negotiated_peers.append(nego_result)
+                    log.info(
+                        f"  [ronda {round_num}] Negociación OK con {u} "
+                        f"(contract={nego_result.get('transfer_contract', '?')[:60]})"
+                    )
+                else:
+                    round_rejected_peers.append(u)
+                    log.warning(f"  [ronda {round_num}] Negociación RECHAZADA por {u}")
+            except Exception as exc:
+                round_rejected_peers.append(u)
+                log.error(f"  [ronda {round_num}] Error negociando con {u}: {exc}")
+            time.sleep(0.25)
+
+        # Actualizar _accepted_workers con las credenciales frescas de esta ronda
+        if round_negotiated_peers:
+            with _negotiate_lock:
+                _accepted_workers = round_negotiated_peers
+
+        # --- CH: Negociación de ronda completada ---
+        _report_to_ch(
+            message_type="ids:NotificationMessage",
+            source_connector=CONNECTOR_URI,
+            status="success",
+            additional_data={
+                "event": "fl_round_negotiation_completed",
+                "round": round_num,
+                "total_rounds": n_rounds,
+                "coordinator": INSTANCE_ID,
+                "negotiated_count": len(round_negotiated_peers),
+                "rejected_count": len(round_rejected_peers),
+                "rejected_uris": round_rejected_peers,
+            },
+        )
+
+        log.info(
+            f"[ronda {round_num}] Negociación completada: "
+            f"{len(round_negotiated_peers)} aceptados, {len(round_rejected_peers)} rechazados"
+        )
+
+        _notify_ws_clients({
+            "event": "round_negotiation_completed",
+            "round": round_num,
+            "negotiated_count": len(round_negotiated_peers),
+            "rejected_count": len(round_rejected_peers),
+        })
+
+        # Construir la lista de peers activos para esta ronda
+        # (solo los que pasaron la negociación)
+        active_peer_targets = [
+            (w["ecc_url"], w["connector_uri"])
+            for w in round_negotiated_peers
+        ]
+
         if algo_bytes:
             log.info(f"[ronda {round_num}] Distribuyendo algorithm.py + fl_config.json a peers...")
-            _peer_csvs = PEER_SELECTED_CSVS if PEER_SELECTED_CSVS else [None] * len(PEER_ECC_URLS)
             active_peer_targets = []
+            
+            # Solo distribuir a los peers que aceptaron la negociación en esta ronda
             if FL_IDS_ECC_ONLY:
-                for p, u, csv in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS, _peer_csvs):
+                for w in round_negotiated_peers:
+                    p = w["ecc_url"]
+                    u = w["connector_uri"]
+                    csv = w.get("selected_csv")
                     try:
                         ok = _negotiate_and_send_algorithm(
                             p, u, algo_bytes, config_bytes or b"{}", csv,
-                            next((w.get("transfer_contract") for w in _accepted_workers if w["connector_uri"] == u), None),
-                            next((w.get("requested_artifact") for w in _accepted_workers if w["connector_uri"] == u), None),
+                            w.get("transfer_contract"),
+                            w.get("requested_artifact"),
                         )
                         log.info(f"  [ronda {round_num}] -> {p}: {'[OK]' if ok else '[FAIL]'}")
                         if ok:
@@ -4629,25 +4717,24 @@ def _run_fl(n_rounds: int, round_timeout: int, min_workers: int,
                         log.error(f"  [ronda {round_num}] -> {p}: [FAIL] {exc}")
                     time.sleep(0.25)
             else:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(PEER_ECC_URLS), 1)) as ex:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max(len(round_negotiated_peers), 1)) as ex:
                     futures = {
-                        ex.submit(_negotiate_and_send_algorithm, p, u, algo_bytes,
-                                  config_bytes or b"{}", csv,
-                                  next((w.get("transfer_contract") for w in _accepted_workers if w["connector_uri"] == u), None),
-                                  next((w.get("requested_artifact") for w in _accepted_workers if w["connector_uri"] == u), None)
-                                  ): p
-                        for p, u, csv in zip(PEER_ECC_URLS, PEER_CONNECTOR_URIS, _peer_csvs)
+                        ex.submit(_negotiate_and_send_algorithm, w["ecc_url"], w["connector_uri"], algo_bytes,
+                                  config_bytes or b"{}", w.get("selected_csv"),
+                                  w.get("transfer_contract"),
+                                  w.get("requested_artifact")
+                                  ): (w["ecc_url"], w["connector_uri"])
+                        for w in round_negotiated_peers
                     }
                     for fut in concurrent.futures.as_completed(futures):
-                        peer = futures[fut]
+                        p, u = futures[fut]
                         try:
                             ok = fut.result()
-                            log.info(f"  [ronda {round_num}] -> {peer}: {'[OK]' if ok else '[FAIL]'}")
+                            log.info(f"  [ronda {round_num}] -> {p}: {'[OK]' if ok else '[FAIL]'}")
                             if ok:
-                                peer_idx = PEER_ECC_URLS.index(peer)
-                                active_peer_targets.append((peer, PEER_CONNECTOR_URIS[peer_idx]))
+                                active_peer_targets.append((p, u))
                         except Exception as exc:
-                            log.error(f"  [ronda {round_num}] -> {peer}: [FAIL] {exc}")
+                            log.error(f"  [ronda {round_num}] -> {p}: [FAIL] {exc}")
 
         if not active_peer_targets:
             log.warning(f"[ronda {round_num}] Ningun peer quedo activo tras distribuir algoritmo/config.")
@@ -6692,6 +6779,175 @@ async def fl_accept_negotiation(request: Request):
     })
 
 
+def _negotiate_peer_contract(
+    peer_ecc_url: str,
+    peer_conn_uri: str,
+    selected_csv: str | None = None,
+    match_ratio: float = 0.0,
+    context_label: str = "negotiate",
+) -> dict | None:
+    """
+    Ejecuta la negociación IDS completa contra un peer individual:
+      1. DescriptionRequestMessage  → obtener catálogo/artifact del peer
+      2. ContractRequestMessage     → solicitar contrato de participación FL
+      3. Evaluar ContractAgreement / RejectionMessage
+
+    Devuelve un dict con los datos del acuerdo si el peer acepta, o None si rechaza.
+    Se usa tanto en /fl/negotiate (Fase 4) como al inicio de cada ronda en _run_fl().
+    """
+    import re as _re_neg
+
+    my_ecc_url = f"https://{ECC_HOSTNAME}:8889/data"
+
+    # ── Excluir al propio coordinator ─────────────────────────────────────
+    if peer_conn_uri == CONNECTOR_URI:
+        log.info(f"[{context_label}] Omitiendo al propio coordinator ({peer_conn_uri})")
+        return None
+    if peer_ecc_url == my_ecc_url:
+        log.info(f"[{context_label}] Omitiendo al propio coordinator por ECC URL ({peer_ecc_url})")
+        return None
+
+    _m = _re_neg.search(r"ecc-worker(\d+)", peer_ecc_url)
+    if not _m:
+        _m = _re_neg.search(r"worker(\d+)", peer_conn_uri)
+
+    if _m:
+        peer_worker_id   = _m.group(1)
+        peer_dataapp_url = f"https://be-dataapp-worker{peer_worker_id}:8500"
+    else:
+        log.warning(
+            f"[{context_label}] No se pudo derivar worker_id de {peer_conn_uri} / {peer_ecc_url} "
+            f"-- saltando peer"
+        )
+        return None
+
+    log.info(
+        f"[{context_label}] Negociando con worker-{peer_worker_id} "
+        f"via ContractRequestMessage -> {_ecc_forward_url(peer_ecc_url) if FL_IDS_ECC_ONLY else f'{peer_dataapp_url}/data'}"
+    )
+
+    # -- Paso 1: DescriptionRequestMessage → obtener catálogo IDS del peer --
+    peer_desc = _ids_send(
+        _ecc_forward_url(peer_ecc_url) if FL_IDS_ECC_ONLY else peer_ecc_url,
+        peer_conn_uri,
+        "ids:DescriptionRequestMessage",
+        use_local_ecc=FL_IDS_ECC_ONLY,
+    )
+    peer_contract_offer, peer_requested_artifact = _first_contract_artifact(
+        peer_desc,
+        selected_csv=selected_csv,
+    )
+    if not peer_requested_artifact:
+        log.warning(f"[{context_label}] No se pudo derivar el artifact IDS de worker-{peer_worker_id}")
+        return None
+
+    log.info(
+        f"[{context_label}] Artifact/contract resueltos para worker-{peer_worker_id}\n"
+        f"  selected_csv      : {selected_csv or '(auto)'}\n"
+        f"  requested_artifact: {peer_requested_artifact}\n"
+        f"  contract_offer    : {peer_contract_offer or '(autogen/fallback)'}"
+    )
+
+    # -- Paso 2: ContractRequestMessage → solicitar contrato FL --
+    _contract_payload = {
+        "@context"      : _ids_context(),
+        "@type"         : "ids:ContractRequest",
+        "@id"           : peer_contract_offer or f"https://w3id.org/idsa/autogen/contractRequest/fl_nego_{uuid.uuid4()}",
+        "ids:permission": [],
+        "ids:provider"  : {"@id": peer_conn_uri},
+        "ids:obligation": [], "ids:prohibition": [],
+        "ids:consumer"  : {"@id": CONNECTOR_URI},
+    }
+
+    ids_result = _ids_send(
+        forward_to_url       = _ecc_forward_url(peer_ecc_url) if FL_IDS_ECC_ONLY else f"{peer_dataapp_url}/data",
+        forward_to_connector = peer_conn_uri,
+        message_type         = "ids:ContractRequestMessage",
+        requested_element    = peer_requested_artifact,
+        payload              = _contract_payload,
+        use_local_ecc        = FL_IDS_ECC_ONLY,
+    )
+
+    # -- Paso 3: Evaluar la respuesta (ContractAgreement / Rejection) --
+    ids_type = ids_result.get("@type", "")
+
+    if "ContractAgreement" in ids_type:
+        transfer_contract_id = ids_result.get("@id", f"ids-agreement-worker{peer_worker_id}")
+        log.info(f"[{context_label}] worker-{peer_worker_id} ACEPTO [OK]  IDS ContractAgreement={transfer_contract_id}")
+        _report_to_ch(
+            message_type="ids:ContractAgreementMessage",
+            source_connector=CONNECTOR_URI,
+            target_connector=peer_conn_uri,
+            status="success",
+            contract_id=transfer_contract_id,
+            additional_data={
+                "event": "negotiate_peer_accepted",
+                "coordinator": INSTANCE_ID,
+                "peer_worker": peer_worker_id,
+                "match_ratio": match_ratio,
+                "selected_csv": selected_csv,
+                "context": context_label,
+            },
+        )
+
+        result = {
+            "connector_uri"    : peer_conn_uri,
+            "ecc_url"          : peer_ecc_url,
+            "match_ratio"      : match_ratio,
+            "transfer_contract": transfer_contract_id,
+            "requested_artifact": peer_requested_artifact,
+            "selected_csv"     : selected_csv,
+        }
+
+        if not FL_IDS_ECC_ONLY:
+            try:
+                requests.post(
+                    f"{peer_dataapp_url}/fl/accept-negotiation",
+                    json={
+                        "coordinator_uri": CONNECTOR_URI,
+                        "coordinator_ecc": my_ecc_url,
+                        "selected_csv"   : selected_csv,
+                    },
+                    timeout=10,
+                    verify=TLS_CERT,
+                )
+            except Exception:
+                pass
+
+        return result
+
+    elif ("Rejection" in ids_type
+          or "rejection" in ids_result.get("reason", "")
+          or ids_result.get("status") == "rejected"):
+        reason = ids_result.get("reason", "ids_rejection")
+        msg    = ids_result.get("message", str(ids_result.get("ids:rejectionReason", "")))
+        log.info(
+            f"[{context_label}] worker-{peer_worker_id} RECHAZO (IDS) -- {reason}: {msg}"
+        )
+        _report_to_ch(
+            message_type="ids:RejectionMessage",
+            source_connector=peer_conn_uri,
+            target_connector=CONNECTOR_URI,
+            status="success",
+            error_message=f"Policy Enforcement: {reason} - {msg}",
+            additional_data={
+                "event": "negotiate_peer_rejected",
+                "coordinator": INSTANCE_ID,
+                "peer_worker": peer_worker_id,
+                "reason": reason,
+                "context": context_label,
+            },
+        )
+        return None
+
+    else:
+        log.warning(
+            f"[{context_label}] worker-{peer_worker_id} respuesta IDS inesperada: "
+            f"{ids_type!r} -- {str(ids_result)[:200]}"
+        )
+        return None
+
+
 @app.post("/fl/negotiate")
 async def fl_negotiate():
     global _accepted_workers, PEER_ECC_URLS, PEER_CONNECTOR_URIS, PEER_SELECTED_CSVS
@@ -6724,181 +6980,31 @@ async def fl_negotiate():
     accepted = []
     rejected = []
 
-    my_ecc_url = f"https://{ECC_HOSTNAME}:8889/data"
-
     for worker in compatible:
         uri      = worker["connector_uri"]
         ecc_url  = worker["ecc_url"]
         sel_csv  = worker.get("selected_csv")
 
-        # ── Excluir al propio coordinator ─────────────────────────────────────
-        # El coordinator no negocia consigo mismo: se excluye por URI IDS y
-        # por ECC URL para cubrir el caso en que la URI no coincida exactamente.
-        if uri == CONNECTOR_URI:
-            log.info(f"[/fl/negotiate] Omitiendo al propio coordinator ({uri})")
-            continue
-        if ecc_url == my_ecc_url:
-            log.info(f"[/fl/negotiate] Omitiendo al propio coordinator por ECC URL ({ecc_url})")
-            continue
-        # ─────────────────────────────────────────────────────────────────────
-
-        import re as _re_neg
-        _m = _re_neg.search(r"ecc-worker(\d+)", ecc_url)
-        if not _m:
-            _m = _re_neg.search(r"worker(\d+)", uri)
-
-        if _m:
-            peer_worker_id   = _m.group(1)
-            peer_dataapp_url = f"https://be-dataapp-worker{peer_worker_id}:8500"
+        result = _negotiate_peer_contract(
+            peer_ecc_url   = ecc_url,
+            peer_conn_uri  = uri,
+            selected_csv   = sel_csv,
+            match_ratio    = worker.get("match_ratio", 0.0),
+            context_label  = "/fl/negotiate",
+        )
+        if result is not None:
+            accepted.append(result)
         else:
-            log.warning(
-                f"[/fl/negotiate] No se pudo derivar worker_id de {uri} / {ecc_url} "
-                f"-- saltando peer"
-            )
-            rejected.append({
-                "connector_uri": uri,
-                "ecc_url"      : ecc_url,
-                "reason"       : "error",
-                "message"      : "No se pudo derivar el worker_id del peer para contactar su ECC.",
-            })
-            continue
+            # Solo registrar como rechazado si no fue el propio coordinator
+            my_ecc_url = f"https://{ECC_HOSTNAME}:8889/data"
+            if uri != CONNECTOR_URI and ecc_url != my_ecc_url:
+                rejected.append({
+                    "connector_uri": uri,
+                    "ecc_url"      : ecc_url,
+                    "reason"       : "negotiation_failed",
+                    "message"      : "La negociacion IDS no resulto en un ContractAgreement.",
+                })
 
-        log.info(
-            f"[/fl/negotiate] Negociando con worker-{peer_worker_id} "
-            f"via ContractRequestMessage -> {_ecc_forward_url(ecc_url) if FL_IDS_ECC_ONLY else f'{peer_dataapp_url}/data'}"
-        )
-
-        peer_desc = _ids_send(
-            _ecc_forward_url(ecc_url) if FL_IDS_ECC_ONLY else ecc_url,
-            uri,
-            "ids:DescriptionRequestMessage",
-            use_local_ecc=FL_IDS_ECC_ONLY,
-        )
-        peer_contract_offer, peer_requested_artifact = _first_contract_artifact(
-            peer_desc,
-            selected_csv=sel_csv,
-        )
-        if not peer_requested_artifact:
-            rejected.append({
-                "connector_uri": uri,
-                "ecc_url"      : ecc_url,
-                "reason"       : "error",
-                "message"      : "No se pudo derivar el artifact IDS del peer.",
-            })
-            continue
-        log.info(
-            f"[/fl/negotiate] Artifact/contract resueltos para worker-{peer_worker_id}\n"
-            f"  selected_csv      : {sel_csv or '(auto)'}\n"
-            f"  requested_artifact: {peer_requested_artifact}\n"
-            f"  contract_offer    : {peer_contract_offer or '(autogen/fallback)'}"
-        )
-
-        # Payload del ContractRequest FL
-        _contract_payload = {
-            "@context"      : _ids_context(),
-            "@type"         : "ids:ContractRequest",
-            "@id"           : peer_contract_offer or f"https://w3id.org/idsa/autogen/contractRequest/fl_nego_{uuid.uuid4()}",
-            "ids:permission": [],
-            "ids:provider"  : {"@id": uri},
-            "ids:obligation": [], "ids:prohibition": [],
-            "ids:consumer"  : {"@id": CONNECTOR_URI},
-        }
-
-        # -- Paso 1: ContractRequestMessage via ECC->ECC --------------------------
-        ids_result = _ids_send(
-            forward_to_url       = _ecc_forward_url(ecc_url) if FL_IDS_ECC_ONLY else f"{peer_dataapp_url}/data",
-            forward_to_connector = uri,
-            message_type         = "ids:ContractRequestMessage",
-            requested_element    = peer_requested_artifact,
-            payload              = _contract_payload,
-            use_local_ecc        = FL_IDS_ECC_ONLY,
-        )
-
-        # -- Paso 2: Evaluar la respuesta (viene del ECC o del fallback DataApp) -
-        ids_type = ids_result.get("@type", "")
-
-        if "ContractAgreement" in ids_type:
-            transfer_contract_id = ids_result.get("@id", f"ids-agreement-worker{peer_worker_id}")
-            log.info(f"[/fl/negotiate] worker-{peer_worker_id} ACEPTO [OK]  IDS ContractAgreement={transfer_contract_id}")
-            # --- CH: Peer acepto trabajar ---
-            _report_to_ch(
-                message_type="ids:ContractAgreementMessage",
-                source_connector=CONNECTOR_URI,
-                target_connector=uri,
-                status="success",
-                contract_id=transfer_contract_id,
-                additional_data={
-                    "event": "negotiate_peer_accepted",
-                    "coordinator": INSTANCE_ID,
-                    "peer_worker": peer_worker_id,
-                    "match_ratio": worker["match_ratio"],
-                    "selected_csv": sel_csv,
-                },
-            )
-            accepted.append({
-                "connector_uri"    : uri,
-                "ecc_url"          : ecc_url,
-                "match_ratio"      : worker["match_ratio"],
-                "transfer_contract": transfer_contract_id,
-                "requested_artifact": peer_requested_artifact,
-                "selected_csv"     : sel_csv,
-            })
-            if not FL_IDS_ECC_ONLY:
-                # Notificar al peer sus datos de coordinator para que abra el tunel WS
-                try:
-                    requests.post(
-                        f"{peer_dataapp_url}/fl/accept-negotiation",
-                        json={
-                            "coordinator_uri": CONNECTOR_URI,
-                            "coordinator_ecc": my_ecc_url,
-                            "selected_csv"   : sel_csv,
-                        },
-                        timeout=10,
-                        verify=TLS_CERT,
-                    )
-                except Exception:
-                    pass   # El tunel WS se iniciara en /fl/start de todos modos
-
-        elif ("Rejection" in ids_type
-              or "rejection" in ids_result.get("reason", "")
-              or ids_result.get("status") == "rejected"):
-            reason = ids_result.get("reason", "ids_rejection")
-            msg    = ids_result.get("message", str(ids_result.get("ids:rejectionReason", "")))
-            log.info(
-                f"[/fl/negotiate] worker-{peer_worker_id} RECHAZO (IDS) -- {reason}: {msg}"
-            )
-            # --- CH: Peer rechazo trabajar ---
-            _report_to_ch(
-                message_type="ids:RejectionMessage",
-                source_connector=uri,
-                target_connector=CONNECTOR_URI,
-                status="success",
-                error_message=f"Policy Enforcement: {reason} - {msg}",
-                additional_data={
-                    "event": "negotiate_peer_rejected",
-                    "coordinator": INSTANCE_ID,
-                    "peer_worker": peer_worker_id,
-                    "reason": reason,
-                },
-            )
-            rejected.append({
-                "connector_uri": uri,
-                "ecc_url"      : ecc_url,
-                "reason"       : reason,
-                "message"      : msg,
-            })
-
-        else:
-            log.warning(
-                f"[/fl/negotiate] worker-{peer_worker_id} respuesta IDS inesperada: "
-                f"{ids_type!r} -- {str(ids_result)[:200]}"
-            )
-            rejected.append({
-                "connector_uri": uri,
-                "ecc_url"      : ecc_url,
-                "reason"       : "unexpected_ids_response",
-                "message"      : str(ids_result)[:200],
-            })
 
     with _negotiate_lock:
         _accepted_workers   = accepted

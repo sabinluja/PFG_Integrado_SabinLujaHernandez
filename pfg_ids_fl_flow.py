@@ -1613,8 +1613,9 @@ def _mostrar_resultados_fl(coordinator_url, cid, req_timeout):
 
     step("Best global model metrics")
     if best_round:
-        field("Best round", best_round)
+        field("Best round", f"{BOLD}{best_round}{RESET}")
     field("Selection criterion", "F1-macro -> Focus F1 -> Accuracy")
+    _log_rule(indent=4, char="-", width=50, color=GRAY)
     metrics_order = [
         ("accuracy",    "Accuracy"),
         ("auc",         "AUC (macro)"),
