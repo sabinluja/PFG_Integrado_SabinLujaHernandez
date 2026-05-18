@@ -33,7 +33,7 @@ np.random.seed(SEED)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import tensorflow as tf
 tf.random.set_seed(SEED)
-from tensorflow import keras
+from tensorflow import keras # type: ignore
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import SelectKBest, VarianceThreshold, mutual_info_classif

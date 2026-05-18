@@ -36,7 +36,7 @@ import concurrent.futures
 import numpy as np
 import requests
 import urllib3
-import uvicorn
+import uvicorn # type: ignore
 
 # MLflow es observabilidad, no parte critica del entrenamiento. Si Docker DNS o
 # el servidor MLflow fallan puntualmente, evitamos reintentos largos que dejen
@@ -46,7 +46,7 @@ os.environ.setdefault("MLFLOW_HTTP_REQUEST_MAX_RETRIES", "1")
 os.environ.setdefault("MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR", "0")
 
 try:
-    import mlflow
+    import mlflow # type: ignore
 except Exception as exc:
     mlflow = None
     _MLFLOW_IMPORT_ERROR = exc
@@ -55,10 +55,10 @@ else:
 
 import asyncio
 
-from fastapi import FastAPI, Form, Request, Response, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
-from requests_toolbelt.multipart.encoder import MultipartEncoder
-from requests_toolbelt.multipart.decoder import MultipartDecoder
+from fastapi import FastAPI, Form, Request, Response, WebSocket, WebSocketDisconnect # type: ignore
+from fastapi.responses import JSONResponse # type: ignore
+from requests_toolbelt.multipart.encoder import MultipartEncoder # type: ignore
+from requests_toolbelt.multipart.decoder import MultipartDecoder # type: ignore
 
 TLS_CERT = "/cert/daps/ca.crt" if os.path.exists("/cert/daps/ca.crt") else False
 if not TLS_CERT:
@@ -1189,10 +1189,10 @@ _dat_cache: dict = {"token": None, "exp": 0}
 
 
 def _get_dat_token() -> str:
-    import jwt as pyjwt
-    from cryptography.hazmat.primitives.serialization import load_pem_private_key
-    from cryptography import x509 as _x509
-    from cryptography.hazmat.backends import default_backend
+    import jwt as pyjwt # type: ignore
+    from cryptography.hazmat.primitives.serialization import load_pem_private_key # type: ignore
+    from cryptography import x509 as _x509 # type: ignore
+    from cryptography.hazmat.backends import default_backend # type: ignore
 
     now = int(time.time())
 
@@ -1443,7 +1443,7 @@ def _multipart_response(header_dict: dict, payload_str: str | None = None) -> Re
 
     body += f"--{boundary}--\r\n"
 
-    from starlette.responses import Response as StarletteResponse
+    from starlette.responses import Response as StarletteResponse # type: ignore
     return StarletteResponse(
         content=body.encode("utf-8"),
         media_type=f"multipart/form-data; boundary={boundary}"
