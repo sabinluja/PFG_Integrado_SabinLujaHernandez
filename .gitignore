@@ -26,6 +26,7 @@ ia-dataapp/data/worker*/output/
 ia-dataapp/data/worker*/_docker_build/
 ia-dataapp/data/worker*/output/_mlflow_artifacts/
 mlruns/
+mlflow-baseline/outputs/
 
 # ── Bases de Datos locales y Caches (Broker / DAPS / Linter) ────────────────────────────
 *.db

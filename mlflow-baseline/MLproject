@@ -1,0 +1,33 @@
+name: pfg-baseline-training
+
+entry_points:
+  main:
+    parameters:
+      epochs: {type: int, default: 18}
+      batch_size: {type: int, default: 128}
+      learning_rate: {type: float, default: 0.001}
+      focal_gamma: {type: float, default: 1.5}
+      label_smoothing: {type: float, default: 0.005}
+      test_split: {type: float, default: 0.2}
+      patience: {type: int, default: 3}
+      data_mode: {type: string, default: workers}
+      worker_ids: {type: string, default: "1,2,3"}
+      dataset_pattern: {type: string, default: "unsw_nb15_worker_{worker}.csv"}
+      data_dir: {type: string, default: /data}
+      output_dir: {type: string, default: /outputs}
+      experiment_name: {type: string, default: PFG_Local_Worker_Baseline}
+    command: >
+      python3 baseline_train.py
+      --epochs {epochs}
+      --batch-size {batch_size}
+      --learning-rate {learning_rate}
+      --focal-gamma {focal_gamma}
+      --label-smoothing {label_smoothing}
+      --test-split {test_split}
+      --patience {patience}
+      --data-mode {data_mode}
+      --worker-ids {worker_ids}
+      --dataset-pattern {dataset_pattern}
+      --data-dir {data_dir}
+      --output-dir {output_dir}
+      --experiment-name {experiment_name}

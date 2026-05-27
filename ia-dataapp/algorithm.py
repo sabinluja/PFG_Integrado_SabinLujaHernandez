@@ -962,9 +962,9 @@ def run(data_path, global_weights_b64=None, config_path=CONFIG_PATH):
             patience=max(1, es_patience - 1), min_lr=1e-6, verbose=0),
     ]
 
-    model.fit(X_train, y_train, epochs=epochs, batch_size=batch_size,
-              verbose=0, validation_data=(X_val, y_val),
-              callbacks=callbacks)
+    fit_history = model.fit(X_train, y_train, epochs=epochs, batch_size=batch_size,
+                            verbose=0, validation_data=(X_val, y_val),
+                            callbacks=callbacks)
 
     metrics, cm, per_class_f1, feat_imp = \
         compute_full_metrics(model, X_val, y_val, class_names)
@@ -990,4 +990,5 @@ def run(data_path, global_weights_b64=None, config_path=CONFIG_PATH):
         "confusion_matrix": cm,
         "per_class_report": per_class_f1,
         "class_names": class_names,
+        "training_history": fit_history.history if fit_history is not None else {},
     }

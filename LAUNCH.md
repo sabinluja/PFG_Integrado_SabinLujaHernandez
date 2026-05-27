@@ -42,12 +42,19 @@ docker compose build --no-cache ia-dataapp-3
 docker compose build --no-cache be-dataapp-consumer
 docker compose up -d
 
+#DESCEN
+
 docker compose down -v
 docker compose build be-dataapp-worker1
 docker compose up -d
 
 docker compose down -v
 docker compose up -d
+
+#BASELINE
+
+docker compose up -d mlflow-db mlflow
+docker compose --profile baseline run --rm baseline-trainer
 
 ```
 > **Note:** The `byoa-dataapp-provider-1` service builds the base image used by instances 2 and 3.

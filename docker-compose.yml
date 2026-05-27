@@ -690,6 +690,81 @@ services:
       start_period: 30s
     restart: always
 
+  # ===========================================================================
+  # LOCAL WORKER BASELINE -- Entrenamiento No-Federado para Comparativa
+  #
+  # Usa exactamente el mismo algorithm.py y la misma arquitectura DNN que
+  # el pipeline FL, pero entrenando cada worker con su propio CSV local
+  # (sin FedAvg, sin FedProx, sin comunicacion IDS).
+  #
+  # Se ejecuta como MLflow Project bajo el profile "baseline" para no
+  # arrancar con el sistema principal. Lanzar con:
+  #   docker compose --profile baseline run --rm baseline-trainer
+  #
+  # Los resultados se registran en MLflow (PFG_Local_Worker_Baseline)
+  # para comparación directa con PFG_IDS_Federated_Learning.
+  # ===========================================================================
+
+  baseline-trainer:
+    image: ia-dataapp:latest
+    profiles:
+      - baseline
+    container_name: baseline-trainer
+    entrypoint: ["mlflow"]
+    command:
+      - run
+      - /mlflow/projects/baseline
+      - --env-manager
+      - local
+      - -P
+      - epochs=18
+      - -P
+      - batch_size=128
+      - -P
+      - learning_rate=0.001
+      - -P
+      - focal_gamma=1.5
+      - -P
+      - label_smoothing=0.005
+      - -P
+      - patience=3
+      - -P
+      - data_mode=workers
+      - -P
+      - worker_ids=1,2,3
+      - -P
+      - dataset_pattern=unsw_nb15_worker_{worker}.csv
+      - -P
+      - output_dir=/outputs
+      - -P
+      - experiment_name=PFG_Local_Worker_Baseline
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4096M
+    logging:
+      options:
+        max-size: "100M"
+    networks:
+      - idsa
+    environment:
+      - TF_CPP_MIN_LOG_LEVEL=3
+      - PYTHONDONTWRITEBYTECODE=1
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_EXPERIMENT_NAME=PFG_Local_Worker_Baseline
+      - MLFLOW_HTTP_REQUEST_TIMEOUT=10
+      - MLFLOW_HTTP_REQUEST_MAX_RETRIES=3
+      - MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR=1
+      - GIT_PYTHON_REFRESH=quiet
+    volumes:
+      - ./mlflow-baseline:/mlflow/projects/baseline:ro
+      - ./mlflow-baseline/outputs:/outputs
+      - ./ia-dataapp/data:/data:ro
+    depends_on:
+      mlflow:
+        condition: service_healthy
+
   fl-registry:
     image: registry:2
     container_name: fl-registry
