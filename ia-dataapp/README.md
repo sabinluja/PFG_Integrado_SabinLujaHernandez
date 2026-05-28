@@ -56,6 +56,8 @@ The DataApp acts as the logic engine that integrates the IDS connectivity layer 
 * [fl_config.json](fl_config.json): Default hyperparameter settings, including number of rounds, local epochs, learning rate, batch size, and the FedProx proximal parameter $\mu$.
 * [Dockerfile](Dockerfile): Docker configuration for building the base DataApp service.
 * [Dockerfile.algorithm](Dockerfile.algorithm): Builds the isolated, immutable Docker image containing the exact training algorithm, distributed to participants.
+* [data/](data/): Subdirectory containing node partitions for data simulation. See [data/README.md](data/README.md) for details.
+* [resources/](resources/): Subdirectory containing configuration properties, logback, user credentials, and firewall rules. See [resources/README.md](resources/README.md) for details.
 
 ---
 
