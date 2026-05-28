@@ -1,28 +1,75 @@
-name: CI — FL IDS Workers
+name: CI - PFG Integrated FL and IDS Verification
 
-on: push
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
 jobs:
-  verificar:
+  validate-workspace:
+    name: Verify Configurations and Syntax
     runs-on: ubuntu-latest
 
     steps:
-      - name: Clonar repositorio
+      - name: Checkout Codebase
         uses: actions/checkout@v4
 
-      - name: Configurar Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: "ia-dataapp/requirements.txt"
 
-      - name: Instalar dependencias de app.py
-        run: pip install fastapi uvicorn requests requests-toolbelt
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f ia-dataapp/requirements.txt ]; then pip install -r ia-dataapp/requirements.txt; fi
+          if [ -f ClearingHouse/requirements.txt ]; then pip install -r ClearingHouse/requirements.txt; fi
 
-      - name: Verificar que docker-compose.yml es válido
-        run: docker compose config --quiet && echo "✅ docker-compose.yml válido"
+      - name: Validate Integrity of Essential Files
+        run: |
+          echo "Checking presence of critical codebase files..."
+          files=(
+            "docker-compose.yml"
+            "pfg_ids_fl_flow.py"
+            "ia-dataapp/app.py"
+            "ia-dataapp/algorithm.py"
+            "ClearingHouse/app/main.py"
+          )
+          for file in "${files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "Error: Critical file $file is missing!"
+              exit 1
+            fi
+          done
+          echo "All critical files present."
 
-      - name: Verificar sintaxis de app.py
-        run: python -m py_compile ia-dataapp/app.py && echo "✅ app.py sin errores de sintaxis"
+      - name: Verify Docker Compose Configuration
+        run: |
+          docker compose config --quiet && echo "Docker Compose configuration is valid."
 
-      - name: Verificar sintaxis de pfg_ids_fl_flow.py
-        run: python -m py_compile pfg_ids_fl_flow.py && echo "✅ pfg_ids_fl_flow.py sin errores de sintaxis"
+      - name: Verify Python Code Syntax
+        run: |
+          echo "Compiling all Python scripts to check for syntax errors..."
+          python -m compileall -q . && echo "All Python codebase compiles successfully without syntax errors."
+
+      - name: Validate JSON Formatting
+        run: |
+          echo "Verifying JSON configuration files and Postman collections..."
+          python -c '
+          import json, glob, sys
+          json_files = glob.glob("ia-dataapp/*.json") + glob.glob("postman/*.json")
+          errors = 0
+          for f in json_files:
+              try:
+                  with open(f, "r", encoding="utf-8") as file:
+                      json.load(file)
+                  print(f"Valid JSON: {f}")
+              except Exception as e:
+                  print(f"Error in JSON file {f}: {e}")
+                  errors += 1
+          if errors > 0:
+              sys.exit(1)
+          ' && echo "All JSON configuration and Postman files are valid."
