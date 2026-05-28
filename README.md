@@ -1,4 +1,4 @@
-<h1 align="center">Federated Learning over International Data Spaces<br/>for Network Intrusion Detection</h1>
+<h1 align="center">Development and implementation of a privacy-preserving federated learning system <br/>for AI algorithm deployment based on IDS connectors</h1>
 
 <p align="center">
   <strong>Final Degree Project - Computer Science · Data Science and Artificial Intelligence</strong><br/>
